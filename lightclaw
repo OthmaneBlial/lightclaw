@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""
+LightClaw CLI
+
+Commands:
+- lightclaw onboard : Initialize runtime files in current directory.
+- lightclaw run     : Run the bot using current directory as runtime home.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import re
+import shutil
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+RUNTIME_DIRNAME = ".lightclaw"
+RUNTIME_WORKSPACE = f"{RUNTIME_DIRNAME}/workspace"
+RUNTIME_DB = f"{RUNTIME_DIRNAME}/lightclaw.db"
+TEMPLATE_FILES = ("IDENTITY.md", "SOUL.md", "USER.md")
+
+
+def _resolve_home(path_arg: str | None) -> Path:
+    if path_arg:
+        return Path(path_arg).expanduser().resolve()
+    return Path.cwd().resolve()
+
+
+def _patched_env_example() -> str:
+    template_path = PROJECT_ROOT / ".env.example"
+    if template_path.exists():
+        content = template_path.read_text(encoding="utf-8")
+    else:
+        content = (
+            "LLM_PROVIDER=openai\n"
+            "LLM_MODEL=latest\n"
+            "OPENAI_API_KEY=\n"
+            "TELEGRAM_BOT_TOKEN=\n"
+            f"MEMORY_DB_PATH={RUNTIME_DB}\n"
+            f"WORKSPACE_PATH={RUNTIME_WORKSPACE}\n"
+            "CONTEXT_WINDOW=128000\n"
+        )
+
+    if re.search(r"(?m)^MEMORY_DB_PATH=", content):
+        content = re.sub(r"(?m)^MEMORY_DB_PATH=.*$", f"MEMORY_DB_PATH={RUNTIME_DB}", content)
+    else:
+        content += f"\nMEMORY_DB_PATH={RUNTIME_DB}\n"
+
+    if re.search(r"(?m)^WORKSPACE_PATH=", content):
+        content = re.sub(r"(?m)^WORKSPACE_PATH=.*$", f"WORKSPACE_PATH={RUNTIME_WORKSPACE}", content)
+    else:
+        content += f"\nWORKSPACE_PATH={RUNTIME_WORKSPACE}\n"
+
+    return content
+
+
+def _upgrade_legacy_env_defaults(content: str) -> tuple[str, bool]:
+    """Upgrade legacy default paths to runtime defaults (non-custom values only)."""
+    updated = content
+    changed = False
+
+    workspace_patterns = [
+        r"(?m)^WORKSPACE_PATH\s*=\s*workspace\s*(?:#.*)?$",
+        r"(?m)^WORKSPACE_PATH\s*=\s*\./workspace\s*(?:#.*)?$",
+    ]
+    memory_patterns = [
+        r"(?m)^MEMORY_DB_PATH\s*=\s*lightclaw\.db\s*(?:#.*)?$",
+        r"(?m)^MEMORY_DB_PATH\s*=\s*\./lightclaw\.db\s*(?:#.*)?$",
+    ]
+
+    for pattern in workspace_patterns:
+        new_text, count = re.subn(pattern, f"WORKSPACE_PATH={RUNTIME_WORKSPACE}", updated)
+        if count:
+            changed = True
+            updated = new_text
+
+    for pattern in memory_patterns:
+        new_text, count = re.subn(pattern, f"MEMORY_DB_PATH={RUNTIME_DB}", updated)
+        if count:
+            changed = True
+            updated = new_text
+
+    return updated, changed
+
+
+def _migrate_legacy_workspace(home: Path, workspace_dir: Path) -> int:
+    """Copy legacy home/workspace files into runtime workspace if missing."""
+    legacy = home / "workspace"
+    if not legacy.exists() or not legacy.is_dir():
+        return 0
+
+    migrated = 0
+    for src in legacy.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(legacy)
+        dst = workspace_dir / rel
+        if dst.exists():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        migrated += 1
+
+    return migrated
+
+
+def _ensure_workspace_templates(workspace_dir: Path, force: bool) -> list[str]:
+    created: list[str] = []
+    source_workspace = PROJECT_ROOT / "templates" / "personality"
+    if not source_workspace.exists():
+        source_workspace = PROJECT_ROOT / "workspace"
+
+    defaults = {
+        "IDENTITY.md": "# LightClaw\n\nA focused personal AI assistant.",
+        "SOUL.md": "# Soul\n\nBe helpful, accurate, and concise.",
+        "USER.md": "# User\n\nPersonal preferences go here.",
+    }
+
+    for filename in TEMPLATE_FILES:
+        target = workspace_dir / filename
+        if target.exists() and not force:
+            continue
+
+        source = source_workspace / filename
+        if source.exists():
+            content = source.read_text(encoding="utf-8")
+        else:
+            content = defaults[filename]
+
+        target.write_text(content, encoding="utf-8")
+        created.append(filename)
+
+    return created
+
+
+def cmd_onboard(args: argparse.Namespace) -> int:
+    home = _resolve_home(args.home)
+    runtime_dir = home / RUNTIME_DIRNAME
+    workspace_dir = runtime_dir / "workspace"
+    env_path = home / ".env"
+
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+
+    migrated = _migrate_legacy_workspace(home, workspace_dir)
+    created_templates = _ensure_workspace_templates(workspace_dir, force=args.force)
+
+    wrote_env = False
+    upgraded_env = False
+    if env_path.exists() and not args.force:
+        original = env_path.read_text(encoding="utf-8")
+        upgraded, changed = _upgrade_legacy_env_defaults(original)
+        if changed:
+            env_path.write_text(upgraded, encoding="utf-8")
+            upgraded_env = True
+    else:
+        env_path.write_text(_patched_env_example(), encoding="utf-8")
+        wrote_env = True
+
+    print("LightClaw onboard complete")
+    print(f"- Home: {home}")
+    print(f"- Runtime dir: {runtime_dir}")
+    print(f"- Workspace: {workspace_dir}")
+    print(f"- Database: {runtime_dir / 'lightclaw.db'}")
+    if wrote_env:
+        print(f"- Wrote config: {env_path}")
+    elif upgraded_env:
+        print(f"- Upgraded legacy defaults in config: {env_path}")
+    else:
+        print(f"- Kept existing config: {env_path}")
+    if created_templates:
+        print(f"- Created templates: {', '.join(created_templates)}")
+    else:
+        print("- Template files already present")
+    if migrated:
+        print(f"- Migrated {migrated} legacy file(s) from ./workspace")
+    print("")
+    print("Next steps:")
+    print("1. Edit .env and set TELEGRAM_BOT_TOKEN + provider API key.")
+    print("2. Run: lightclaw run")
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    home = _resolve_home(args.home)
+    runtime_dir = home / RUNTIME_DIRNAME
+    workspace_dir = runtime_dir / "workspace"
+
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    _migrate_legacy_workspace(home, workspace_dir)
+    _ensure_workspace_templates(workspace_dir, force=False)
+
+    env_path = home / ".env"
+    if env_path.exists():
+        load_dotenv(env_path, override=False)
+
+    os.environ["LIGHTCLAW_HOME"] = str(home)
+    workspace_env = os.getenv("WORKSPACE_PATH", "").strip()
+    memory_env = os.getenv("MEMORY_DB_PATH", "").strip()
+    if not workspace_env or workspace_env in {"workspace", "./workspace"}:
+        os.environ["WORKSPACE_PATH"] = RUNTIME_WORKSPACE
+    if not memory_env or memory_env in {"lightclaw.db", "./lightclaw.db"}:
+        os.environ["MEMORY_DB_PATH"] = RUNTIME_DB
+
+    os.chdir(home)
+
+    from main import main as bot_main
+
+    bot_main()
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="lightclaw", description="LightClaw CLI")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    onboard = sub.add_parser("onboard", help="Initialize .env and runtime workspace in current directory")
+    onboard.add_argument("--home", help="Target runtime home directory (default: current directory)")
+    onboard.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing .env and workspace templates",
+    )
+    onboard.set_defaults(func=cmd_onboard)
+
+    run = sub.add_parser("run", help="Run LightClaw using current directory as runtime home")
+    run.add_argument("--home", help="Runtime home directory (default: current directory)")
+    run.set_defaults(func=cmd_run)
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# LightClaw
+.env
+lightclaw.db
+*.db
+.lightclaw/
+workspace/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+base/

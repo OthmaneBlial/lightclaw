@@ -1,0 +1,336 @@
+<div align="center">
+
+  <h1>🦞 LightClaw</h1>
+
+  <h3>The Featherweight Core of OpenClaw — Your AI Agent in a Tiny Codebase</h3>
+
+  <p>
+    <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python">
+    <img src="https://img.shields.io/badge/Files-5-brightgreen" alt="Files">
+    <img src="https://img.shields.io/badge/Lines-~1300-blue" alt="Lines">
+    <img src="https://img.shields.io/badge/LLM_Providers-5-purple" alt="Providers">
+    <img src="https://img.shields.io/badge/RAM-<50MB-orange" alt="RAM">
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  </p>
+
+  <p><i>Fork it. Hack it. Ship it. No framework tax.</i></p>
+
+</div>
+
+---
+
+## Why LightClaw Exists
+
+**OpenClaw** is a powerful, full-featured AI agent platform — but it's also *big*. Dozens of packages, multiple channels, tool registries, message buses, plugin systems. It's built for scale and enterprise use.
+
+**LightClaw** is the opposite. It's the *distilled essence* of the OpenClaw idea, stripped down to the atomic minimum:
+
+```
+OpenClaw:     50+ packages │ 20k+ lines  │ TypeScript │ 10+ channels │ 12+ providers │ >1GB RAM
+LightClaw:    5 files       │ ~1300 lines │ Python │ Telegram only │ 5 providers │ <50MB RAM
+```
+
+Think of LightClaw as **the starter engine** — the part of a rocket that ignites first. It contains the core DNA of OpenClaw (LLM routing, memory, conversational agent) but removes everything else. No message bus. No plugin registry. No tool orchestration. Just a direct pipeline:
+
+```
+📱 Telegram Message → 🧠 Memory Recall → 🤖 LLM → 💡 HTML Format → 💬 Reply
+```
+
+## Who Is This For?
+
+<table>
+  <tr>
+    <td>🧑‍💻 <b>Builders</b></td>
+    <td>You want to build <i>your own</i> AI assistant without inheriting a massive codebase. Fork LightClaw, add what you need, nothing more.</td>
+  </tr>
+  <tr>
+    <td>🎓 <b>Learners</b></td>
+    <td>You want to understand how AI agents work — memory, RAG, LLM routing — in code you can read in 30 minutes.</td>
+  </tr>
+  <tr>
+    <td>⚡ <b>Minimalists</b></td>
+    <td>You need a personal AI bot on a $5/month VPS. No Docker. No build steps. Just <code>./lightclaw run</code>.</td>
+  </tr>
+  <tr>
+    <td>🔬 <b>Tinkerers</b></td>
+    <td>You want to experiment with different LLM providers, memory strategies, or prompt engineering without fighting a framework.</td>
+  </tr>
+</table>
+
+## The Core Idea
+
+> **OpenClaw is the Industrial Complex. LightClaw is the Precision Workbench.**
+>
+> You don't need an entire industrial complex to build a custom tool. You need a workbench with the right instruments. LightClaw gives you exactly that — a clean, readable, forkable foundation that does one thing well: **connect you to an AI through Telegram, with infinite memory.**
+>
+> Add Discord support? Drop in a file. Need tool calling? Add a function. Want vector search with FAISS? Swap out 20 lines in `memory.py`. The codebase is small enough that *you own it completely*.
+
+## Features
+
+🧠 **Infinite Memory** — Every conversation is persisted in SQLite with TF-IDF vector embeddings. The bot recalls relevant context from days, weeks, or months ago via semantic search (RAG).
+
+🔌 **5 LLM Providers** — OpenAI (ChatGPT), xAI (Grok), Anthropic (Claude), Google (Gemini), Z-AI (GLM). Switch providers by changing one line in `.env`.
+
+📱 **Telegram Native** — Polling-based bot with "Thinking… 💭" placeholders, HTML-formatted responses, typing indicators, and rich commands.
+
+🎭 **Customizable Personality** — Edit `.lightclaw/workspace/SOUL.md`, `IDENTITY.md`, and `USER.md` to shape your bot's character, identity, and personal context.
+
+🎙️ **Voice Messages** — Automatic voice transcription via Groq Whisper (optional). Send a voice note and the bot transcribes + responds.
+
+📸 **Photo & Document Support** — Send images and files — the bot acknowledges them and processes captions through the agent loop.
+
+🧹 **Smart Context Management** — Auto-summarization when conversations grow too long, plus emergency context window compression with retry on overflow.
+
+📦 **Small Core** — `main.py` + `memory.py` + `providers.py` + `config.py` + `lightclaw` CLI. No hidden complexity. No abstractions for the sake of abstractions.
+
+🚀 **Instant Startup** — No compilation, no Docker, no build pipeline. `./lightclaw run` and you're running.
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      main.py                                      │
+│                                                                  │
+│  ┌─────────────────────────────────────────┐                     │
+│  │ markdown_to_telegram_html()             │  MD → HTML converter│
+│  │ load_personality()                      │  .lightclaw/workspace/*.md │
+│  │ build_system_prompt()                   │  Dynamic prompts    │
+│  │ transcribe_voice()                      │  Groq Whisper       │
+│  └─────────────────────────────────────────┘                     │
+│                                                                  │
+│  LightClawBot                                                    │
+│  ├── handle_message()    ← text messages                         │
+│  ├── handle_voice()      ← voice transcription                   │
+│  ├── handle_photo()      ← image handling                        │
+│  ├── handle_document()   ← file handling                         │
+│  ├── _process_user_message()                                     │
+│  │     │                                                         │
+│  │     ├─ 1. Send "Thinking… 💭"  placeholder                   │
+│  │     ├─ 2. Recall memories      ◄── memory.py                  │
+│  │     ├─ 3. Build prompt              SQLite + TF-IDF RAG      │
+│  │     ├─ 4. Call LLM + retry     ◄── providers.py               │
+│  │     ├─ 5. Edit placeholder          5 providers unified       │
+│  │     └─ 6. Summarize if needed                                 │
+│  │                                                               │
+│  └── cmd_start/help/clear/memory/recall/show                     │
+│                                                                  │
+│  config.py ◄── .env file                                          │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+## Quick Start
+
+### ⚡ One-Command Setup (Recommended)
+
+```bash
+git clone https://github.com/OthmaneBlial/LightClaw.git && cd LightClaw && bash setup.sh
+```
+
+The interactive setup wizard will walk you through:
+1. Choosing your AI provider (OpenAI, xAI, Claude, Gemini, Z-AI)
+2. Entering your API key
+3. Creating a Telegram bot via @BotFather (step-by-step guide)
+4. Optional voice transcription setup
+5. Auto-start your bot 🚀
+
+### 🔧 Manual Setup
+
+```bash
+git clone https://github.com/OthmaneBlial/LightClaw.git
+cd LightClaw
+pip install -r requirements.txt
+```
+
+**2. Onboard (recommended)**
+
+```bash
+./lightclaw onboard
+```
+
+This creates:
+- `.env` (if missing)
+- `.lightclaw/workspace/` (runtime personality files)
+- `.lightclaw/lightclaw.db` (runtime DB path)
+
+Then edit `.env` with your API key and Telegram bot token:
+
+```env
+# Choose your provider: openai | xai | claude | gemini | zai
+LLM_PROVIDER=openai
+LLM_MODEL=latest
+OPENAI_API_KEY=sk-...
+
+# Get a token from @BotFather on Telegram
+TELEGRAM_BOT_TOKEN=123456:ABC...
+
+# Optional: restrict to your user ID (get it from @userinfobot)
+TELEGRAM_ALLOWED_USERS=123456789
+```
+
+**3. Customize (Optional)**
+
+Edit the personality files in `.lightclaw/workspace/`:
+
+```
+.lightclaw/workspace/
+├── IDENTITY.md   # Bot's name, purpose, philosophy
+├── SOUL.md       # Personality traits and values
+└── USER.md       # Your preferences and personal context
+```
+
+**4. Run**
+
+```bash
+./lightclaw run
+```
+
+That's it. Open Telegram, find your bot, say hello. 🦞
+
+> Development mode still works with `python main.py` (it now defaults to `.lightclaw/workspace`).
+
+## CLI Commands
+
+```bash
+lightclaw onboard   # initialize .env + .lightclaw/workspace in current directory
+lightclaw run       # run using the current directory as runtime home
+```
+
+If `lightclaw` is not on your `PATH`, run `./lightclaw onboard` and `./lightclaw run`.
+
+## Supported Providers
+
+| Provider | SDK Used | Set in `.env` | Model Examples |
+|----------|----------|---------------|----------------|
+| **OpenAI** | `openai` | `LLM_PROVIDER=openai` | `gpt-5.2`, `gpt-5.2-mini` |
+| **xAI** | `openai` (base_url override) | `LLM_PROVIDER=xai` | `grok-4-latest`, `grok-4-fast-non-reasoning` |
+| **Claude** | `anthropic` | `LLM_PROVIDER=claude` | `claude-opus-4-5`, `claude-sonnet-4-5` |
+| **Gemini** | `google-generativeai` | `LLM_PROVIDER=gemini` | `gemini-3-flash-preview`, `gemini-2.5-flash` |
+| **Z-AI** | `openai` (base_url override) | `LLM_PROVIDER=zai` | `glm-5`, `glm-4.7` |
+
+> **Pro tip:** If `LLM_MODEL` is empty, `latest`, `auto`, or `default`, LightClaw picks the latest per-provider default automatically.
+
+Quick provider sanity test:
+
+```bash
+python scripts/provider_smoke_test.py
+```
+
+It sends a tiny prompt to each provider with a configured API key and reports `OK`/`FAIL`/`SKIP`.
+
+## Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Welcome message |
+| `/help` | Show available commands |
+| `/memory` | Show memory statistics (total interactions, sessions, vocabulary) |
+| `/recall <query>` | Search past conversations by semantic similarity |
+| `/clear` | Reset conversation history for the current chat |
+| `/show` | Show current model, provider, uptime, memory stats, voice status |
+
+## How Infinite Memory Works
+
+Unlike traditional chatbots that forget after a session ends, LightClaw stores **every interaction** in a local SQLite database with vector embeddings:
+
+```
+User says: "I love Italian food, especially pasta"
+                    │
+                    ▼
+          ┌─────────────────┐
+          │  1. Tokenize     │  "love", "italian", "food", "pasta"
+          │  2. TF-IDF Vec   │  [0.0, 0.3, 0.5, 0.7, ...]
+          │  3. Store in DB   │  SQLite: content + embedding blob
+          └─────────────────┘
+
+... 3 weeks later ...
+
+User says: "What food do I like?"
+                    │
+                    ▼
+          ┌─────────────────┐
+          │  1. Embed query  │  [0.0, 0.2, 0.6, 0.0, ...]
+          │  2. Cosine sim.  │  Compare with all stored vectors
+          │  3. Top-K recall │  "I love Italian food" → 0.82 sim
+          │  4. Inject prompt│  System prompt gets memory context
+          └─────────────────┘
+                    │
+                    ▼
+          LLM responds: "You mentioned you love Italian food,
+                         especially pasta! 🍝"
+```
+
+## Smart Context Management
+
+LightClaw automatically manages conversation length so you never hit context window limits:
+
+1. **Auto-summarization** — When history exceeds 20 messages or 75% of the context window, the LLM summarizes older messages while keeping the last 4 for continuity.
+2. **Emergency compression** — If the LLM returns a context-too-long error, LightClaw drops the oldest 50% of messages and retries automatically.
+3. **Token estimation** — Uses a 2.5 chars/token heuristic to predict when to summarize before hitting limits.
+
+## Project Structure
+
+```
+lightclaw/
+├── lightclaw         # CLI entrypoint: onboard + run
+├── setup.sh          # One-command interactive setup wizard
+├── main.py           # Telegram bot + agent loop + HTML converter
+├── memory.py         # SQLite infinite memory + RAG
+├── providers.py      # Unified LLM client for 5 providers
+├── config.py         # .env configuration
+├── scripts/
+│   └── provider_smoke_test.py  # Quick API smoke test for all providers
+├── templates/
+│   └── personality/  # Onboarding templates (IDENTITY.md, SOUL.md, USER.md)
+├── .lightclaw/       # Runtime data (created by `lightclaw onboard`)
+│   ├── workspace/    # Active personality files + generated artifacts
+│   └── lightclaw.db  # Runtime memory database
+├── requirements.txt  # 6 dependencies
+├── .env.example      # Configuration template
+├── LICENSE           # MIT
+└── .gitignore
+```
+
+That's the entire project. No `src/`. No `pkg/`. No `internal/`.
+
+## Fork & Build Your Own
+
+LightClaw is designed to be forked. Here are some ideas:
+
+| What You Want | What to Change |
+|---------------|----------------|
+| Add Discord support | Add a Discord handler in `main.py` (~50 lines) |
+| Better embeddings | Swap TF-IDF in `memory.py` for `sentence-transformers` or OpenAI embeddings |
+| Tool calling | Add tool definitions to `providers.py` and a tool executor in `main.py` |
+| Web search | Add a search function and inject results into the prompt |
+| Multi-user personas | Extend `.lightclaw/workspace/` with per-user personality files |
+| Webhook mode | Replace polling with `python-telegram-bot`'s webhook handler |
+| Vision support | Send photos to GPT-5.2 or GPT-4.1 vision APIs in `handle_photo()` |
+
+The point is: **you shouldn't need permission from a framework to add a feature**. The code is small enough to understand in an afternoon and modify with confidence.
+
+## OpenClaw Family
+
+| Project | Language | Purpose | Complexity |
+|---------|----------|---------|------------|
+| **[OpenClaw](https://github.com/OthmaneBlial/openclaw)** | TypeScript | Full-featured AI agent platform | ████████░░ |
+| **[LightClaw](https://github.com/OthmaneBlial/LightClaw)** | Python | Minimal forkable agent core (5 LLMs) | ██░░░░░░░░ |
+
+> **LightClaw** is where you start. **OpenClaw** is where you scale.
+
+## Requirements
+
+- Python 3.10+
+- A Telegram bot token ([get one from @BotFather](https://t.me/BotFather))
+- An API key from any supported LLM provider
+- (Optional) Groq API key for voice transcription
+
+## License
+
+MIT — do whatever you want with it.
+
+---
+
+<div align="center">
+  <p><b>🦞 LightClaw — Because the best framework is no framework.</b></p>
+  <p><i>Built with ❤️ by <a href="https://github.com/OthmaneBlial">Othmane BLIAL</a></i></p>
+</div>
