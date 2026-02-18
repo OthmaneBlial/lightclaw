@@ -247,6 +247,11 @@ def build_system_prompt(
         personality,
         f"## Current Time\n{datetime.now().strftime('%Y-%m-%d %H:%M (%A)')}",
         f"## Provider\n{config.llm_provider} ({config.llm_model})",
+        (
+            "## Delegation Guardrails\n"
+            "- Never claim or simulate local-agent execution unless LightClaw has already done it.\n"
+            "- Do not output fake local-agent wrappers like '🤖 Delegated to ...' in normal chat mode."
+        ),
         FILE_IO_RULES,
     ]
 
@@ -1245,6 +1250,7 @@ class LightClawBot:
             return
 
         recent = self.memory.get_recent(session_id, limit=100)
+        recent = self._filter_recent_context(recent)
         token_estimate = self.estimate_tokens(recent)
         threshold = self.config.context_window * 75 // 100
 
@@ -1339,6 +1345,43 @@ class LightClawBot:
         while messages and messages[0].get("role") == "tool":
             messages = messages[1:]
         return messages
+
+    @staticmethod
+    def _is_delegation_transcript_text(text: str) -> bool:
+        """Detect local-agent transcript wrappers to keep them out of normal LLM context."""
+        normalized = (text or "").strip()
+        if not normalized:
+            return False
+        if normalized.startswith("🤖 Delegated to "):
+            return True
+        return (
+            "No workspace file changes detected." in normalized
+            and "Created/updated:" in normalized
+        )
+
+    def _filter_recent_context(self, messages: list[dict]) -> list[dict]:
+        """Remove delegation transcripts and /agent command noise from recent history."""
+        filtered: list[dict] = []
+        for msg in messages:
+            role = (msg.get("role") or "").strip()
+            content = msg.get("content", "")
+            if role == "assistant" and self._is_delegation_transcript_text(content):
+                continue
+            if role == "user" and content.strip().lower().startswith("/agent"):
+                continue
+            filtered.append(msg)
+        return filtered
+
+    def _filter_recalled_memories(self, memories: list) -> list:
+        """Remove recalled snippets that can trigger fake delegation-style replies."""
+        filtered = []
+        for rec in memories:
+            if rec.role == "assistant" and self._is_delegation_transcript_text(rec.content):
+                continue
+            if rec.role == "user" and rec.content.strip().lower().startswith("/agent"):
+                continue
+            filtered.append(rec)
+        return filtered
 
     # ── /start ────────────────────────────────────────────────
 
@@ -1918,16 +1961,30 @@ class LightClawBot:
 
         if sub in {"off", "disable", "stop"}:
             previous = self._agent_mode_by_session.pop(session_id, None)
+            removed = await asyncio.to_thread(
+                self.memory.delete_delegation_transcripts,
+                session_id,
+            )
             if previous:
+                extra = (
+                    f"\n🧹 Removed {removed} delegation transcript(s) from chat memory context."
+                    if removed > 0
+                    else ""
+                )
                 await self._reply_logged(
                     update,
-                    f"✅ Delegation disabled (was <code>{_escape_html(previous)}</code>).",
+                    f"✅ Delegation disabled (was <code>{_escape_html(previous)}</code>).{extra}",
                     parse_mode=ParseMode.HTML,
                 )
             else:
+                extra = (
+                    f"\n🧹 Removed {removed} old delegation transcript(s) from chat memory context."
+                    if removed > 0
+                    else ""
+                )
                 await self._reply_logged(
                     update,
-                    "Delegation mode is already disabled for this chat.",
+                    "Delegation mode is already disabled for this chat." + extra,
                 )
             return
 
@@ -3041,6 +3098,9 @@ class LightClawBot:
         # Optional delegation mode: route normal messages to local coding agent.
         active_agent = self._agent_mode_by_session.get(session_id)
         if active_agent:
+            log.info(
+                f"[{session_id}] Delegation mode active ({active_agent}); routing message to local agent"
+            )
             self.memory.ingest("user", user_text, session_id)
             delegated_response = await self._run_local_agent_task(
                 session_id=session_id,
@@ -3068,11 +3128,13 @@ class LightClawBot:
 
         # 2. Recall relevant memories
         memories = self.memory.recall(user_text, top_k=self.config.memory_top_k)
+        memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)
 
         # 3. Get recent conversation history + clean orphans
         recent = self.memory.get_recent(session_id, limit=20)
         recent = self._clean_orphan_messages(recent)
+        recent = self._filter_recent_context(recent)
 
         # 4. Get session summary
         summary = self._get_session_summary(session_id)

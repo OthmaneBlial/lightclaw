@@ -267,6 +267,16 @@ class MemoryStore:
         self.db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
         self.db.commit()
 
+    def delete_delegation_transcripts(self, session_id: str) -> int:
+        """Delete assistant messages that are local-agent delegation transcripts."""
+        cursor = self.db.execute(
+            "DELETE FROM interactions "
+            "WHERE session_id = ? AND role = 'assistant' AND content LIKE ?",
+            (session_id, "🤖 Delegated to %"),
+        )
+        self.db.commit()
+        return int(cursor.rowcount or 0)
+
     def clear_all(self):
         """Delete all memory data across all sessions."""
         global _vocab, _idf, _doc_count
