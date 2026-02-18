@@ -1310,7 +1310,10 @@ class LightClawBot:
             if summary and not self._is_provider_error_text(summary):
                 self._session_summaries[session_id] = summary
                 self._clear_llm_backoff()
-                log.info(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")
+                if os.getenv("LIGHTCLAW_CHAT_MODE", "").strip() == "1":
+                    log.debug(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")
+                else:
+                    log.info(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")
             elif summary and self._is_provider_error_text(summary):
                 self._set_llm_backoff()
                 log.warning(f"[{session_id}] Skipped summary update due to provider error response")

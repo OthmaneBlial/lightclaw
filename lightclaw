@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import argparse
 import getpass
+import logging
 import os
 import re
 import shlex
@@ -568,8 +569,15 @@ def cmd_chat(args: argparse.Namespace) -> int:
     if prep_code:
         return prep_code
 
+    os.environ["LIGHTCLAW_CHAT_MODE"] = "1"
+
     from config import load_config
     from main import LightClawBot, build_system_prompt, resolve_runtime_path
+
+    # Keep terminal chat clean: suppress noisy transport/client logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
     config = load_config()
     config.workspace_path = str(resolve_runtime_path(config.workspace_path))

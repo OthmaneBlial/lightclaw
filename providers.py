@@ -29,6 +29,9 @@ class LLMClient:
         self.provider_name = config.llm_provider
         self.model = config.llm_model
         self.max_output_tokens = max(512, int(getattr(config, "max_output_tokens", 4096) or 4096))
+        if self.provider_name == "deepseek" and self.max_output_tokens > 4096:
+            # DeepSeek's chat endpoint commonly rejects larger max_tokens values.
+            self.max_output_tokens = 4096
         self._client = None
 
         self._init_client()
