@@ -21,9 +21,12 @@ Phase 2 features:
 import asyncio
 import difflib
 import io
+import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
@@ -325,6 +328,8 @@ class LightClawBot:
         self._pending_wipe_confirm: dict[str, float] = {}
         # Track last successful file operation target per session.
         self._last_file_by_session: dict[str, str] = {}
+        # Per-chat local delegation mode (codex/claude/opencode).
+        self._agent_mode_by_session: dict[str, str] = {}
 
     def is_allowed(self, user_id: int) -> bool:
         """Check if this user is in the allowlist (empty = allow all)."""
@@ -424,6 +429,443 @@ class LightClawBot:
             if len(unique) >= limit:
                 break
         return unique
+
+    @staticmethod
+    def _agent_aliases() -> dict[str, str]:
+        return {
+            "codex": "codex",
+            "codex-cli": "codex",
+            "claude": "claude",
+            "claude-code": "claude",
+            "opencode": "opencode",
+            "open-code": "opencode",
+            "open_code": "opencode",
+        }
+
+    def _available_local_agents(self) -> dict[str, str]:
+        """Return locally available coding agents (name -> executable path)."""
+        binaries = {
+            "codex": "codex",
+            "claude": "claude",
+            "opencode": "opencode",
+        }
+        available: dict[str, str] = {}
+        for name, binary in binaries.items():
+            path = shutil.which(binary)
+            if path:
+                available[name] = path
+        return available
+
+    def _resolve_local_agent_name(self, raw_name: str) -> str | None:
+        alias = self._agent_aliases().get((raw_name or "").strip().lower())
+        if not alias:
+            return None
+        return alias
+
+    @staticmethod
+    def _agent_usage_text() -> str:
+        return (
+            "<b>Usage</b>\n"
+            "<code>/agent</code> - show status + available local agents\n"
+            "<code>/agent use &lt;codex|claude|opencode&gt;</code> - route chat messages to that local agent\n"
+            "<code>/agent off</code> - disable delegation mode for this chat\n"
+            "<code>/agent run &lt;task&gt;</code> - run one task with current active agent\n"
+            "<code>/agent run &lt;agent&gt; &lt;task&gt;</code> - one-shot with a specific agent"
+        )
+
+    def _render_agent_status(self, session_id: str) -> str:
+        available = self._available_local_agents()
+        active = self._agent_mode_by_session.get(session_id)
+
+        lines = ["🤖 <b>Local Agent Delegation</b>", ""]
+        if active:
+            lines.append(f"<b>Active in this chat:</b> <code>{_escape_html(active)}</code>")
+        else:
+            lines.append("<b>Active in this chat:</b> none")
+        lines.append("")
+
+        if available:
+            lines.append("<b>Installed local agents:</b>")
+            for name in sorted(available):
+                lines.append(
+                    f"• <code>{_escape_html(name)}</code> "
+                    f"({_escape_html(available[name])})"
+                )
+        else:
+            lines.append("No supported local coding agents found in PATH.")
+
+        lines.append("")
+        lines.append(self._agent_usage_text())
+        return "\n".join(lines)
+
+    def _build_delegation_prompt(self, task: str) -> str:
+        workspace = Path(self.config.workspace_path).resolve().as_posix()
+        return (
+            "You are a local coding agent delegated by LightClaw.\n"
+            f"Workspace root: {workspace}\n\n"
+            "Requirements:\n"
+            "- Implement the task directly by creating/editing files in this workspace.\n"
+            "- Do not ask for confirmation; make reasonable assumptions and proceed.\n"
+            "- If the task is large, still perform as much as possible in one run.\n"
+            "- Do not dump full source files in the final response.\n"
+            "- End with a concise summary of what was created/updated.\n\n"
+            "TASK:\n"
+            f"{task}\n"
+        )
+
+    def _snapshot_workspace_state(self) -> dict[str, tuple[int, int]]:
+        """Snapshot workspace file metadata for before/after change detection."""
+        workspace = Path(self.config.workspace_path).resolve()
+        snapshot: dict[str, tuple[int, int]] = {}
+        for path in workspace.rglob("*"):
+            if not path.is_file():
+                continue
+            try:
+                stat = path.stat()
+            except Exception:
+                continue
+            rel = path.relative_to(workspace).as_posix()
+            snapshot[rel] = (int(stat.st_size), int(stat.st_mtime_ns))
+        return snapshot
+
+    @staticmethod
+    def _summarize_workspace_delta(
+        before: dict[str, tuple[int, int]],
+        after: dict[str, tuple[int, int]],
+        max_items_per_group: int = 12,
+    ) -> str:
+        before_paths = set(before.keys())
+        after_paths = set(after.keys())
+
+        created = sorted(after_paths - before_paths)
+        deleted = sorted(before_paths - after_paths)
+        updated = sorted(
+            path for path in (before_paths & after_paths) if before[path] != after[path]
+        )
+
+        total = len(created) + len(updated) + len(deleted)
+        if total == 0:
+            return "No workspace file changes detected."
+
+        lines = [
+            "✅ Workspace changes detected:",
+            f"- Created: {len(created)}",
+            f"- Updated: {len(updated)}",
+            f"- Deleted: {len(deleted)}",
+        ]
+
+        for label, items in (("Created", created), ("Updated", updated), ("Deleted", deleted)):
+            if not items:
+                continue
+            for path in items[:max_items_per_group]:
+                lines.append(f"- {label}: `{path}`")
+            remaining = len(items) - max_items_per_group
+            if remaining > 0:
+                lines.append(f"- {label}: ... and {remaining} more")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _strip_ansi(text: str) -> str:
+        return re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text or "")
+
+    @staticmethod
+    def _compact_external_agent_summary(text: str, max_chars: int = 900) -> str:
+        raw = (text or "").strip()
+        if not raw:
+            return ""
+        compact = re.sub(r"```[\s\S]*?```", "", raw)
+        compact = re.sub(r"\n{3,}", "\n\n", compact).strip()
+        if len(compact) > max_chars:
+            compact = compact[:max_chars].rstrip() + "..."
+        return compact
+
+    def _parse_codex_exec_output(self, stdout: str) -> str:
+        parts: list[str] = []
+        last_error = ""
+        for line in (stdout or "").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            event_type = str(obj.get("type") or "")
+            if event_type == "item.completed":
+                item = obj.get("item") or {}
+                if isinstance(item, dict) and item.get("type") == "agent_message":
+                    text = str(item.get("text") or "").strip()
+                    if text:
+                        parts.append(text)
+            elif event_type == "error":
+                last_error = str(obj.get("message") or last_error)
+            elif event_type == "turn.failed":
+                err = obj.get("error") or {}
+                if isinstance(err, dict):
+                    last_error = str(err.get("message") or last_error)
+
+        if parts:
+            return "\n".join(parts).strip()
+        if last_error:
+            return f"Error: {last_error}"
+        return (stdout or "").strip()[-2000:]
+
+    def _parse_claude_cli_output(self, stdout: str) -> str:
+        cleaned = self._strip_ansi(stdout).strip()
+        if not cleaned:
+            return ""
+
+        parsed_obj = None
+        try:
+            parsed_obj = json.loads(cleaned)
+        except Exception:
+            for line in reversed(cleaned.splitlines()):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed_obj = json.loads(line)
+                    break
+                except Exception:
+                    continue
+
+        if isinstance(parsed_obj, dict):
+            result = str(parsed_obj.get("result") or "").strip()
+            if result:
+                return result
+            msg = str(parsed_obj.get("message") or "").strip()
+            if msg:
+                return msg
+
+        return cleaned[-2000:]
+
+    def _parse_opencode_run_output(self, stdout: str) -> str:
+        cleaned = self._strip_ansi(stdout).strip()
+        if not cleaned:
+            return ""
+
+        pieces: list[str] = []
+        last_error = ""
+
+        def add_piece(value: str):
+            text = (value or "").strip()
+            if text and text not in pieces:
+                pieces.append(text)
+
+        for line in cleaned.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                add_piece(line)
+                continue
+
+            event_type = str(obj.get("type") or "")
+            if event_type == "error":
+                err = obj.get("error") or {}
+                if isinstance(err, dict):
+                    data = err.get("data") or {}
+                    if isinstance(data, dict):
+                        last_error = str(data.get("message") or last_error)
+                    if not last_error:
+                        last_error = str(err.get("message") or last_error)
+                if not last_error:
+                    last_error = str(obj.get("message") or "unknown error")
+                continue
+
+            for key in ("result", "message", "content", "text"):
+                val = obj.get(key)
+                if isinstance(val, str):
+                    add_piece(val)
+
+            msg = obj.get("message")
+            if isinstance(msg, dict):
+                for key in ("text", "content", "result"):
+                    val = msg.get(key)
+                    if isinstance(val, str):
+                        add_piece(val)
+                content = msg.get("content")
+                if isinstance(content, list):
+                    for part in content:
+                        if isinstance(part, str):
+                            add_piece(part)
+                        elif isinstance(part, dict):
+                            for key in ("text", "content", "value"):
+                                val = part.get(key)
+                                if isinstance(val, str):
+                                    add_piece(val)
+
+        if pieces:
+            return "\n".join(pieces).strip()
+        if last_error:
+            return f"Error: {last_error}"
+        return cleaned[-2000:]
+
+    def _invoke_local_agent_sync(self, agent: str, task: str) -> dict:
+        workspace = Path(self.config.workspace_path).resolve()
+        timeout_sec = max(60, int(self.config.local_agent_timeout_sec))
+        prompt = self._build_delegation_prompt(task)
+        env = os.environ.copy()
+        env["LIGHTCLAW_DELEGATED_AGENT"] = "1"
+        env["CI"] = "1"
+
+        cmd: list[str]
+        run_input: str | None = None
+        if agent == "codex":
+            cmd = [
+                "codex",
+                "exec",
+                "--json",
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--skip-git-repo-check",
+                "--color",
+                "never",
+                "-C",
+                workspace.as_posix(),
+                "-",
+            ]
+            run_input = prompt
+        elif agent == "claude":
+            cmd = [
+                "claude",
+                "-p",
+                "--output-format",
+                "json",
+                "--dangerously-skip-permissions",
+                "--no-chrome",
+                "--no-session-persistence",
+                "-",
+            ]
+            run_input = prompt
+        elif agent == "opencode":
+            cmd = [
+                "opencode",
+                "run",
+                "--format",
+                "json",
+                prompt,
+            ]
+        else:
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": f"unsupported local agent: {agent}",
+                "summary": "",
+                "elapsed": 0.0,
+                "timed_out": False,
+            }
+
+        started = time.monotonic()
+        try:
+            completed = subprocess.run(
+                cmd,
+                input=run_input,
+                text=True,
+                capture_output=True,
+                cwd=workspace.as_posix(),
+                env=env,
+                timeout=timeout_sec,
+            )
+            elapsed = time.monotonic() - started
+        except subprocess.TimeoutExpired as e:
+            elapsed = time.monotonic() - started
+            return {
+                "ok": False,
+                "exit_code": 124,
+                "stdout": str(e.stdout or ""),
+                "stderr": (str(e.stderr or "") + f"\nTimed out after {timeout_sec}s").strip(),
+                "summary": "",
+                "elapsed": elapsed,
+                "timed_out": True,
+            }
+        except Exception as e:
+            elapsed = time.monotonic() - started
+            return {
+                "ok": False,
+                "exit_code": 1,
+                "stdout": "",
+                "stderr": str(e),
+                "summary": "",
+                "elapsed": elapsed,
+                "timed_out": False,
+            }
+
+        stdout = completed.stdout or ""
+        stderr = completed.stderr or ""
+
+        if agent == "codex":
+            summary = self._parse_codex_exec_output(stdout)
+        elif agent == "claude":
+            summary = self._parse_claude_cli_output(stdout)
+        else:
+            summary = self._parse_opencode_run_output(stdout)
+
+        ok = completed.returncode == 0
+        if summary.strip().lower().startswith("error:"):
+            ok = False
+
+        return {
+            "ok": ok,
+            "exit_code": int(completed.returncode if ok or completed.returncode != 0 else 1),
+            "stdout": stdout,
+            "stderr": stderr,
+            "summary": summary,
+            "elapsed": elapsed,
+            "timed_out": False,
+        }
+
+    async def _run_local_agent_task(self, session_id: str, agent: str, task: str) -> str:
+        available = self._available_local_agents()
+        if agent not in available:
+            installed = ", ".join(sorted(available.keys())) if available else "none"
+            return (
+                f"⚠️ Local agent `{agent}` is not available on this machine.\n"
+                f"Installed agents: {installed}"
+            )
+
+        before = await asyncio.to_thread(self._snapshot_workspace_state)
+        result = await asyncio.to_thread(self._invoke_local_agent_sync, agent, task)
+        after = await asyncio.to_thread(self._snapshot_workspace_state)
+
+        summary = self._compact_external_agent_summary(str(result.get("summary") or ""))
+        delta_summary = self._summarize_workspace_delta(before, after)
+        stderr_excerpt = self._compact_external_agent_summary(
+            self._strip_ansi(str(result.get("stderr") or ""))
+        )
+
+        lines = [f"🤖 Delegated to `{agent}`"]
+        if result.get("ok"):
+            lines.append(f"✅ Finished in {float(result.get('elapsed', 0.0)):.1f}s")
+        elif result.get("timed_out"):
+            lines.append(
+                f"⚠️ Timed out after {int(self.config.local_agent_timeout_sec)}s"
+            )
+        else:
+            lines.append(
+                f"⚠️ `{agent}` exited with code {int(result.get('exit_code', 1))}"
+            )
+
+        if summary:
+            lines.append("")
+            lines.append(summary)
+
+        lines.append("")
+        lines.append(delta_summary)
+
+        if not result.get("ok") and stderr_excerpt:
+            lines.append("")
+            lines.append(f"stderr: {stderr_excerpt[:700]}")
+
+        log.info(
+            f"[{session_id}] Local agent {agent} finished "
+            f"(ok={result.get('ok')}, exit={result.get('exit_code')}, "
+            f"elapsed={float(result.get('elapsed', 0.0)):.1f}s)"
+        )
+        return "\n".join(lines).strip()
 
     async def _reply_logged(
         self,
@@ -556,6 +998,7 @@ class LightClawBot:
             "/memory - Show memory stats\n"
             "/recall &lt;query&gt; - Search my memories\n"
             "/skills - Manage skills (install/use/create)\n"
+            "/agent - Delegate tasks to local coding agents\n"
             "/show - Show current config",
             parse_mode=ParseMode.HTML,
         )
@@ -580,6 +1023,7 @@ class LightClawBot:
             "/memory - Show memory statistics\n"
             "/recall &lt;query&gt; - Search past conversations\n"
             "/skills - Install/use/create skills\n"
+            "/agent - Delegate tasks to local coding agents\n"
             "/show - Show current model, provider, uptime",
             parse_mode=ParseMode.HTML,
         )
@@ -1034,6 +1478,154 @@ class LightClawBot:
         await self._reply_logged(
             update,
             "Unknown /skills subcommand.\n\n" + self._skills_usage_text(),
+            parse_mode=ParseMode.HTML,
+        )
+
+    # ── /agent ───────────────────────────────────────────────
+
+    async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user or not update.message:
+            return
+        if not self.is_allowed(update.effective_user.id):
+            return
+
+        session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        args = context.args or []
+        self._log_user_message(session_id, f"/agent {' '.join(args)}".strip())
+
+        sub = args[0].lower() if args else "status"
+        if sub in {"list", "ls"}:
+            sub = "status"
+
+        if sub == "status":
+            await self._reply_logged(
+                update,
+                self._render_agent_status(session_id),
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        if sub in {"use", "set", "on"}:
+            if len(args) < 2:
+                await self._reply_logged(
+                    update,
+                    "Usage: <code>/agent use &lt;codex|claude|opencode&gt;</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            agent = self._resolve_local_agent_name(args[1])
+            if not agent:
+                await self._reply_logged(
+                    update,
+                    "Unknown agent. Use one of: <code>codex</code>, "
+                    "<code>claude</code>, <code>opencode</code>.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            available = self._available_local_agents()
+            if agent not in available:
+                installed = ", ".join(sorted(available.keys())) if available else "none"
+                await self._reply_logged(
+                    update,
+                    f"⚠️ <code>{_escape_html(agent)}</code> is not installed.\n"
+                    f"Installed: <code>{_escape_html(installed)}</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            self._agent_mode_by_session[session_id] = agent
+            await self._reply_logged(
+                update,
+                f"✅ Delegation mode enabled: <code>{_escape_html(agent)}</code>\n"
+                "All normal chat messages in this chat will now run through this local agent.\n"
+                "Disable with <code>/agent off</code>.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        if sub in {"off", "disable", "stop"}:
+            previous = self._agent_mode_by_session.pop(session_id, None)
+            if previous:
+                await self._reply_logged(
+                    update,
+                    f"✅ Delegation disabled (was <code>{_escape_html(previous)}</code>).",
+                    parse_mode=ParseMode.HTML,
+                )
+            else:
+                await self._reply_logged(
+                    update,
+                    "Delegation mode is already disabled for this chat.",
+                )
+            return
+
+        # One-shot convenience: /agent codex <task...>
+        direct_agent = self._resolve_local_agent_name(sub)
+        if direct_agent:
+            task = " ".join(args[1:]).strip()
+            if not task:
+                await self._reply_logged(
+                    update,
+                    f"Usage: <code>/agent {_escape_html(direct_agent)} &lt;task&gt;</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+            progress = await self._reply_logged(
+                update,
+                f"🤖 Delegating to <code>{_escape_html(direct_agent)}</code>...",
+                parse_mode=ParseMode.HTML,
+            )
+            result_text = await self._run_local_agent_task(session_id, direct_agent, task)
+            await self._send_response(progress, update, result_text)
+            return
+
+        if sub == "run":
+            if len(args) < 2:
+                await self._reply_logged(
+                    update,
+                    "Usage: <code>/agent run &lt;task&gt;</code> or "
+                    "<code>/agent run &lt;agent&gt; &lt;task&gt;</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            requested_agent = self._resolve_local_agent_name(args[1])
+            if requested_agent and len(args) >= 3:
+                agent = requested_agent
+                task = " ".join(args[2:]).strip()
+            else:
+                agent = self._agent_mode_by_session.get(session_id)
+                task = " ".join(args[1:]).strip()
+
+            if not agent:
+                await self._reply_logged(
+                    update,
+                    "No active local agent for this chat.\n"
+                    "Set one first: <code>/agent use codex</code> "
+                    "(or claude/opencode).",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+            if not task:
+                await self._reply_logged(
+                    update,
+                    "Task is required.",
+                )
+                return
+
+            progress = await self._reply_logged(
+                update,
+                f"🤖 Delegating to <code>{_escape_html(agent)}</code>...",
+                parse_mode=ParseMode.HTML,
+            )
+            result_text = await self._run_local_agent_task(session_id, agent, task)
+            await self._send_response(progress, update, result_text)
+            return
+
+        await self._reply_logged(
+            update,
+            "Unknown /agent subcommand.\n\n" + self._agent_usage_text(),
             parse_mode=ParseMode.HTML,
         )
 
@@ -1939,6 +2531,7 @@ class LightClawBot:
         summary_status = "✅" if session_id in self._session_summaries else "—"
         active_skills = self.skills.active_records(session_id)
         installed_skills = self.skills.list_skills()
+        active_agent = self._agent_mode_by_session.get(session_id, "none")
 
         voice_status = "✅ Groq Whisper" if self.config.groq_api_key else "❌ No GROQ_API_KEY"
 
@@ -1953,6 +2546,7 @@ class LightClawBot:
             f"<b>Memory:</b> {stats['total_interactions']} interactions\n"
             f"<b>Session summary:</b> {summary_status}\n"
             f"<b>Skills:</b> {len(active_skills)} active / {len(installed_skills)} installed\n"
+            f"<b>Delegation:</b> {_escape_html(active_agent)}\n"
             f"<b>Voice:</b> {voice_status}",
             parse_mode=ParseMode.HTML,
         )
@@ -2072,6 +2666,20 @@ class LightClawBot:
             placeholder = await update.message.reply_text("Thinking... 💭")
         except Exception:
             pass
+
+        # Optional delegation mode: route normal messages to local coding agent.
+        active_agent = self._agent_mode_by_session.get(session_id)
+        if active_agent:
+            self.memory.ingest("user", user_text, session_id)
+            delegated_response = await self._run_local_agent_task(
+                session_id=session_id,
+                agent=active_agent,
+                task=user_text,
+            )
+            self.memory.ingest("assistant", delegated_response, session_id)
+            await self._send_response(placeholder, update, delegated_response)
+            asyncio.create_task(self.maybe_summarize(session_id))
+            return
 
         # 2. Recall relevant memories
         memories = self.memory.recall(user_text, top_k=self.config.memory_top_k)
@@ -2391,6 +2999,7 @@ def main():
     log.info(f"   Skills hub: {config.skills_hub_base_url}")
     log.info(f"   Context window: {config.context_window:,} tokens")
     log.info(f"   Max output: {config.max_output_tokens:,} tokens")
+    log.info(f"   Local agent timeout: {config.local_agent_timeout_sec}s")
     if config.groq_api_key:
         log.info("   Voice: ✅ Groq Whisper enabled")
     else:
@@ -2432,6 +3041,7 @@ def main():
     app.add_handler(CommandHandler("memory", bot.cmd_memory))
     app.add_handler(CommandHandler("recall", bot.cmd_recall))
     app.add_handler(CommandHandler("skills", bot.cmd_skills))
+    app.add_handler(CommandHandler("agent", bot.cmd_agent))
     app.add_handler(CommandHandler("show", bot.cmd_show))
     app.add_handler(MessageHandler(filters.VOICE, bot.handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))

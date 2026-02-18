@@ -87,6 +87,8 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 🧩 **Skill System (ClawHub + Local)** — Install skills from `clawhub.ai`, activate them per chat with `/skills`, and create your own custom skills locally.
 
+🤖 **Local Agent Delegation** — Delegate large build tasks to installed local coding agents (`codex`, `claude`, `opencode`) with `/agent`, while LightClaw reports workspace change summaries back in Telegram.
+
 🎙️ **Voice Messages** — Automatic voice transcription via Groq Whisper (optional). Send a voice note and the bot transcribes + responds.
 
 📸 **Photo & Document Support** — Send images and files — the bot acknowledges them and processes captions through the agent loop.
@@ -124,7 +126,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 │  │     ├─ 5. Edit placeholder          5 providers unified       │
 │  │     └─ 6. Summarize if needed                                 │
 │  │                                                               │
-│  └── cmd_start/help/clear/memory/recall/skills/show              │
+│  └── cmd_start/help/clear/wipe_memory/memory/recall/skills/agent/show │
 │                                                                  │
 │  config.py ◄── .env file                                          │
 └──────────────────────────────────────────────────────────────────┘
@@ -177,6 +179,10 @@ TELEGRAM_BOT_TOKEN=123456:ABC...
 
 # Optional: restrict to your user ID (get it from @userinfobot)
 TELEGRAM_ALLOWED_USERS=123456789
+
+# Optional tuning for large code/file generation
+MAX_OUTPUT_TOKENS=12000
+LOCAL_AGENT_TIMEOUT_SEC=1800
 
 # Skills (default registry)
 SKILLS_HUB_BASE_URL=https://clawhub.ai
@@ -252,6 +258,20 @@ Runtime skill paths:
 
 Active skills are persisted per chat in `.lightclaw/skills_state.json`.
 
+## Local Agent Delegation
+
+Use local coding agents for bigger project work while keeping LightClaw as the single Telegram interface:
+
+```text
+/agent
+/agent use codex
+/agent run Build a full React dashboard in this workspace
+/agent run claude Add auth + routing to the current project
+/agent off
+```
+
+Supported local agents (auto-detected from `PATH`): `codex`, `claude`, `opencode`.
+
 ## Bot Commands
 
 | Command | Description |
@@ -261,7 +281,9 @@ Active skills are persisted per chat in `.lightclaw/skills_state.json`.
 | `/memory` | Show memory statistics (total interactions, sessions, vocabulary) |
 | `/recall <query>` | Search past conversations by semantic similarity |
 | `/skills` | List/search/install/activate/create/remove skills |
+| `/agent` | Delegate tasks to local coding agents (`codex`, `claude`, `opencode`) |
 | `/clear` | Reset conversation history for the current chat |
+| `/wipe_memory` | Wipe all saved memory (requires explicit confirmation) |
 | `/show` | Show current model, provider, uptime, memory stats, voice status |
 
 ## How Infinite Memory Works
