@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import re
 import shutil
+import tempfile
 import threading
 import time
 import zipfile
@@ -119,6 +121,50 @@ def _body_summary(text: str, max_len: int = 180) -> str:
     return ""
 
 
+def _atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
+    """Atomically write text to disk using fsync + rename."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding=encoding,
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as tmp:
+            tmp.write(content)
+            tmp.flush()
+            os.fsync(tmp.fileno())
+            temp_path = Path(tmp.name)
+
+        os.replace(temp_path, path)
+        temp_path = None
+
+        # Best-effort: fsync directory to persist rename metadata.
+        try:
+            dir_fd = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
+    finally:
+        if temp_path is not None:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    """Atomically write JSON object with stable formatting."""
+    _atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True))
+
+
 class SkillManager:
     """Manage installed skills, active per-chat skills, and ClawHub installs."""
 
@@ -164,9 +210,7 @@ class SkillManager:
             return {"active_by_chat": {}}
 
     def _write_state(self, state: dict[str, Any]):
-        tmp = self.state_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
-        tmp.replace(self.state_path)
+        _atomic_write_json(self.state_path, state)
 
     @staticmethod
     def _http_get_bytes(url: str, accept: str = "*/*") -> bytes:
@@ -492,7 +536,7 @@ class SkillManager:
             "version": "local",
             "installed_at": int(time.time()),
         }
-        source_path.write_text(json.dumps(source, indent=2, sort_keys=True), encoding="utf-8")
+        _atomic_write_json(source_path, source)
 
         rec = self._build_record(directory, source="local", skill_id=f"local/{slug}")
         if not rec:
@@ -536,10 +580,7 @@ class SkillManager:
 
         (directory / "SKILL.md").write_text(skill_text, encoding="utf-8")
         if archive_meta is not None:
-            (directory / "_meta.json").write_text(
-                json.dumps(archive_meta, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
+            _atomic_write_json(directory / "_meta.json", archive_meta)
 
         source = {
             "source": "hub",
@@ -552,10 +593,7 @@ class SkillManager:
             "version": effective_version or latest.get("version"),
             "installed_at": int(time.time()),
         }
-        (directory / "source.json").write_text(
-            json.dumps(source, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        _atomic_write_json(directory / "source.json", source)
 
         rec = self._build_record(directory, source="hub", skill_id=slug)
         if not rec:
