@@ -267,6 +267,16 @@ class MemoryStore:
         self.db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
         self.db.commit()
 
+    def clear_all(self):
+        """Delete all memory data across all sessions."""
+        global _vocab, _idf, _doc_count
+        self.db.execute("DELETE FROM interactions")
+        self.db.execute("DELETE FROM sessions")
+        self.db.commit()
+        _vocab.clear()
+        _idf.clear()
+        _doc_count = 0
+
     def format_memories_for_prompt(self, memories: list[MemoryRecord]) -> str:
         """Format recalled memories for injection into the system prompt."""
         if not memories:

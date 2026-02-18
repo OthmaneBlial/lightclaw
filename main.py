@@ -321,6 +321,8 @@ class LightClawBot:
         self._session_summaries: dict[str, str] = {}
         # Lock to prevent concurrent summarization per session
         self._summarizing: set[str] = set()
+        # Confirmation window for destructive memory wipe command (per chat).
+        self._pending_wipe_confirm: dict[str, float] = {}
 
     def is_allowed(self, user_id: int) -> bool:
         """Check if this user is in the allowlist (empty = allow all)."""
@@ -477,6 +479,7 @@ class LightClawBot:
             "<b>Commands:</b>\n"
             "/help - Show this message\n"
             "/clear - Reset our conversation\n"
+            "/wipe_memory - Wipe ALL memory (with confirmation)\n"
             "/memory - Show memory stats\n"
             "/recall &lt;query&gt; - Search my memories\n"
             "/skills - Manage skills (install/use/create)\n"
@@ -500,6 +503,7 @@ class LightClawBot:
             "/start - Welcome message\n"
             "/help - This help message\n"
             "/clear - Clear conversation history\n"
+            "/wipe_memory - Wipe ALL memory (dangerous)\n"
             "/memory - Show memory statistics\n"
             "/recall &lt;query&gt; - Search past conversations\n"
             "/skills - Install/use/create skills\n"
@@ -523,6 +527,54 @@ class LightClawBot:
             update,
             "🗑️ Conversation cleared. Your memories from this chat have been reset.\n"
             "Note: memories from other chats are preserved."
+        )
+
+    # ── /wipe_memory ─────────────────────────────────────────
+
+    async def cmd_wipe_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Dangerous command: wipe all memory after explicit confirmation."""
+        if not update.effective_user or not update.message:
+            return
+        if not self.is_allowed(update.effective_user.id):
+            return
+
+        session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        args = [a.strip().lower() for a in (context.args or []) if a.strip()]
+        self._log_user_message(session_id, f"/wipe_memory {' '.join(args)}".strip())
+
+        now = time.time()
+        confirm_window_sec = 90
+        pending_until = self._pending_wipe_confirm.get(session_id, 0.0)
+
+        if args and args[0] in {"confirm", "yes", "now"}:
+            if pending_until and now <= pending_until:
+                await asyncio.to_thread(self.memory.clear_all)
+                self._session_summaries.clear()
+                self._pending_wipe_confirm.pop(session_id, None)
+                await self._reply_logged(
+                    update,
+                    "🧨 <b>All memory wiped.</b>\n"
+                    "All sessions/interactions were deleted. The bot now starts fresh.",
+                    parse_mode=ParseMode.HTML,
+                )
+            else:
+                await self._reply_logged(
+                    update,
+                    "No active wipe confirmation.\n"
+                    "Run <code>/wipe_memory</code> first, then confirm within 90s with "
+                    "<code>/wipe_memory confirm</code>.",
+                    parse_mode=ParseMode.HTML,
+                )
+            return
+
+        self._pending_wipe_confirm[session_id] = now + confirm_window_sec
+        await self._reply_logged(
+            update,
+            "⚠️ <b>Danger: wipe ALL memory</b>\n"
+            "This deletes every saved interaction and session across all chats.\n\n"
+            f"To confirm within {confirm_window_sec}s, run:\n"
+            "<code>/wipe_memory confirm</code>",
+            parse_mode=ParseMode.HTML,
         )
 
     # ── /memory ───────────────────────────────────────────────
@@ -1118,6 +1170,9 @@ class LightClawBot:
         )
         edit_blocks_found = bool(edit_pattern.search(cleaned_response))
 
+        def success_count() -> int:
+            return sum(1 for op in operations if op.action != "error")
+
         def write_workspace_file(raw_path: str, content: str, auto_generated: bool = False) -> str:
             target, rel_path, path_err = self._resolve_workspace_path(raw_path)
             display_path = rel_path or raw_path.strip() or "unknown"
@@ -1210,6 +1265,19 @@ class LightClawBot:
 
         cleaned_response = re.sub(pattern_named, apply_named_file_block, cleaned_response)
 
+        # Common malformed style: ```index.html ... ```
+        pattern_filename_fence = re.compile(
+            r"```(?P<path>[^\n`]+\.[a-zA-Z0-9]{1,10})\s*\n(?P<body>[\s\S]*?)```",
+            re.MULTILINE,
+        )
+
+        def apply_filename_fence_block(match: re.Match) -> str:
+            raw_path = match.group("path").strip()
+            content = match.group("body").strip()
+            return write_workspace_file(raw_path, content)
+
+        cleaned_response = re.sub(pattern_filename_fence, apply_filename_fence_block, cleaned_response)
+
         pattern_file_label = re.compile(
             r"File:\s*([^\n`]+)\s*\n```([a-zA-Z0-9_+\-]+)?\s*\n?([\s\S]*?)```",
             re.IGNORECASE,
@@ -1249,6 +1317,56 @@ class LightClawBot:
             return write_workspace_file(filename, content, auto_generated=True)
 
         cleaned_response = re.sub(pattern_auto, apply_auto_block, cleaned_response)
+
+        # Salvage malformed/unclosed named fence: ```html:index.html ...EOF
+        if success_count() == 0:
+            unclosed_named = re.search(
+                r"```([a-zA-Z0-9_+\-]+):([^\n`]+)\s*\n([\s\S]+)$",
+                cleaned_response,
+                re.MULTILINE,
+            )
+            if unclosed_named:
+                raw_path = unclosed_named.group(2).strip()
+                content = unclosed_named.group(3).strip()
+                if content:
+                    marker = write_workspace_file(raw_path, content)
+                    prefix = cleaned_response[: unclosed_named.start()].rstrip()
+                    cleaned_response = (
+                        (prefix + "\n\n" if prefix else "")
+                        + marker
+                    ).strip()
+
+        # Salvage malformed/unclosed generic fence: ```html ...EOF
+        if success_count() == 0:
+            unclosed_generic = re.search(
+                r"```([a-zA-Z0-9_+\-]+)?\s*\n([\s\S]+)$",
+                cleaned_response,
+                re.MULTILINE,
+            )
+            if unclosed_generic:
+                lang = (unclosed_generic.group(1) or "txt").strip().lower()
+                content = unclosed_generic.group(2).strip()
+                if lang != "diff" and len(content) >= 120:
+                    ext = lang_extensions.get(lang, ".txt")
+                    filename = f"output_{int(time.time())}_unclosed{ext}"
+                    marker = write_workspace_file(filename, content, auto_generated=True)
+                    prefix = cleaned_response[: unclosed_generic.start()].rstrip()
+                    cleaned_response = (
+                        (prefix + "\n\n" if prefix else "")
+                        + marker
+                    ).strip()
+
+        # Last resort: HTML document without fences.
+        if success_count() == 0:
+            html_start = cleaned_response.lower().find("<!doctype html")
+            if html_start < 0:
+                html_start = cleaned_response.lower().find("<html")
+            if html_start >= 0:
+                html = cleaned_response[html_start:].strip()
+                if len(html) >= 200:
+                    marker = write_workspace_file("index.html", html, auto_generated=True)
+                    intro = cleaned_response[:html_start].strip()
+                    cleaned_response = (f"{intro}\n\n{marker}" if intro else marker).strip()
 
         # Never return huge fenced code in chat: remove any remaining large code blocks.
         def strip_large_leftover_code(match: re.Match) -> str:
@@ -1604,6 +1722,22 @@ class LightClawBot:
                 )
             )
         final_markdown_response = "\n\n".join(part for part in response_parts if part).strip()
+        if self._is_large_code_leak(final_markdown_response):
+            # Hard guardrail: never send giant code dumps to Telegram.
+            if file_ops:
+                final_markdown_response = (
+                    "Done. Saved requested changes to files.\n\n"
+                    + self._render_file_operations(
+                        file_ops,
+                        include_diffs=True,
+                        workspace_label=workspace_label,
+                    )
+                )
+            else:
+                final_markdown_response = (
+                    "Large code output was suppressed.\n"
+                    "Please ask again and include explicit file names (e.g. ```html:index.html ...```)."
+                )
         if not final_markdown_response:
             final_markdown_response = "Done."
 
@@ -1690,6 +1824,16 @@ class LightClawBot:
         # If we had multiple chunks, log it
         if len(markdown_chunks) > 1:
             log.info(f"Long response split into {len(markdown_chunks)} messages ({len(markdown_response)} chars)")
+
+    @staticmethod
+    def _is_large_code_leak(text: str) -> bool:
+        """Detect suspicious large code dumps that should never reach chat."""
+        if len(text) < 800:
+            return False
+        if "```" in text and any(tag in text.lower() for tag in ("```html", "```python", "```javascript", "```css", "```tsx", "```jsx")):
+            return True
+        indicators = ("<!doctype html", "<html", "tailwind.config", "function(", "className=", "import React", "def main(")
+        return sum(1 for i in indicators if i.lower() in text.lower()) >= 2
 
     # ── Global Telegram Error Handler ────────────────────────
 
@@ -1799,6 +1943,8 @@ def main():
     app.add_handler(CommandHandler("start", bot.cmd_start))
     app.add_handler(CommandHandler("help", bot.cmd_help))
     app.add_handler(CommandHandler("clear", bot.cmd_clear))
+    app.add_handler(CommandHandler("wipe_memory", bot.cmd_wipe_memory))
+    app.add_handler(CommandHandler("wipe", bot.cmd_wipe_memory))
     app.add_handler(CommandHandler("memory", bot.cmd_memory))
     app.add_handler(CommandHandler("recall", bot.cmd_recall))
     app.add_handler(CommandHandler("skills", bot.cmd_skills))
