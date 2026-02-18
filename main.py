@@ -63,6 +63,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("lightclaw")
 
+# Reduce noisy transport logs by default (can be re-enabled with LIGHTCLAW_VERBOSE_HTTP=1).
+if os.getenv("LIGHTCLAW_VERBOSE_HTTP", "").strip().lower() not in {"1", "true", "yes"}:
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+    logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+
 
 # ──────────────────────────────────────────────────────────────
 # Markdown → Telegram HTML Converter
@@ -3543,7 +3549,8 @@ def main():
     log.info("🦞 LightClaw is running! Press Ctrl+C to stop.")
 
     # Start polling
-    app.run_polling(drop_pending_updates=True)
+    # Longer Telegram long-poll timeout reduces idle request churn.
+    app.run_polling(drop_pending_updates=True, timeout=30)
 
 
 if __name__ == "__main__":
