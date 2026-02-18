@@ -27,9 +27,11 @@ class LLMClient:
         self.config = config
         self.provider_name = config.llm_provider
         self.model = config.llm_model
+        self.max_output_tokens = max(512, int(getattr(config, "max_output_tokens", 4096) or 4096))
         self._client = None
 
         self._init_client()
+        log.info(f"LLM output budget: {self.max_output_tokens} tokens")
 
     def _init_client(self):
         """Initialize the appropriate SDK client."""
@@ -83,49 +85,95 @@ class LLMClient:
                 f"Supported: openai, xai, claude, gemini, zai"
             )
 
-    async def chat(self, messages: list[dict], system_prompt: str = "") -> str:
+    async def chat(
+        self,
+        messages: list[dict],
+        system_prompt: str = "",
+        max_output_tokens: int | None = None,
+    ) -> str:
         """
         Send messages to the LLM and return the response as a plain string.
 
         Args:
             messages: List of {"role": "user"|"assistant", "content": "..."} dicts.
             system_prompt: System prompt injected at the beginning.
+            max_output_tokens: Optional override for output token budget.
 
         Returns:
             The assistant's response text.
         """
         try:
             if self.provider_name in ("openai", "xai", "zai"):
-                return await self._chat_openai(messages, system_prompt)
+                return await self._chat_openai(messages, system_prompt, max_output_tokens)
             elif self.provider_name == "claude":
-                return await self._chat_claude(messages, system_prompt)
+                return await self._chat_claude(messages, system_prompt, max_output_tokens)
             elif self.provider_name == "gemini":
-                return await self._chat_gemini(messages, system_prompt)
+                return await self._chat_gemini(messages, system_prompt, max_output_tokens)
         except Exception as e:
             log.error(f"LLM call failed ({self.provider_name}): {e}")
             return f"⚠️ Error communicating with {self.provider_name}: {e}"
 
     # ── OpenAI / xAI ──────────────────────────────────────────
 
-    async def _chat_openai(self, messages: list[dict], system_prompt: str) -> str:
+    async def _chat_openai(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        max_output_tokens: int | None = None,
+    ) -> str:
         """Chat via OpenAI-compatible API (covers ChatGPT, xAI Grok, and Z-AI GLM)."""
         api_messages = []
         if system_prompt:
             api_messages.append({"role": "system", "content": system_prompt})
         api_messages.extend(messages)
 
-        response = await asyncio.to_thread(
-            self._client.chat.completions.create,
-            model=self.model,
-            messages=api_messages,
-            max_tokens=4096,
-            temperature=0.7,
-        )
+        output_tokens = max(256, int(max_output_tokens or self.max_output_tokens))
+        try:
+            response = await asyncio.to_thread(
+                self._client.chat.completions.create,
+                model=self.model,
+                messages=api_messages,
+                max_tokens=output_tokens,
+                temperature=0.7,
+            )
+        except Exception as e:
+            err_text = str(e).lower()
+            limit_related = any(
+                marker in err_text
+                for marker in (
+                    "max_tokens",
+                    "max token",
+                    "max output",
+                    "out of range",
+                    "too large",
+                    "exceed",
+                    "greater than",
+                    "must be less",
+                )
+            )
+            if output_tokens > 4096 and limit_related:
+                log.warning(
+                    f"{self.provider_name} rejected max_tokens={output_tokens}; retrying with 4096"
+                )
+                response = await asyncio.to_thread(
+                    self._client.chat.completions.create,
+                    model=self.model,
+                    messages=api_messages,
+                    max_tokens=4096,
+                    temperature=0.7,
+                )
+            else:
+                raise
         return response.choices[0].message.content or ""
 
     # ── Claude ────────────────────────────────────────────────
 
-    async def _chat_claude(self, messages: list[dict], system_prompt: str) -> str:
+    async def _chat_claude(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        max_output_tokens: int | None = None,
+    ) -> str:
         """Chat via Anthropic's Messages API (system prompt is a separate param)."""
         # Claude requires alternating user/assistant messages
         # Filter out any system messages from the list
@@ -135,15 +183,25 @@ class LLMClient:
         if not api_messages or api_messages[0]["role"] != "user":
             api_messages.insert(0, {"role": "user", "content": "Hello!"})
 
+        output_tokens = max(256, int(max_output_tokens or self.max_output_tokens))
         kwargs = {
             "model": self.model,
             "messages": api_messages,
-            "max_tokens": 4096,
+            "max_tokens": output_tokens,
         }
         if system_prompt:
             kwargs["system"] = system_prompt
 
-        response = await asyncio.to_thread(self._client.messages.create, **kwargs)
+        try:
+            response = await asyncio.to_thread(self._client.messages.create, **kwargs)
+        except Exception as e:
+            err_text = str(e).lower()
+            if output_tokens > 4096 and "max_tokens" in err_text:
+                log.warning(f"claude rejected max_tokens={output_tokens}; retrying with 4096")
+                kwargs["max_tokens"] = 4096
+                response = await asyncio.to_thread(self._client.messages.create, **kwargs)
+            else:
+                raise
 
         # Extract text from content blocks
         text_parts = []
@@ -154,7 +212,12 @@ class LLMClient:
 
     # ── Gemini ────────────────────────────────────────────────
 
-    async def _chat_gemini(self, messages: list[dict], system_prompt: str) -> str:
+    async def _chat_gemini(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        max_output_tokens: int | None = None,
+    ) -> str:
         """Chat via Google Gemini's GenerativeModel API."""
         import google.generativeai as genai
 

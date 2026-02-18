@@ -45,6 +45,7 @@ class Config:
     # Workspace & Context
     workspace_path: str = ".lightclaw/workspace"
     context_window: int = 128000
+    max_output_tokens: int = 12000
 
     # Skills
     skills_hub_base_url: str = "https://clawhub.ai"
@@ -82,6 +83,7 @@ def load_config() -> Config:
         memory_top_k=int(os.getenv("MEMORY_TOP_K", "5")),
         workspace_path=os.getenv("WORKSPACE_PATH", ".lightclaw/workspace"),
         context_window=int(os.getenv("CONTEXT_WINDOW", "128000")),
+        max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "12000")),
         skills_hub_base_url=os.getenv("SKILLS_HUB_BASE_URL", "https://clawhub.ai") or "https://clawhub.ai",
         skills_state_path=os.getenv("SKILLS_STATE_PATH", ".lightclaw/skills_state.json") or ".lightclaw/skills_state.json",
         groq_api_key=os.getenv("GROQ_API_KEY", ""),
@@ -102,5 +104,6 @@ def load_config() -> Config:
 
     cfg.llm_provider = cfg.llm_provider.strip().lower()
     cfg.llm_model = _resolve_model(cfg.llm_provider, cfg.llm_model)
+    cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
 
     return cfg

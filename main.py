@@ -323,6 +323,8 @@ class LightClawBot:
         self._summarizing: set[str] = set()
         # Confirmation window for destructive memory wipe command (per chat).
         self._pending_wipe_confirm: dict[str, float] = {}
+        # Track last successful file operation target per session.
+        self._last_file_by_session: dict[str, str] = {}
 
     def is_allowed(self, user_id: int) -> bool:
         """Check if this user is in the allowlist (empty = allow all)."""
@@ -351,6 +353,77 @@ class LightClawBot:
 
     def _log_bot_message(self, session_id: str, text: str):
         log.info(f"[{session_id}] Bot: {self._trim_for_log(text)}")
+
+    @staticmethod
+    def _extract_file_mentions(text: str) -> list[str]:
+        pattern = re.compile(r"\b([A-Za-z0-9._/-]+\.[A-Za-z0-9]{1,10})\b")
+        return [m.group(1) for m in pattern.finditer(text or "")]
+
+    def _is_file_intent(self, user_text: str) -> bool:
+        lower = (user_text or "").lower()
+        keywords = (
+            "build", "create", "make", "generate", "landing page", "website",
+            "html", "css", "javascript", "python", "script", "edit", "modify",
+            "update", "improve", "enhance", "add more", "add feature", "refactor", "fix",
+        )
+        if any(k in lower for k in keywords):
+            return True
+        return bool(self._extract_file_mentions(user_text))
+
+    @staticmethod
+    def _is_deferral_response(text: str) -> bool:
+        lower = (text or "").lower()
+        patterns = (
+            "let me first", "let me check", "let me read", "i'll first check",
+            "i need to check", "i need to read", "before i", "then i'll",
+            "i will check", "i'll inspect", "let me inspect",
+        )
+        return any(p in lower for p in patterns)
+
+    def _collect_workspace_candidates(self, user_text: str, session_id: str, limit: int = 4) -> list[str]:
+        """Pick likely target files for forced edit passes."""
+        candidates: list[str] = []
+
+        # 1) Explicit file mention in user text.
+        for mention in self._extract_file_mentions(user_text):
+            target, rel_path, err = self._resolve_workspace_path(mention)
+            if not err and target and rel_path:
+                candidates.append(rel_path)
+
+        # 2) Last touched file in this chat.
+        last = self._last_file_by_session.get(session_id)
+        if last:
+            target, rel_path, err = self._resolve_workspace_path(last)
+            if not err and target and rel_path and target.exists():
+                candidates.append(rel_path)
+
+        # 3) Most recently modified workspace files.
+        workspace = Path(self.config.workspace_path).resolve()
+        files = []
+        for path in workspace.rglob("*"):
+            if path.is_file():
+                try:
+                    files.append((path.stat().st_mtime, path))
+                except Exception:
+                    continue
+        files.sort(reverse=True, key=lambda x: x[0])
+        for _, path in files[:20]:
+            rel = path.relative_to(workspace).as_posix()
+            candidates.append(rel)
+            if len(candidates) >= limit * 3:
+                break
+
+        # Unique preserving order, then limit.
+        seen = set()
+        unique: list[str] = []
+        for item in candidates:
+            if item in seen:
+                continue
+            seen.add(item)
+            unique.append(item)
+            if len(unique) >= limit:
+                break
+        return unique
 
     async def _reply_logged(
         self,
@@ -1076,6 +1149,20 @@ class LightClawBot:
         return compact
 
     @staticmethod
+    def _is_incomplete_html_text(text: str) -> bool:
+        """Heuristic detection for likely-truncated HTML documents."""
+        lower = (text or "").lower()
+        if "<html" not in lower and "<!doctype html" not in lower:
+            return False
+        if "</html>" not in lower or "</body>" not in lower:
+            return True
+        if lower.count("<section") > lower.count("</section>") + 2:
+            return True
+        if lower.count("<div") > lower.count("</div>") + 12:
+            return True
+        return False
+
+    @staticmethod
     def _render_file_operations(
         operations: list[FileOperationResult],
         include_diffs: bool = True,
@@ -1168,7 +1255,6 @@ class LightClawBot:
             r"```edit:(?P<path>[^\n`]+)\s*\n(?P<body>[\s\S]*?)```",
             re.IGNORECASE,
         )
-        edit_blocks_found = bool(edit_pattern.search(cleaned_response))
 
         def success_count() -> int:
             return sum(1 for op in operations if op.action != "error")
@@ -1210,6 +1296,154 @@ class LightClawBot:
             operations.append(FileOperationResult("updated", rel_path, diff=diff_text))
             log.info(f"Updated file: {target}")
             return f"[File updated: {rel_path}]"
+
+        def _max_overlap_suffix_prefix(left: str, right: str, max_len: int = 1500) -> int:
+            if not left or not right:
+                return 0
+            max_check = min(len(left), len(right), max_len)
+            for size in range(max_check, 0, -1):
+                if left.endswith(right[:size]):
+                    return size
+            return 0
+
+        def _strip_outer_code_fence(text: str) -> tuple[str, bool]:
+            """Return (content_without_wrapping_fence, saw_closing_fence)."""
+            chunk = (text or "").strip()
+            if not chunk:
+                return "", False
+
+            wrapped = re.match(r"^```[^\n`]*\n([\s\S]*?)\n```$", chunk)
+            if wrapped:
+                return wrapped.group(1).strip(), True
+
+            if chunk.startswith("```"):
+                nl = chunk.find("\n")
+                if nl >= 0:
+                    chunk = chunk[nl + 1 :]
+
+            if chunk.strip() == "```":
+                return "", True
+
+            close_idx = chunk.find("\n```")
+            if close_idx >= 0:
+                return chunk[:close_idx].rstrip(), True
+
+            if chunk.endswith("```"):
+                return chunk[:-3].rstrip(), True
+
+            return chunk.strip(), False
+
+        async def complete_unclosed_named_fence(
+            lang: str,
+            raw_path: str,
+            partial_content: str,
+        ) -> tuple[str, bool]:
+            """Try to continue a truncated ```lang:path fenced block."""
+            assembled = (partial_content or "").rstrip()
+            lang_name = (lang or "txt").strip().lower()
+            attempts = 3
+
+            for _ in range(attempts):
+                if lang_name in {"html", "htm"} and not self._is_incomplete_html_text(assembled):
+                    return assembled, True
+
+                continuation_system = (
+                    "You are continuing a truncated fenced file block.\n"
+                    "Return ONLY the missing tail starting from the exact next character.\n"
+                    "Do NOT repeat already-sent text.\n"
+                    "Do NOT include explanations.\n"
+                    "When complete, end with a closing fence line: ```"
+                )
+                continuation_user = (
+                    f"The following block was truncated before the closing fence.\n\n"
+                    f"```{lang_name}:{raw_path}\n"
+                    f"{assembled}\n\n"
+                    "Continue now from the next character only."
+                )
+
+                try:
+                    continuation = await self.llm.chat(
+                        [{"role": "user", "content": continuation_user}],
+                        system_prompt=continuation_system,
+                    )
+                except Exception as e:
+                    log.error(f"Continuation pass failed for {raw_path}: {e}")
+                    return assembled, False
+
+                if not continuation:
+                    break
+
+                # If model returned a full fenced replacement block, use it directly.
+                full_block = re.search(
+                    rf"```[a-zA-Z0-9_+\-]*:{re.escape(raw_path)}\s*\n([\s\S]*?)```",
+                    continuation,
+                    re.IGNORECASE,
+                )
+                if full_block:
+                    candidate = full_block.group(1).strip()
+                    return candidate, True
+
+                piece, saw_closing = _strip_outer_code_fence(continuation)
+                if piece:
+                    overlap = _max_overlap_suffix_prefix(assembled, piece)
+                    piece = piece[overlap:]
+                    if piece:
+                        if assembled and not assembled.endswith("\n") and not piece.startswith("\n"):
+                            assembled += "\n"
+                        assembled += piece
+
+                if saw_closing:
+                    if lang_name in {"html", "htm"} and self._is_incomplete_html_text(assembled):
+                        continue
+                    return assembled, True
+
+            if lang_name in {"html", "htm"} and not self._is_incomplete_html_text(assembled):
+                return assembled, True
+
+            return assembled, False
+
+        async def complete_unclosed_generic_fence(
+            lang: str,
+            partial_content: str,
+        ) -> tuple[str, bool]:
+            """Try to continue a truncated ```lang fenced block with no explicit path."""
+            assembled = (partial_content or "").rstrip()
+            lang_name = (lang or "txt").strip().lower()
+
+            for _ in range(2):
+                continuation_system = (
+                    "You are continuing a truncated fenced code block.\n"
+                    "Return ONLY the missing tail from the exact next character.\n"
+                    "No explanation. End with ``` when complete."
+                )
+                continuation_user = (
+                    f"```{lang_name}\n"
+                    f"{assembled}\n\n"
+                    "Continue now from the next character only."
+                )
+                try:
+                    continuation = await self.llm.chat(
+                        [{"role": "user", "content": continuation_user}],
+                        system_prompt=continuation_system,
+                    )
+                except Exception:
+                    return assembled, False
+
+                if not continuation:
+                    break
+
+                piece, saw_closing = _strip_outer_code_fence(continuation)
+                if piece:
+                    overlap = _max_overlap_suffix_prefix(assembled, piece)
+                    piece = piece[overlap:]
+                    if piece:
+                        if assembled and not assembled.endswith("\n") and not piece.startswith("\n"):
+                            assembled += "\n"
+                        assembled += piece
+                if saw_closing:
+                    return assembled, True
+
+            return assembled, False
 
         def apply_edit_block(match: re.Match) -> str:
             raw_path = match.group("path").strip()
@@ -1326,10 +1560,28 @@ class LightClawBot:
                 re.MULTILINE,
             )
             if unclosed_named:
+                lang = (unclosed_named.group(1) or "txt").strip().lower()
                 raw_path = unclosed_named.group(2).strip()
                 content = unclosed_named.group(3).strip()
                 if content:
-                    marker = write_workspace_file(raw_path, content)
+                    completed_content, completed = await complete_unclosed_named_fence(
+                        lang=lang,
+                        raw_path=raw_path,
+                        partial_content=content,
+                    )
+                    if completed:
+                        marker = write_workspace_file(raw_path, completed_content)
+                    else:
+                        _, rel_path, _ = self._resolve_workspace_path(raw_path)
+                        display_path = rel_path or raw_path or "unknown"
+                        operations.append(
+                            FileOperationResult(
+                                "error",
+                                display_path,
+                                "incomplete code block (model output truncated before closing fence)",
+                            )
+                        )
+                        marker = f"[Save failed: {display_path}]"
                     prefix = cleaned_response[: unclosed_named.start()].rstrip()
                     cleaned_response = (
                         (prefix + "\n\n" if prefix else "")
@@ -1349,7 +1601,21 @@ class LightClawBot:
                 if lang != "diff" and len(content) >= 120:
                     ext = lang_extensions.get(lang, ".txt")
                     filename = f"output_{int(time.time())}_unclosed{ext}"
-                    marker = write_workspace_file(filename, content, auto_generated=True)
+                    completed_content, completed = await complete_unclosed_generic_fence(
+                        lang=lang,
+                        partial_content=content,
+                    )
+                    if completed:
+                        marker = write_workspace_file(filename, completed_content, auto_generated=True)
+                    else:
+                        operations.append(
+                            FileOperationResult(
+                                "error",
+                                filename,
+                                "incomplete code block (model output truncated before closing fence)",
+                            )
+                        )
+                        marker = f"[Save failed: {filename}]"
                     prefix = cleaned_response[: unclosed_generic.start()].rstrip()
                     cleaned_response = (
                         (prefix + "\n\n" if prefix else "")
@@ -1364,7 +1630,17 @@ class LightClawBot:
             if html_start >= 0:
                 html = cleaned_response[html_start:].strip()
                 if len(html) >= 200:
-                    marker = write_workspace_file("index.html", html, auto_generated=True)
+                    if self._is_incomplete_html_text(html):
+                        operations.append(
+                            FileOperationResult(
+                                "error",
+                                "index.html",
+                                "incomplete html output (missing closing tags)",
+                            )
+                        )
+                        marker = "[Save failed: index.html]"
+                    else:
+                        marker = write_workspace_file("index.html", html, auto_generated=True)
                     intro = cleaned_response[:html_start].strip()
                     cleaned_response = (f"{intro}\n\n{marker}" if intro else marker).strip()
 
@@ -1473,6 +1749,177 @@ class LightClawBot:
 
         return retry_ops, retry_cleaned
 
+    async def _force_file_ops_pass(
+        self,
+        session_id: str,
+        user_text: str,
+        prior_model_response: str,
+    ) -> tuple[list[FileOperationResult], str]:
+        """Force a file operation pass when the model returned prose/no-op."""
+        target_files = self._collect_workspace_candidates(user_text, session_id, limit=4)
+        snippets: list[str] = []
+        for rel_path in target_files:
+            target, _, err = self._resolve_workspace_path(rel_path)
+            if err or target is None or not target.exists():
+                continue
+            try:
+                content = target.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            shown = content[:14000]
+            if len(content) > 14000:
+                shown += "\n... [truncated]"
+            snippets.append(f"### {rel_path}\n```text\n{shown}\n```")
+
+        file_context = (
+            f"Current candidate workspace files:\n{'\n\n'.join(snippets)}"
+            if snippets
+            else "Current candidate workspace files:\n(none yet - create new files in workspace as needed)"
+        )
+
+        forced_system = (
+            "You are a file operation engine for LightClaw. "
+            "Do NOT ask to inspect/read files. You already have file contents. "
+            "You MUST perform the requested modifications now.\n"
+            "Return ONLY file operation blocks:\n"
+            "1) Edits:\n"
+            "```edit:path/to/file.ext\n"
+            "<<<<<<< SEARCH\n"
+            "exact old text\n"
+            "=======\n"
+            "new text\n"
+            ">>>>>>> REPLACE\n"
+            "```\n"
+            "2) Full rewrite if large changes:\n"
+            "```lang:path/to/file.ext\n"
+            "<full file>\n"
+            "```\n"
+            "Use a language tag that matches the file extension.\n"
+            "No prose."
+        )
+        forced_user = (
+            f"User request:\n{user_text}\n\n"
+            "Previous model response (incorrect/no-op):\n"
+            f"{prior_model_response}\n\n"
+            f"{file_context}\n\n"
+            "Now apply the request directly. Return file operation blocks only."
+        )
+
+        try:
+            forced_response = await self.llm.chat(
+                [{"role": "user", "content": forced_user}],
+                system_prompt=forced_system,
+            )
+        except Exception as e:
+            log.error(f"Forced file-op pass failed: {e}")
+            return [], ""
+
+        if not forced_response:
+            return [], ""
+
+        return await self._process_file_blocks(forced_response)
+
+    async def _repair_incomplete_html(
+        self,
+        session_id: str,
+        user_text: str,
+        file_ops: list[FileOperationResult],
+    ) -> list[FileOperationResult]:
+        """Repair likely-truncated HTML files created/updated by the model."""
+        repair_ops: list[FileOperationResult] = []
+        success_ops = [op for op in file_ops if op.action != "error"]
+        html_paths = [op.path for op in success_ops if op.path.lower().endswith((".html", ".htm"))]
+        if not html_paths:
+            return repair_ops
+
+        # Preserve order while avoiding duplicate repair attempts per path.
+        seen_paths: set[str] = set()
+        ordered_html_paths: list[str] = []
+        for path in html_paths:
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            ordered_html_paths.append(path)
+
+        for rel_path in ordered_html_paths:
+            target, _, err = self._resolve_workspace_path(rel_path)
+            if err or target is None or not target.exists():
+                continue
+
+            max_attempts = 3
+            repaired = False
+
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    content = target.read_text(encoding="utf-8")
+                except Exception:
+                    break
+
+                if not self._is_incomplete_html_text(content):
+                    repaired = True
+                    break
+
+                repair_system = (
+                    "You are an HTML repair engine. "
+                    "The file below is truncated/incomplete. "
+                    "Return ONLY one full-file block in this format:\n"
+                    "```html:path/to/file.html\n"
+                    "<complete valid HTML document>\n"
+                    "```\n"
+                    "CRITICAL:\n"
+                    "- Include </body> and </html>\n"
+                    "- Return full file, not a diff\n"
+                    "- No prose."
+                )
+                repair_user = (
+                    f"Attempt: {attempt}/{max_attempts}\n"
+                    f"User context/request:\n{user_text}\n\n"
+                    f"Repair this file and keep its design intent:\n"
+                    f"Path: {rel_path}\n"
+                    "Current content:\n"
+                    f"```html\n{content}\n```"
+                )
+                try:
+                    repair_response = await self.llm.chat(
+                        [{"role": "user", "content": repair_user}],
+                        system_prompt=repair_system,
+                    )
+                except Exception as e:
+                    log.error(f"HTML repair pass failed for {rel_path}: {e}")
+                    continue
+
+                if not repair_response:
+                    continue
+
+                ops, _ = await self._process_file_blocks(repair_response)
+                if ops:
+                    ok = sum(1 for op in ops if op.action != "error")
+                    err_count = sum(1 for op in ops if op.action == "error")
+                    log.info(
+                        f"[{session_id}] HTML repair {rel_path} (attempt {attempt}): "
+                        f"{ok} succeeded, {err_count} failed"
+                    )
+                    repair_ops.extend(ops)
+
+                try:
+                    updated = target.read_text(encoding="utf-8")
+                except Exception:
+                    updated = ""
+                if updated and not self._is_incomplete_html_text(updated):
+                    repaired = True
+                    break
+
+            if not repaired:
+                repair_ops.append(
+                    FileOperationResult(
+                        "error",
+                        rel_path,
+                        "html file still incomplete after repair attempts",
+                    )
+                )
+
+        return repair_ops
+
     # ── /show ─────────────────────────────────────────────────
 
     async def cmd_show(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1501,6 +1948,7 @@ class LightClawBot:
             f"<b>Provider:</b> {_escape_html(self.config.llm_provider)}\n"
             f"<b>Model:</b> {_escape_html(self.config.llm_model)}\n"
             f"<b>Context window:</b> {self.config.context_window:,} tokens\n"
+            f"<b>Max output:</b> {self.config.max_output_tokens:,} tokens\n"
             f"<b>Uptime:</b> {hours}h {minutes}m {seconds}s\n"
             f"<b>Memory:</b> {stats['total_interactions']} interactions\n"
             f"<b>Session summary:</b> {summary_status}\n"
@@ -1701,6 +2149,41 @@ class LightClawBot:
                             part for part in [cleaned_response, retry_cleaned] if part
                         ).strip()
                 file_ops.extend(retry_ops)
+
+        # 9b. Force a second pass when the model returned no-op prose for file tasks.
+        success_ops = [op for op in file_ops if op.action != "error"]
+        if not success_ops and (
+            self._is_file_intent(user_text)
+            or self._is_deferral_response(response)
+            or self._is_deferral_response(cleaned_response)
+        ):
+            forced_ops, forced_cleaned = await self._force_file_ops_pass(
+                session_id=session_id,
+                user_text=user_text,
+                prior_model_response=response,
+            )
+            if forced_ops:
+                recovered_paths = {op.path for op in forced_ops if op.action != "error"}
+                if recovered_paths:
+                    file_ops = [op for op in file_ops if op.path not in recovered_paths]
+                file_ops.extend(forced_ops)
+                if forced_cleaned:
+                    cleaned_response = "\n\n".join(
+                        part for part in [cleaned_response, forced_cleaned] if part
+                    ).strip()
+
+        # 9c. Repair likely-truncated HTML outputs before user-facing response.
+        repair_ops = await self._repair_incomplete_html(session_id, user_text, file_ops)
+        if repair_ops:
+            repaired_paths = {op.path for op in repair_ops if op.action != "error"}
+            if repaired_paths:
+                file_ops = [op for op in file_ops if op.path not in repaired_paths]
+            file_ops.extend(repair_ops)
+
+        # Track last touched file to support follow-up edit requests like "add more".
+        success_ops = [op for op in file_ops if op.action != "error" and op.path]
+        if success_ops:
+            self._last_file_by_session[session_id] = success_ops[-1].path
 
         # 10. Build final message (short text + file operation summary)
         workspace_label = self._workspace_display_path()
@@ -1907,6 +2390,7 @@ def main():
     log.info(f"   Skills state: {config.skills_state_path}")
     log.info(f"   Skills hub: {config.skills_hub_base_url}")
     log.info(f"   Context window: {config.context_window:,} tokens")
+    log.info(f"   Max output: {config.max_output_tokens:,} tokens")
     if config.groq_api_key:
         log.info("   Voice: ✅ Groq Whisper enabled")
     else:
