@@ -123,7 +123,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 ### ⚡ One-Command Setup (Recommended)
 
 ```bash
-git clone https://github.com/OthmaneBlial/LightClaw.git && cd LightClaw && bash setup.sh
+git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash setup.sh
 ```
 
 The interactive setup wizard will walk you through:
@@ -136,8 +136,8 @@ The interactive setup wizard will walk you through:
 ### 🔧 Manual Setup
 
 ```bash
-git clone https://github.com/OthmaneBlial/LightClaw.git
-cd LightClaw
+git clone https://github.com/OthmaneBlial/lightclaw.git
+cd lightclaw
 pip install -r requirements.txt
 ```
 
@@ -313,7 +313,7 @@ The point is: **you shouldn't need permission from a framework to add a feature*
 | Project | Language | Purpose | Complexity |
 |---------|----------|---------|------------|
 | **[OpenClaw](https://github.com/OthmaneBlial/openclaw)** | TypeScript | Full-featured AI agent platform | ████████░░ |
-| **[LightClaw](https://github.com/OthmaneBlial/LightClaw)** | Python | Minimal forkable agent core (5 LLMs) | ██░░░░░░░░ |
+| **[LightClaw](https://github.com/OthmaneBlial/lightclaw)** | Python | Minimal forkable agent core (5 LLMs) | ██░░░░░░░░ |
 
 > **LightClaw** is where you start. **OpenClaw** is where you scale.
 

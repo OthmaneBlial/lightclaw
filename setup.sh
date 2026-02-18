@@ -3,9 +3,9 @@
 # 🦞 LightClaw — One-Command Setup
 # ──────────────────────────────────────────────────────────────
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/OthmaneBlial/LightClaw/master/setup.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/OthmaneBlial/lightclaw/master/setup.sh | bash
 #   — or —
-#   git clone https://github.com/OthmaneBlial/LightClaw.git && cd LightClaw && bash setup.sh
+#   git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash setup.sh
 # ──────────────────────────────────────────────────────────────
 
 set -e
@@ -98,9 +98,9 @@ fi
 
 if [ ! -f "main.py" ]; then
     step "Cloning LightClaw..."
-    git clone https://github.com/OthmaneBlial/LightClaw.git
-    cd LightClaw
-    success "Cloned into ./LightClaw"
+    git clone https://github.com/OthmaneBlial/lightclaw.git
+    cd lightclaw
+    success "Cloned into ./lightclaw"
 fi
 
 # ── Install Dependencies ─────────────────────────────────────
