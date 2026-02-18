@@ -1284,7 +1284,9 @@ class LightClawBot:
         if not valid:
             return
 
-        existing_summary = self._session_summaries.get(session_id, "")
+        existing_summary = self._sanitize_summary_for_prompt(
+            self._session_summaries.get(session_id, "")
+        )
         if self._is_provider_error_text(existing_summary):
             existing_summary = ""
             self._session_summaries.pop(session_id, None)
@@ -1302,6 +1304,7 @@ class LightClawBot:
                 [{"role": "user", "content": prompt}],
                 system_prompt="You are a conversation summarizer. Be concise but preserve all important context.",
             )
+            summary = self._sanitize_summary_for_prompt(summary)
             if summary and not self._is_provider_error_text(summary):
                 self._session_summaries[session_id] = summary
                 self._clear_llm_backoff()
@@ -1316,13 +1319,13 @@ class LightClawBot:
         """Get the stored summary for a session."""
         # First check in-memory cache
         if session_id in self._session_summaries:
-            summary = self._session_summaries[session_id]
+            summary = self._sanitize_summary_for_prompt(self._session_summaries[session_id])
             if self._is_provider_error_text(summary):
                 self._session_summaries.pop(session_id, None)
                 return ""
             return summary
         # Fall back to memory store
-        summary = self.memory.get_summary(session_id)
+        summary = self._sanitize_summary_for_prompt(self.memory.get_summary(session_id))
         if self._is_provider_error_text(summary):
             return ""
         return summary
@@ -1382,6 +1385,24 @@ class LightClawBot:
                 continue
             filtered.append(rec)
         return filtered
+
+    def _sanitize_summary_for_prompt(self, summary: str) -> str:
+        """Strip delegation transcript artifacts from persistent session summaries."""
+        if not summary:
+            return ""
+        if self._is_delegation_transcript_text(summary):
+            return ""
+        cleaned_lines: list[str] = []
+        for line in summary.splitlines():
+            stripped = line.strip()
+            if (
+                stripped.startswith("🤖 Delegated to ")
+                or "No workspace file changes detected." in stripped
+                or stripped.startswith("Created/updated:")
+            ):
+                continue
+            cleaned_lines.append(line)
+        return "\n".join(cleaned_lines).strip()
 
     # ── /start ────────────────────────────────────────────────
 
