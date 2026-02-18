@@ -8,8 +8,8 @@
 
   <p>
     <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python">
-    <img src="https://img.shields.io/badge/Files-5-brightgreen" alt="Files">
-    <img src="https://img.shields.io/badge/Lines-~1300-blue" alt="Lines">
+    <img src="https://img.shields.io/badge/Core-lean-brightgreen" alt="Core">
+    <img src="https://img.shields.io/badge/Repo-~5k_lines-blue" alt="Lines">
     <img src="https://img.shields.io/badge/LLM_Providers-5-purple" alt="Providers">
     <img src="https://img.shields.io/badge/RAM-<50MB-orange" alt="RAM">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
@@ -88,6 +88,10 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 🧩 **Skill System (ClawHub + Local)** — Install skills from `clawhub.ai`, activate them per chat with `/skills`, and create your own custom skills locally.
 
 🤖 **Local Agent Delegation** — Delegate large build tasks to installed local coding agents (`codex`, `claude`, `opencode`) with `/agent`, while LightClaw reports workspace change summaries back in Telegram.
+
+🛠️ **Workspace File Operations + Diff Summaries** — Large code is written directly to `.lightclaw/workspace` (not dumped in chat). LightClaw applies create/edit operations, then returns concise operation + diff line summaries.
+
+🧱 **Truncation Recovery for Large Files** — If an LLM response is cut mid-file, LightClaw attempts continuation/repair passes (including HTML completion) before finalizing the saved file.
 
 🎙️ **Voice Messages** — Automatic voice transcription via Groq Whisper (optional). Send a voice note and the bot transcribes + responds.
 
@@ -265,12 +269,47 @@ Use local coding agents for bigger project work while keeping LightClaw as the s
 ```text
 /agent
 /agent use codex
+/agent codex Build a complete SaaS landing page with pricing + FAQ
 /agent run Build a full React dashboard in this workspace
 /agent run claude Add auth + routing to the current project
 /agent off
 ```
 
 Supported local agents (auto-detected from `PATH`): `codex`, `claude`, `opencode`.
+You should authenticate these CLIs once on the host machine before using delegation mode.
+
+How it behaves:
+- `use` enables per-chat delegation mode (normal text messages are routed to that local agent).
+- `run` executes one explicit delegated task.
+- After each run, LightClaw reports a compact workspace delta (created/updated/deleted files).
+
+## Workspace Code Generation & Editing
+
+LightClaw's file pipeline is optimized for coding-heavy chats:
+
+- Saves generated artifacts to `.lightclaw/workspace` by default.
+- Accepts full-file fenced blocks, filename fences, and explicit edit hunks.
+- Applies edits with exact `SEARCH/REPLACE` semantics.
+- Retries failed edit hunks with current file context.
+- Avoids dumping large code blocks in Telegram responses.
+
+Supported block styles include:
+
+````text
+```html:landing/index.html
+<full file content>
+```
+````
+
+````text
+```edit:landing/index.html
+<<<<<<< SEARCH
+old text
+=======
+new text
+>>>>>>> REPLACE
+```
+````
 
 ## Bot Commands
 
@@ -284,6 +323,7 @@ Supported local agents (auto-detected from `PATH`): `codex`, `claude`, `opencode
 | `/agent` | Delegate tasks to local coding agents (`codex`, `claude`, `opencode`) |
 | `/clear` | Reset conversation history for the current chat |
 | `/wipe_memory` | Wipe all saved memory (requires explicit confirmation) |
+| `/wipe` | Alias of `/wipe_memory` |
 | `/show` | Show current model, provider, uptime, memory stats, voice status |
 
 ## How Infinite Memory Works
@@ -324,6 +364,7 @@ LightClaw automatically manages conversation length so you never hit context win
 1. **Auto-summarization** — When history exceeds 20 messages or 75% of the context window, the LLM summarizes older messages while keeping the last 4 for continuity.
 2. **Emergency compression** — If the LLM returns a context-too-long error, LightClaw drops the oldest 50% of messages and retries automatically.
 3. **Token estimation** — Uses a 2.5 chars/token heuristic to predict when to summarize before hitting limits.
+4. **Large output handling** — Uses `MAX_OUTPUT_TOKENS` and file-save pipelines to keep long code generations reliable.
 
 ## Project Structure
 
@@ -343,7 +384,8 @@ lightclaw/
 ├── .lightclaw/       # Runtime data (created by `lightclaw onboard`)
 │   ├── workspace/    # Active personality files + generated artifacts
 │   │   └── skills/   # Installed hub skills + local custom skills
-│   └── lightclaw.db  # Runtime memory database
+│   ├── lightclaw.db  # Runtime memory database
+│   └── skills_state.json # Per-chat active skills state
 ├── requirements.txt  # 6 dependencies
 ├── .env.example      # Configuration template
 ├── LICENSE           # MIT
