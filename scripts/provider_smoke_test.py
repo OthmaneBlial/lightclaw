@@ -74,6 +74,8 @@ async def _check_provider(
     text = (response or "").strip().replace("\n", " ")
     if not text:
         return "FAIL", "empty response"
+    if text.lower().startswith("⚠️ error communicating with") or text.lower().startswith("error communicating with"):
+        return "FAIL", text[:160]
     return "OK", text[:120]
 
 

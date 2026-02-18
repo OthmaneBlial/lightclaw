@@ -330,6 +330,8 @@ class LightClawBot:
         self._last_file_by_session: dict[str, str] = {}
         # Per-chat local delegation mode (codex/claude/opencode).
         self._agent_mode_by_session: dict[str, str] = {}
+        # Backoff window to avoid repeated background LLM calls during provider failures.
+        self._llm_backoff_until: float = 0.0
 
     def is_allowed(self, user_id: int) -> bool:
         """Check if this user is in the allowlist (empty = allow all)."""
@@ -384,6 +386,33 @@ class LightClawBot:
             "i will check", "i'll inspect", "let me inspect",
         )
         return any(p in lower for p in patterns)
+
+    @staticmethod
+    def _is_provider_error_text(text: str) -> bool:
+        lower = (text or "").strip().lower()
+        if not lower:
+            return False
+        if lower.startswith("⚠️ error communicating with"):
+            return True
+        if lower.startswith("error communicating with"):
+            return True
+        return False
+
+    def _llm_backoff_active(self) -> bool:
+        return time.time() < self._llm_backoff_until
+
+    def _set_llm_backoff(self, seconds: int = 180):
+        duration = max(15, int(seconds))
+        until = time.time() + duration
+        if until > self._llm_backoff_until:
+            self._llm_backoff_until = until
+        log.warning(f"LLM backoff enabled for {duration}s due to provider errors")
+
+    def _clear_llm_backoff(self):
+        self._llm_backoff_until = 0.0
+
+    def _llm_backoff_remaining_sec(self) -> int:
+        return max(0, int(self._llm_backoff_until - time.time()))
 
     def _collect_workspace_candidates(self, user_text: str, session_id: str, limit: int = 4) -> list[str]:
         """Pick likely target files for forced edit passes."""
@@ -1212,6 +1241,9 @@ class LightClawBot:
 
     async def maybe_summarize(self, session_id: str):
         """Trigger summarization if history is too long or token count too high."""
+        if self._llm_backoff_active():
+            return
+
         recent = self.memory.get_recent(session_id, limit=100)
         token_estimate = self.estimate_tokens(recent)
         threshold = self.config.context_window * 75 // 100
@@ -1247,6 +1279,9 @@ class LightClawBot:
             return
 
         existing_summary = self._session_summaries.get(session_id, "")
+        if self._is_provider_error_text(existing_summary):
+            existing_summary = ""
+            self._session_summaries.pop(session_id, None)
 
         # Build summarization prompt
         prompt = "Provide a concise summary of this conversation, preserving key context and important points.\n"
@@ -1261,9 +1296,13 @@ class LightClawBot:
                 [{"role": "user", "content": prompt}],
                 system_prompt="You are a conversation summarizer. Be concise but preserve all important context.",
             )
-            if summary:
+            if summary and not self._is_provider_error_text(summary):
                 self._session_summaries[session_id] = summary
+                self._clear_llm_backoff()
                 log.info(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")
+            elif summary and self._is_provider_error_text(summary):
+                self._set_llm_backoff()
+                log.warning(f"[{session_id}] Skipped summary update due to provider error response")
         except Exception as e:
             log.error(f"Summarization failed: {e}")
 
@@ -1271,9 +1310,16 @@ class LightClawBot:
         """Get the stored summary for a session."""
         # First check in-memory cache
         if session_id in self._session_summaries:
-            return self._session_summaries[session_id]
+            summary = self._session_summaries[session_id]
+            if self._is_provider_error_text(summary):
+                self._session_summaries.pop(session_id, None)
+                return ""
+            return summary
         # Fall back to memory store
-        return self.memory.get_summary(session_id)
+        summary = self.memory.get_summary(session_id)
+        if self._is_provider_error_text(summary):
+            return ""
+        return summary
 
     # ── Emergency Context Compression ────────────────────────
 
@@ -3003,7 +3049,21 @@ class LightClawBot:
             )
             self.memory.ingest("assistant", delegated_response, session_id)
             await self._send_response(placeholder, update, delegated_response)
-            asyncio.create_task(self.maybe_summarize(session_id))
+            if not self._llm_backoff_active():
+                asyncio.create_task(self.maybe_summarize(session_id))
+            return
+
+        # Provider backoff: avoid hammering the API on every user message.
+        if self._llm_backoff_active():
+            remaining = self._llm_backoff_remaining_sec()
+            wait_hint = f"{remaining}s" if remaining > 0 else "a short while"
+            self.memory.ingest("user", user_text, session_id)
+            quick_reply = (
+                f"⚠️ {self.config.llm_provider} is temporarily unavailable "
+                "(quota/billing or rate limit).\n"
+                f"Please retry in about {wait_hint}, or top up your provider balance."
+            )
+            await self._send_response(placeholder, update, quick_reply)
             return
 
         # 2. Recall relevant memories
@@ -3054,6 +3114,11 @@ class LightClawBot:
 
         if response is None:
             response = "⚠️ Failed to get a response after retries. Please try again."
+        provider_error_response = self._is_provider_error_text(response)
+        if provider_error_response:
+            self._set_llm_backoff()
+        else:
+            self._clear_llm_backoff()
 
         elapsed = time.monotonic() - start_time_mono
         log.info(f"[{session_id}] LLM response ({elapsed:.1f}s)")
@@ -3175,7 +3240,8 @@ class LightClawBot:
         await self._send_response(placeholder, update, final_markdown_response)
 
         # 12. Async summarization check
-        asyncio.create_task(self.maybe_summarize(session_id))
+        if not provider_error_response:
+            asyncio.create_task(self.maybe_summarize(session_id))
 
     # ── Message Chunking (Telegram 4096 char limit) ─────────
 
