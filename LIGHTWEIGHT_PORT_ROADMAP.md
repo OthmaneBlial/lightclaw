@@ -15,7 +15,8 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 - [DONE] P0.1 Atomic state writes for non-DB runtime files (`8acb95d`)
 - [DONE] P0.2 Delegation preflight checks (`/agent doctor`) (`9ce48e9`)
-- [NEXT] P0.3 stronger workspace path/symlink guard
+- [DONE] P0.3 stronger workspace path/symlink guard (`pending commit`)
+- [NEXT] P0.4 delegation safety policy layer
 
 ## P0 (High Impact, Low-Medium Effort)
 
@@ -34,7 +35,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - Return actionable fixes (`codex login`, `claude setup-token`, `opencode auth login`).
 - Effort: low.
 
-### 3) Stronger workspace path/symlink guard for all write/edit paths
+### 3) Stronger workspace path/symlink guard for all write/edit paths [DONE]
 - Why: close edge cases for symlink escape and non-existing-path ancestor tricks.
 - Scope:
   - Reuse current path policy but add explicit existing-ancestor symlink checks.
@@ -119,8 +120,8 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 1. [DONE] P0.1 Atomic writes
 2. [DONE] P0.2 `/agent doctor`
-3. [NEXT] P0.3 path/symlink hardening
-4. P0.4 delegation safety policy
+3. [DONE] P0.3 path/symlink hardening
+4. [NEXT] P0.4 delegation safety policy
 5. P0.5 per-chat lock/queue
 6. P1.8 health endpoint
 7. P1.6 heartbeat

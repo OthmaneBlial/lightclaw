@@ -2100,7 +2100,21 @@ class LightClawBot:
             return None, None, "absolute paths are not allowed"
 
         workspace = Path(self.config.workspace_path).resolve()
-        candidate = (workspace / path_text).resolve()
+        lexical = workspace / path_text
+        # Explicitly reject existing symlink segments to prevent workspace escape via link hops.
+        probe = workspace
+        for part in Path(path_text).parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                return None, None, "parent traversal is not allowed"
+            probe = probe / part
+            if not probe.exists():
+                break
+            if probe.is_symlink():
+                return None, None, f"path segment is a symlink: {part}"
+
+        candidate = lexical.resolve()
         try:
             rel = candidate.relative_to(workspace)
         except ValueError:
@@ -2108,6 +2122,8 @@ class LightClawBot:
 
         if str(rel) == ".":
             return None, None, "path points to workspace root"
+        if candidate.exists() and candidate.is_symlink():
+            return None, None, "target path is a symlink"
 
         return candidate, rel.as_posix(), None
 
