@@ -17,6 +17,10 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 - [DONE] P0.2 Delegation preflight checks (`/agent doctor`) (`9ce48e9`)
 - [DONE] P0.3 stronger workspace path/symlink guard
 - [DONE] P0.4 delegation safety policy layer (`LOCAL_AGENT_SAFETY_MODE`, `LOCAL_AGENT_DENY_PATTERNS`)
+- [SKIP] P0.5 per-chat task lock/queue for delegated runs
+- [NEXT] P1.6 Heartbeat automation via `HEARTBEAT.md`
+- [SKIP] P2.11 Migration command with dry-run
+- [SKIP] P2.12 Optional built-in web tools (`web_search`, `web_fetch`)
 
 ## P0 (High Impact, Low-Medium Effort)
 
@@ -54,7 +58,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - Normal non-delegated LLM chat path is intentionally unchanged for now.
 - Effort: medium.
 
-### 5) Per-chat task lock/queue for delegated runs
+### 5) Per-chat task lock/queue for delegated runs [SKIP]
 - Why: avoid race conditions when user sends multiple heavy tasks quickly.
 - Scope:
   - One active delegated run per session/chat.
@@ -63,7 +67,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 ## P1 (High Value, Medium Effort)
 
-### 6) Heartbeat automation via `HEARTBEAT.md`
+### 6) Heartbeat automation via `HEARTBEAT.md` [NEXT]
 - Why: proactive automation without constant prompts.
 - Scope:
   - Optional scheduler reads `.lightclaw/workspace/HEARTBEAT.md`.
@@ -105,14 +109,14 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - Preserve existing behavior for current users.
 - Effort: medium.
 
-### 11) Migration command with dry-run
+### 11) Migration command with dry-run [SKIP]
 - Why: safe upgrades when workspace/runtime format evolves.
 - Scope:
   - Add `lightclaw migrate --dry-run` first.
   - Show copy/backup plan, then apply with confirmation.
 - Effort: medium.
 
-### 12) Optional built-in web tools (`web_search`, `web_fetch`)
+### 12) Optional built-in web tools (`web_search`, `web_fetch`) [SKIP]
 - Why: better autonomous research with explicit tool boundaries.
 - Scope:
   - Keep optional by env toggle.
@@ -125,12 +129,14 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 2. [DONE] P0.2 `/agent doctor`
 3. [DONE] P0.3 path/symlink hardening
 4. [DONE] P0.4 delegation safety policy
-5. [NEXT] P0.5 per-chat lock/queue
-6. P1.8 health endpoint
-7. P1.6 heartbeat
+5. [SKIP] P0.5 per-chat lock/queue
+6. [NEXT] P1.6 heartbeat
+7. P1.8 health endpoint
 8. P1.7 cron
 9. P1.9 JSON logs
-10. P2 items as needed
+10. [SKIP] P2.11 migrate command (dry-run)
+11. [SKIP] P2.12 web tools
+12. P2.10 skill discovery precedence (as needed)
 
 ## What We Should Not Port (to stay lightweight)
 
