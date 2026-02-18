@@ -30,38 +30,38 @@ PROVIDER_KEY_ATTRS = {
 }
 
 
-def _build_provider_config(base: Config, provider: str, model: str) -> Config:
+def _build_provider_config(source_cfg: Config, provider: str, model: str) -> Config:
     """Clone config while forcing provider/model for one smoke test."""
     return Config(
         llm_provider=provider,
         llm_model=model,
-        openai_api_key=base.openai_api_key,
-        xai_api_key=base.xai_api_key,
-        anthropic_api_key=base.anthropic_api_key,
-        gemini_api_key=base.gemini_api_key,
-        zai_api_key=base.zai_api_key,
-        telegram_bot_token=base.telegram_bot_token,
-        telegram_allowed_users=base.telegram_allowed_users,
-        memory_db_path=base.memory_db_path,
-        memory_top_k=base.memory_top_k,
-        workspace_path=base.workspace_path,
-        context_window=base.context_window,
-        groq_api_key=base.groq_api_key,
+        openai_api_key=source_cfg.openai_api_key,
+        xai_api_key=source_cfg.xai_api_key,
+        anthropic_api_key=source_cfg.anthropic_api_key,
+        gemini_api_key=source_cfg.gemini_api_key,
+        zai_api_key=source_cfg.zai_api_key,
+        telegram_bot_token=source_cfg.telegram_bot_token,
+        telegram_allowed_users=source_cfg.telegram_allowed_users,
+        memory_db_path=source_cfg.memory_db_path,
+        memory_top_k=source_cfg.memory_top_k,
+        workspace_path=source_cfg.workspace_path,
+        context_window=source_cfg.context_window,
+        groq_api_key=source_cfg.groq_api_key,
     )
 
 
 async def _check_provider(
-    base_cfg: Config,
+    root_cfg: Config,
     provider: str,
     model: str,
     prompt: str,
     timeout_seconds: int,
 ) -> Tuple[str, str]:
     key_attr = PROVIDER_KEY_ATTRS[provider]
-    if not getattr(base_cfg, key_attr):
+    if not getattr(root_cfg, key_attr):
         return "SKIP", f"missing {key_attr}"
 
-    cfg = _build_provider_config(base_cfg, provider, model)
+    cfg = _build_provider_config(root_cfg, provider, model)
     client = LLMClient(cfg)
     try:
         response = await asyncio.wait_for(
@@ -78,7 +78,7 @@ async def _check_provider(
 
 
 async def _run(args: argparse.Namespace) -> int:
-    base_cfg = load_config()
+    root_cfg = load_config()
     providers = [p.strip().lower() for p in args.providers.split(",") if p.strip()]
 
     invalid = [p for p in providers if p not in PROVIDER_KEY_ATTRS]
@@ -91,7 +91,7 @@ async def _run(args: argparse.Namespace) -> int:
     for provider in providers:
         model = args.model or LATEST_MODEL_DEFAULTS[provider]
         status, detail = await _check_provider(
-            base_cfg=base_cfg,
+            root_cfg=root_cfg,
             provider=provider,
             model=model,
             prompt=args.prompt,

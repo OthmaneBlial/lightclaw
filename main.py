@@ -597,8 +597,12 @@ class LightClawBot:
         if custom_home:
             return Path(custom_home).expanduser() / "auth.json"
         xdg_data_home = os.getenv("XDG_DATA_HOME", "").strip()
-        base = Path(xdg_data_home).expanduser() if xdg_data_home else (Path.home() / ".local" / "share")
-        return base / "opencode" / "auth.json"
+        data_root = (
+            Path(xdg_data_home).expanduser()
+            if xdg_data_home
+            else (Path.home() / ".local" / "share")
+        )
+        return data_root / "opencode" / "auth.json"
 
     def _codex_doctor_auth_status(self) -> tuple[str, str, str]:
         auth_path = self._resolve_codex_auth_path()
