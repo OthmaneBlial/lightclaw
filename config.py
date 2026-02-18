@@ -57,6 +57,18 @@ def _parse_allowed_users(raw: str) -> list[str]:
     return users
 
 
+def _parse_deny_patterns(raw: str) -> list[str]:
+    """Parse LOCAL_AGENT_DENY_PATTERNS into a list of regex pattern strings."""
+    if not raw:
+        return []
+    patterns: list[str] = []
+    for chunk in re.split(r"[,\n;]+", raw):
+        token = _strip_inline_comment(chunk)
+        if token:
+            patterns.append(token)
+    return patterns
+
+
 @dataclass
 class Config:
     # LLM Provider
@@ -84,6 +96,8 @@ class Config:
     context_window: int = 128000
     max_output_tokens: int = 12000
     local_agent_timeout_sec: int = 1800
+    local_agent_safety_mode: str = "off"
+    local_agent_deny_patterns: list[str] = field(default_factory=list)
 
     # Skills
     skills_hub_base_url: str = "https://clawhub.ai"
@@ -124,6 +138,10 @@ def load_config() -> Config:
         context_window=int(os.getenv("CONTEXT_WINDOW", "128000")),
         max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "12000")),
         local_agent_timeout_sec=int(os.getenv("LOCAL_AGENT_TIMEOUT_SEC", "1800")),
+        local_agent_safety_mode=os.getenv("LOCAL_AGENT_SAFETY_MODE", "off"),
+        local_agent_deny_patterns=_parse_deny_patterns(
+            os.getenv("LOCAL_AGENT_DENY_PATTERNS", "")
+        ),
         skills_hub_base_url=os.getenv("SKILLS_HUB_BASE_URL", "https://clawhub.ai") or "https://clawhub.ai",
         skills_state_path=os.getenv("SKILLS_STATE_PATH", ".lightclaw/skills_state.json") or ".lightclaw/skills_state.json",
         groq_api_key=os.getenv("GROQ_API_KEY", ""),
@@ -148,5 +166,10 @@ def load_config() -> Config:
     cfg.llm_model = _resolve_model(cfg.llm_provider, cfg.llm_model)
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
     cfg.local_agent_timeout_sec = max(60, int(cfg.local_agent_timeout_sec))
+    cfg.local_agent_safety_mode = _strip_inline_comment(
+        cfg.local_agent_safety_mode or "off"
+    ).lower()
+    if cfg.local_agent_safety_mode not in {"off", "strict"}:
+        cfg.local_agent_safety_mode = "off"
 
     return cfg

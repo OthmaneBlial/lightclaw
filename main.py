@@ -70,6 +70,23 @@ if os.getenv("LIGHTCLAW_VERBOSE_HTTP", "").strip().lower() not in {"1", "true", 
     logging.getLogger("openai._base_client").setLevel(logging.WARNING)
 
 
+# Optional strict-mode safety denylist for delegated local-agent tasks.
+STRICT_LOCAL_AGENT_DENY_PATTERNS = (
+    r"\brm\s+-rf\s+/(?:\s|$)",
+    r"\brm\s+-rf\s+--no-preserve-root\b",
+    r"\bmkfs(?:\.[a-z0-9]+)?\b",
+    r"\bdd\s+if=",
+    r"\bshutdown\b",
+    r"\breboot\b",
+    r"\bpoweroff\b",
+    r"\bhalt\b",
+    r"\binit\s+[06]\b",
+    r"\bgit\s+reset\s+--hard\b",
+    r"\bgit\s+clean\s+-fdx?\b",
+    r":\(\)\s*\{\s*:\|\:\s*&\s*\};:",
+)
+
+
 # ──────────────────────────────────────────────────────────────
 # Markdown → Telegram HTML Converter
 # ──────────────────────────────────────────────────────────────
@@ -345,6 +362,8 @@ class LightClawBot:
         self._llm_backoff_until: float = 0.0
         # Throttle repeated Telegram polling conflict warnings.
         self._last_telegram_conflict_log_at: float = 0.0
+        # Compiled strict-mode deny patterns for delegated local-agent tasks.
+        self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
 
     def is_allowed(self, user_id: int) -> bool:
         """Check if this user is in the allowlist (empty = allow all)."""
@@ -426,6 +445,36 @@ class LightClawBot:
 
     def _llm_backoff_remaining_sec(self) -> int:
         return max(0, int(self._llm_backoff_until - time.time()))
+
+    def _compile_delegation_deny_patterns(self) -> list[tuple[str, re.Pattern[str]]]:
+        """Compile strict-mode deny patterns once at startup."""
+        if self.config.local_agent_safety_mode != "strict":
+            return []
+
+        raw_patterns = list(STRICT_LOCAL_AGENT_DENY_PATTERNS)
+        raw_patterns.extend(self.config.local_agent_deny_patterns)
+
+        compiled: list[tuple[str, re.Pattern[str]]] = []
+        for raw in raw_patterns:
+            text = (raw or "").strip()
+            if not text:
+                continue
+            try:
+                compiled.append((text, re.compile(text, re.IGNORECASE)))
+            except re.error:
+                log.warning(f"Ignoring invalid LOCAL_AGENT_DENY_PATTERNS regex: {text}")
+        return compiled
+
+    def _delegation_safety_block_reason(self, task: str) -> str:
+        """Return matched deny pattern if task is blocked, else empty string."""
+        if self.config.local_agent_safety_mode != "strict":
+            return ""
+
+        task_text = task or ""
+        for raw, pattern in self._delegation_deny_patterns:
+            if pattern.search(task_text):
+                return raw
+        return ""
 
     def _collect_workspace_candidates(self, user_text: str, session_id: str, limit: int = 4) -> list[str]:
         """Pick likely target files for forced edit passes."""
@@ -1185,6 +1234,19 @@ class LightClawBot:
             return (
                 f"⚠️ Local agent `{agent}` is not available on this machine.\n"
                 f"Installed agents: {installed}"
+            )
+
+        blocked_by = self._delegation_safety_block_reason(task)
+        if blocked_by:
+            log.warning(
+                f"[{session_id}] Blocked delegated task by safety policy "
+                f"(agent={agent}, pattern={blocked_by})"
+            )
+            return (
+                "🛑 Delegation blocked by local safety policy.\n"
+                "Reason: potentially destructive task pattern detected.\n"
+                f"Matched rule: `{blocked_by}`\n"
+                "If this is intentional, set `LOCAL_AGENT_SAFETY_MODE=off` and restart."
             )
 
         before = await asyncio.to_thread(self._snapshot_workspace_state)
@@ -3023,6 +3085,7 @@ class LightClawBot:
             f"<b>Session summary:</b> {summary_status}\n"
             f"<b>Skills:</b> {len(active_skills)} active / {len(installed_skills)} installed\n"
             f"<b>Delegation:</b> {_escape_html(active_agent)}\n"
+            f"<b>Delegation safety:</b> {_escape_html(self.config.local_agent_safety_mode)}\n"
             f"<b>Voice:</b> {voice_status}",
             parse_mode=ParseMode.HTML,
         )
@@ -3511,6 +3574,10 @@ def main():
     log.info(f"   Context window: {config.context_window:,} tokens")
     log.info(f"   Max output: {config.max_output_tokens:,} tokens")
     log.info(f"   Local agent timeout: {config.local_agent_timeout_sec}s")
+    log.info(
+        f"   Delegation safety: {config.local_agent_safety_mode} "
+        f"({len(config.local_agent_deny_patterns)} custom pattern(s))"
+    )
     if config.groq_api_key:
         log.info("   Voice: ✅ Groq Whisper enabled")
     else:

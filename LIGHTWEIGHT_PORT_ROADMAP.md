@@ -15,8 +15,8 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 - [DONE] P0.1 Atomic state writes for non-DB runtime files (`8acb95d`)
 - [DONE] P0.2 Delegation preflight checks (`/agent doctor`) (`9ce48e9`)
-- [DONE] P0.3 stronger workspace path/symlink guard (`pending commit`)
-- [NEXT] P0.4 delegation safety policy layer
+- [DONE] P0.3 stronger workspace path/symlink guard
+- [DONE] P0.4 delegation safety policy layer (`LOCAL_AGENT_SAFETY_MODE`, `LOCAL_AGENT_DENY_PATTERNS`)
 
 ## P0 (High Impact, Low-Medium Effort)
 
@@ -42,13 +42,16 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - Apply to every file op and repair pass path resolution.
 - Effort: low-medium.
 
-### 4) Execution safety policy layer for delegated local agents
+### 4) Execution safety policy layer for delegated local agents [DONE]
 - Why: local agents run with broad permissions; add guardrails at LightClaw layer.
 - Scope:
   - Add optional safety mode env flags:
   - `LOCAL_AGENT_SAFETY_MODE=strict|off`
   - `LOCAL_AGENT_DENY_PATTERNS=...`
   - Block obviously destructive tasks before CLI dispatch.
+- Current boundary:
+  - This policy currently applies to delegated local-agent runs only (`/agent run`, `/agent use` mode path).
+  - Normal non-delegated LLM chat path is intentionally unchanged for now.
 - Effort: medium.
 
 ### 5) Per-chat task lock/queue for delegated runs
@@ -121,8 +124,8 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 1. [DONE] P0.1 Atomic writes
 2. [DONE] P0.2 `/agent doctor`
 3. [DONE] P0.3 path/symlink hardening
-4. [NEXT] P0.4 delegation safety policy
-5. P0.5 per-chat lock/queue
+4. [DONE] P0.4 delegation safety policy
+5. [NEXT] P0.5 per-chat lock/queue
 6. P1.8 health endpoint
 7. P1.6 heartbeat
 8. P1.7 cron

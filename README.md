@@ -189,6 +189,10 @@ TELEGRAM_ALLOWED_USERS=123456789
 MAX_OUTPUT_TOKENS=12000
 LOCAL_AGENT_TIMEOUT_SEC=1800
 
+# Optional delegated local-agent safety policy
+LOCAL_AGENT_SAFETY_MODE=off
+LOCAL_AGENT_DENY_PATTERNS=
+
 # Skills (default registry)
 SKILLS_HUB_BASE_URL=https://clawhub.ai
 SKILLS_STATE_PATH=.lightclaw/skills_state.json
@@ -290,6 +294,23 @@ How it behaves:
 - `use` enables per-chat delegation mode (normal text messages are routed to that local agent).
 - `run` executes one explicit delegated task.
 - After each run, LightClaw reports a compact workspace delta (created/updated/deleted files).
+
+Optional delegation safety policy:
+- `LOCAL_AGENT_SAFETY_MODE=off|strict`
+- `LOCAL_AGENT_DENY_PATTERNS=<regex1,regex2,...>`
+- In `strict` mode, delegated tasks are checked before CLI dispatch and blocked on match.
+- Scope today: this guard is delegation-only; normal non-delegated chat flow is unchanged.
+
+Safe test example:
+```env
+LOCAL_AGENT_SAFETY_MODE=strict
+LOCAL_AGENT_DENY_PATTERNS=LIGHTCLAW_BLOCK_TEST
+```
+Then run:
+```text
+/agent run codex please do LIGHTCLAW_BLOCK_TEST and continue
+```
+Expected result: task is blocked by policy.
 
 ## Run-Time Provider Selection
 
