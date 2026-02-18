@@ -26,6 +26,7 @@ PROVIDER_KEY_ATTRS = {
     "xai": "xai_api_key",
     "claude": "anthropic_api_key",
     "gemini": "gemini_api_key",
+    "deepseek": "deepseek_api_key",
     "zai": "zai_api_key",
 }
 
@@ -39,6 +40,7 @@ def _build_provider_config(source_cfg: Config, provider: str, model: str) -> Con
         xai_api_key=source_cfg.xai_api_key,
         anthropic_api_key=source_cfg.anthropic_api_key,
         gemini_api_key=source_cfg.gemini_api_key,
+        deepseek_api_key=source_cfg.deepseek_api_key,
         zai_api_key=source_cfg.zai_api_key,
         telegram_bot_token=source_cfg.telegram_bot_token,
         telegram_allowed_users=source_cfg.telegram_allowed_users,
@@ -115,7 +117,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke-test configured LLM providers.")
     parser.add_argument(
         "--providers",
-        default="openai,xai,claude,gemini,zai",
+        default="openai,xai,claude,gemini,deepseek,zai",
         help="Comma-separated providers to test.",
     )
     parser.add_argument(

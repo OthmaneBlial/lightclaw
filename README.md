@@ -31,7 +31,7 @@ If you are searching for an **OpenClaw alternative**, **OpenClaw in Python**, or
 
 ```
 OpenClaw:     50+ packages │ 20k+ lines  │ TypeScript │ 10+ channels │ 12+ providers │ >1GB RAM
-LightClaw:    5 files       │ ~1300 lines │ Python │ Telegram only │ 5 providers │ <50MB RAM
+LightClaw:    5 files       │ ~1300 lines │ Python │ Telegram only │ 6 providers │ <50MB RAM
 ```
 
 Think of LightClaw as **the starter engine** — the part of a rocket that ignites first. It contains the core DNA of OpenClaw (LLM routing, memory, conversational agent) but removes everything else. No message bus. No plugin registry. No tool orchestration. Just a direct pipeline:
@@ -79,7 +79,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 🧠 **Infinite Memory** — Every conversation is persisted in SQLite with TF-IDF vector embeddings. The bot recalls relevant context from days, weeks, or months ago via semantic search (RAG).
 
-🔌 **5 LLM Providers** — OpenAI (ChatGPT), xAI (Grok), Anthropic (Claude), Google (Gemini), Z-AI (GLM). Switch providers by changing one line in `.env`.
+🔌 **6 LLM Providers** — OpenAI (ChatGPT), xAI (Grok), Anthropic (Claude), Google (Gemini), DeepSeek, Z-AI (GLM). Switch providers by changing one line in `.env`.
 
 📱 **Telegram Native** — Polling-based bot with "Thinking… 💭" placeholders, HTML-formatted responses, typing indicators, and rich commands.
 
@@ -127,7 +127,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 │  │     ├─ 2. Recall memories      ◄── memory.py                  │
 │  │     ├─ 3. Build prompt              SQLite + TF-IDF RAG      │
 │  │     ├─ 4. Call LLM + retry     ◄── providers.py               │
-│  │     ├─ 5. Edit placeholder          5 providers unified       │
+│  │     ├─ 5. Edit placeholder          6 providers unified       │
 │  │     └─ 6. Summarize if needed                                 │
 │  │                                                               │
 │  └── cmd_start/help/clear/wipe_memory/memory/recall/skills/agent/show │
@@ -145,7 +145,7 @@ git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash 
 ```
 
 The interactive setup wizard will walk you through:
-1. Choosing your AI provider (OpenAI, xAI, Claude, Gemini, Z-AI)
+1. Choosing your AI provider (OpenAI, xAI, Claude, Gemini, DeepSeek, Z-AI)
 2. Entering your API key
 3. Creating a Telegram bot via @BotFather (step-by-step guide)
 4. Optional voice transcription setup
@@ -173,10 +173,11 @@ This creates:
 Then edit `.env` with your API key and Telegram bot token:
 
 ```env
-# Choose your provider: openai | xai | claude | gemini | zai
+# Choose your provider: openai | xai | claude | gemini | deepseek | zai
 LLM_PROVIDER=openai
 LLM_MODEL=latest
 OPENAI_API_KEY=sk-...
+DEEPSEEK_API_KEY=
 
 # Get a token from @BotFather on Telegram
 TELEGRAM_BOT_TOKEN=123456:ABC...
@@ -231,6 +232,7 @@ If `lightclaw` is not on your `PATH`, run `./lightclaw onboard` and `./lightclaw
 | **xAI** | `openai` (base_url override) | `LLM_PROVIDER=xai` | `grok-4-latest`, `grok-4-fast-non-reasoning` |
 | **Claude** | `anthropic` | `LLM_PROVIDER=claude` | `claude-opus-4-5`, `claude-sonnet-4-5` |
 | **Gemini** | `google-generativeai` | `LLM_PROVIDER=gemini` | `gemini-3-flash-preview`, `gemini-2.5-flash` |
+| **DeepSeek** | `openai` (base_url override) | `LLM_PROVIDER=deepseek` | `deepseek-chat`, `deepseek-reasoner` |
 | **Z-AI** | `openai` (base_url override) | `LLM_PROVIDER=zai` | `glm-5`, `glm-4.7` |
 
 > **Pro tip:** If `LLM_MODEL` is empty, `latest`, `auto`, or `default`, LightClaw picks the latest per-provider default automatically.
@@ -375,7 +377,7 @@ lightclaw/
 ├── main.py           # Telegram bot + agent loop + HTML converter
 ├── skills.py         # Skills manager (ClawHub + local + per-chat activation)
 ├── memory.py         # SQLite infinite memory + RAG
-├── providers.py      # Unified LLM client for 5 providers
+├── providers.py      # Unified LLM client for 6 providers
 ├── config.py         # .env configuration
 ├── scripts/
 │   └── provider_smoke_test.py  # Quick API smoke test for all providers
@@ -415,7 +417,7 @@ The point is: **you shouldn't need permission from a framework to add a feature*
 | Project | Language | Purpose | Complexity |
 |---------|----------|---------|------------|
 | **[OpenClaw](https://github.com/openclaw/openclaw)** | TypeScript | Full-featured AI agent platform | ████████░░ |
-| **[LightClaw](https://github.com/OthmaneBlial/lightclaw)** | Python | Minimal forkable agent core (5 LLMs) | ██░░░░░░░░ |
+| **[LightClaw](https://github.com/OthmaneBlial/lightclaw)** | Python | Minimal forkable agent core (6 LLMs) | ██░░░░░░░░ |
 
 > **LightClaw** is where you start. **OpenClaw** is where you scale.
 

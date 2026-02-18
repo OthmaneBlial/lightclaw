@@ -15,6 +15,7 @@ LATEST_MODEL_DEFAULTS = {
     "xai": "grok-4-latest",
     "claude": "claude-opus-4-5",
     "gemini": "gemini-3-flash-preview",
+    "deepseek": "deepseek-chat",
     "zai": "glm-5",
 }
 
@@ -32,6 +33,7 @@ class Config:
     xai_api_key: str = ""
     anthropic_api_key: str = ""
     gemini_api_key: str = ""
+    deepseek_api_key: str = ""
     zai_api_key: str = ""
 
     # Telegram
@@ -77,6 +79,7 @@ def load_config() -> Config:
         xai_api_key=os.getenv("XAI_API_KEY", ""),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
         gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+        deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         zai_api_key=os.getenv("ZAI_API_KEY", ""),
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
         telegram_allowed_users=allowed,
@@ -101,6 +104,8 @@ def load_config() -> Config:
             cfg.llm_provider = "claude"
         elif cfg.gemini_api_key:
             cfg.llm_provider = "gemini"
+        elif cfg.deepseek_api_key:
+            cfg.llm_provider = "deepseek"
         elif cfg.zai_api_key:
             cfg.llm_provider = "zai"
 

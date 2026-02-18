@@ -40,6 +40,7 @@ def _patched_env_example() -> str:
             "LLM_PROVIDER=openai\n"
             "LLM_MODEL=latest\n"
             "OPENAI_API_KEY=\n"
+            "DEEPSEEK_API_KEY=\n"
             "TELEGRAM_BOT_TOKEN=\n"
             f"MEMORY_DB_PATH={RUNTIME_DB}\n"
             f"WORKSPACE_PATH={RUNTIME_WORKSPACE}\n"

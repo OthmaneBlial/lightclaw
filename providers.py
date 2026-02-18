@@ -1,6 +1,6 @@
 """
 LightClaw — Unified LLM Provider
-Single class routing to OpenAI, xAI, Claude, Gemini, or Z-AI.
+Single class routing to OpenAI, xAI, Claude, Gemini, DeepSeek, or Z-AI.
 Unified LLM provider interface.
 """
 
@@ -20,6 +20,7 @@ class LLMClient:
       - xai     → xAI Grok (via openai SDK with custom base_url)
       - claude  → Anthropic Claude (via anthropic SDK)
       - gemini  → Google Gemini (via google-generativeai SDK)
+      - deepseek → DeepSeek (via openai SDK with custom base_url)
       - zai     → Z-AI / Zhipu GLM (via openai SDK with custom base_url)
     """
 
@@ -35,7 +36,7 @@ class LLMClient:
 
     def _init_client(self):
         """Initialize the appropriate SDK client."""
-        if self.provider_name in ("openai", "xai", "zai"):
+        if self.provider_name in ("openai", "xai", "deepseek", "zai"):
             import openai
 
             if self.provider_name == "xai":
@@ -44,6 +45,14 @@ class LLMClient:
                 self._client = openai.OpenAI(
                     api_key=self.config.xai_api_key,
                     base_url="https://api.x.ai/v1",
+                    max_retries=0,
+                )
+            elif self.provider_name == "deepseek":
+                if not self.config.deepseek_api_key:
+                    raise ValueError("DEEPSEEK_API_KEY is required when LLM_PROVIDER=deepseek")
+                self._client = openai.OpenAI(
+                    api_key=self.config.deepseek_api_key,
+                    base_url="https://api.deepseek.com",
                     max_retries=0,
                 )
             elif self.provider_name == "zai":
@@ -85,7 +94,7 @@ class LLMClient:
         else:
             raise ValueError(
                 f"Unknown provider: {self.provider_name!r}. "
-                f"Supported: openai, xai, claude, gemini, zai"
+                f"Supported: openai, xai, claude, gemini, deepseek, zai"
             )
 
     async def chat(
@@ -106,7 +115,7 @@ class LLMClient:
             The assistant's response text.
         """
         try:
-            if self.provider_name in ("openai", "xai", "zai"):
+            if self.provider_name in ("openai", "xai", "deepseek", "zai"):
                 return await self._chat_openai(messages, system_prompt, max_output_tokens)
             elif self.provider_name == "claude":
                 return await self._chat_claude(messages, system_prompt, max_output_tokens)
@@ -142,7 +151,7 @@ class LLMClient:
         system_prompt: str,
         max_output_tokens: int | None = None,
     ) -> str:
-        """Chat via OpenAI-compatible API (covers ChatGPT, xAI Grok, and Z-AI GLM)."""
+        """Chat via OpenAI-compatible API (ChatGPT/xAI/DeepSeek/Z-AI)."""
         api_messages = []
         if system_prompt:
             api_messages.append({"role": "system", "content": system_prompt})

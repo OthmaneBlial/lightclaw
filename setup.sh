@@ -125,7 +125,8 @@ echo -e "  ${BOLD}1)${NC} OpenAI      ${DIM}(ChatGPT — gpt-5.2)${NC}"
 echo -e "  ${BOLD}2)${NC} xAI         ${DIM}(Grok — grok-4-latest)${NC}"
 echo -e "  ${BOLD}3)${NC} Anthropic   ${DIM}(Claude — claude-opus-4-5)${NC}"
 echo -e "  ${BOLD}4)${NC} Google      ${DIM}(Gemini — gemini-3-flash-preview)${NC}"
-echo -e "  ${BOLD}5)${NC} Z-AI        ${DIM}(GLM — glm-5)${NC}"
+echo -e "  ${BOLD}5)${NC} DeepSeek    ${DIM}(deepseek-chat — DeepSeek-V3.2 alias)${NC}"
+echo -e "  ${BOLD}6)${NC} Z-AI        ${DIM}(GLM — glm-5)${NC}"
 echo ""
 
 PROVIDER=""
@@ -134,15 +135,16 @@ API_KEY_ENV=""
 DEFAULT_MODEL=""
 
 while [ -z "$PROVIDER" ]; do
-    ask "Enter number [1-5]:"
+    ask "Enter number [1-6]:"
     read -r choice
     case $choice in
         1) PROVIDER="openai";  PROVIDER_NAME="OpenAI";  API_KEY_ENV="OPENAI_API_KEY";   DEFAULT_MODEL="gpt-5.2" ;;
         2) PROVIDER="xai";     PROVIDER_NAME="xAI";     API_KEY_ENV="XAI_API_KEY";      DEFAULT_MODEL="grok-4-latest" ;;
         3) PROVIDER="claude";  PROVIDER_NAME="Anthropic"; API_KEY_ENV="ANTHROPIC_API_KEY"; DEFAULT_MODEL="claude-opus-4-5" ;;
         4) PROVIDER="gemini";  PROVIDER_NAME="Google";   API_KEY_ENV="GEMINI_API_KEY";   DEFAULT_MODEL="gemini-3-flash-preview" ;;
-        5) PROVIDER="zai";     PROVIDER_NAME="Z-AI";     API_KEY_ENV="ZAI_API_KEY";      DEFAULT_MODEL="glm-5" ;;
-        *) echo -e "  ${RED}Invalid choice. Enter 1-5.${NC}" ;;
+        5) PROVIDER="deepseek"; PROVIDER_NAME="DeepSeek"; API_KEY_ENV="DEEPSEEK_API_KEY"; DEFAULT_MODEL="deepseek-chat" ;;
+        6) PROVIDER="zai";     PROVIDER_NAME="Z-AI";     API_KEY_ENV="ZAI_API_KEY";      DEFAULT_MODEL="glm-5" ;;
+        *) echo -e "  ${RED}Invalid choice. Enter 1-6.${NC}" ;;
     esac
 done
 success "Selected: $PROVIDER_NAME ($DEFAULT_MODEL)"

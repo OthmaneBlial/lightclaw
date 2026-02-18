@@ -2,7 +2,7 @@
 """
 LightClaw — Minimal AI Agent for Telegram
 ==========================================
-A minimalist Python AI agent. Telegram-only, 5 LLM providers, 
+A minimalist Python AI agent. Telegram-only, 6 LLM providers, 
 infinite memory, and customizable personality.
 
 Architecture: Telegram Polling → handle_message → Memory Recall → LLM → Reply
