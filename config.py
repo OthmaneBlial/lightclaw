@@ -4,6 +4,7 @@ Flat .env-based configuration system.
 """
 
 import os
+import re
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
@@ -20,6 +21,40 @@ LATEST_MODEL_DEFAULTS = {
 }
 
 _MODEL_DEFAULT_SENTINELS = {"", "latest", "auto", "default"}
+
+
+def _strip_inline_comment(value: str) -> str:
+    """Strip shell-style inline comments for unquoted env values."""
+    if not value:
+        return ""
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+    if cleaned.startswith("#"):
+        return ""
+    return re.sub(r"\s+#.*$", "", cleaned).strip()
+
+
+def _parse_allowed_users(raw: str) -> list[str]:
+    """Parse TELEGRAM_ALLOWED_USERS as comma-separated numeric user IDs."""
+    cleaned = _strip_inline_comment(raw)
+    if not cleaned:
+        return []
+
+    users: list[str] = []
+    for chunk in cleaned.split(","):
+        token = chunk.strip()
+        if not token:
+            continue
+        if token.startswith("#"):
+            break
+        token = token.split("#", 1)[0].strip()
+        if not token:
+            continue
+        # Telegram user IDs are numeric; ignore placeholder/comment text safely.
+        if token.lstrip("-").isdigit():
+            users.append(token)
+    return users
 
 
 @dataclass
@@ -60,8 +95,8 @@ class Config:
 
 def _resolve_model(provider: str, model: str) -> str:
     """Resolve empty/default model values to provider-specific latest defaults."""
-    provider_name = (provider or "").strip().lower()
-    requested = (model or "").strip()
+    provider_name = _strip_inline_comment(provider or "").lower()
+    requested = _strip_inline_comment(model or "")
     if requested.lower() in _MODEL_DEFAULT_SENTINELS:
         return LATEST_MODEL_DEFAULTS.get(provider_name, LATEST_MODEL_DEFAULTS["openai"])
     return requested
@@ -70,7 +105,7 @@ def _resolve_model(provider: str, model: str) -> str:
 def load_config() -> Config:
     """Load config from environment variables with auto-detection."""
     allowed_raw = os.getenv("TELEGRAM_ALLOWED_USERS", "")
-    allowed = [u.strip() for u in allowed_raw.split(",") if u.strip()] if allowed_raw else []
+    allowed = _parse_allowed_users(allowed_raw)
 
     cfg = Config(
         llm_provider=os.getenv("LLM_PROVIDER", ""),

@@ -10,9 +10,11 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import getpass
 import os
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -139,6 +141,168 @@ def _ensure_workspace_templates(workspace_dir: Path, force: bool) -> list[str]:
     return created
 
 
+def _confirm_reset_env(env_path: Path) -> bool:
+    """Ask whether to reset .env when onboarding is re-run."""
+    if not sys.stdin.isatty():
+        return False
+    print("")
+    print(f"Existing config found: {env_path}")
+    print("Do you want to reset .env from the latest template now?")
+    answer = input("Reset .env? [y/N]: ").strip().lower()
+    return answer in {"y", "yes"}
+
+
+def _set_env_value(content: str, key: str, value: str) -> str:
+    line = f"{key}={value}"
+    pattern = rf"(?m)^{re.escape(key)}=.*$"
+    if re.search(pattern, content):
+        return re.sub(pattern, line, content)
+    suffix = "" if content.endswith("\n") else "\n"
+    return f"{content}{suffix}{line}\n"
+
+
+def _get_env_value(content: str, key: str) -> str:
+    match = re.search(rf"(?m)^{re.escape(key)}=(.*)$", content)
+    if not match:
+        return ""
+    value = (match.group(1) or "").strip()
+    if not value:
+        return ""
+    # Treat comment placeholders as empty and strip inline comments.
+    if value.startswith("#"):
+        return ""
+    return re.sub(r"\s+#.*$", "", value).strip()
+
+
+def _clear_other_provider_keys(content: str, keep_key: str) -> str:
+    provider_keys = (
+        "OPENAI_API_KEY",
+        "XAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "ZAI_API_KEY",
+    )
+    updated = content
+    for key in provider_keys:
+        if key == keep_key:
+            continue
+        updated = _set_env_value(updated, key, "")
+    return updated
+
+
+def _read_secret(prompt: str) -> str:
+    """Read secret input, with fallback for non-standard terminals."""
+    try:
+        return getpass.getpass(prompt).strip()
+    except Exception:
+        try:
+            return input(prompt).strip()
+        except EOFError:
+            return ""
+
+
+def _configure_env_interactive(
+    env_path: Path,
+    force_prompt: bool = False,
+    fallback_content: str = "",
+) -> bool:
+    """Optional guided provider/token setup for .env."""
+    if not sys.stdin.isatty():
+        return False
+
+    if not force_prompt:
+        answer = input("Configure provider and tokens now? [Y/n]: ").strip().lower()
+        if answer in {"n", "no"}:
+            return False
+
+    providers = [
+        ("openai", "OpenAI", "OPENAI_API_KEY", "gpt-5.2"),
+        ("xai", "xAI", "XAI_API_KEY", "grok-4-latest"),
+        ("claude", "Anthropic", "ANTHROPIC_API_KEY", "claude-opus-4-5"),
+        ("gemini", "Google", "GEMINI_API_KEY", "gemini-3-flash-preview"),
+        ("deepseek", "DeepSeek", "DEEPSEEK_API_KEY", "deepseek-chat"),
+        ("zai", "Z-AI", "ZAI_API_KEY", "glm-5"),
+    ]
+
+    print("")
+    print("Choose provider:")
+    for idx, (_, name, _, model) in enumerate(providers, start=1):
+        print(f"  {idx}) {name} ({model})")
+
+    content = env_path.read_text(encoding="utf-8")
+
+    def existing_value(key: str) -> str:
+        current = _get_env_value(content, key)
+        if current:
+            return current
+        return _get_env_value(fallback_content, key) if fallback_content else ""
+
+    existing_provider = existing_value("LLM_PROVIDER")
+    default_provider_idx = None
+    for idx, (provider_id, _, _, _) in enumerate(providers, start=1):
+        if provider_id == existing_provider:
+            default_provider_idx = idx
+            break
+
+    selected = None
+    while selected is None:
+        default_label = (
+            f" [{default_provider_idx}]"
+            if default_provider_idx is not None
+            else f" [1-{len(providers)}]"
+        )
+        raw = input(f"Provider number{default_label}: ").strip()
+        if not raw and default_provider_idx is not None:
+            choice = default_provider_idx
+        else:
+            try:
+                choice = int(raw)
+            except ValueError:
+                choice = 0
+        if 1 <= choice <= len(providers):
+            selected = providers[choice - 1]
+        else:
+            print(f"Invalid choice. Enter 1-{len(providers)}.")
+
+    provider_id, provider_name, key_env, default_model = selected
+    existing_model = existing_value("LLM_MODEL")
+    model_default = (
+        existing_model
+        if existing_provider == provider_id and existing_model
+        else default_model
+    )
+    model = input(f"Model [{model_default}]: ").strip() or model_default
+
+    existing_key = existing_value(key_env)
+    api_key = _read_secret(f"{key_env} (leave blank to keep current): ")
+    if not api_key:
+        api_key = existing_key
+
+    existing_telegram_token = existing_value("TELEGRAM_BOT_TOKEN")
+    telegram_token = input("TELEGRAM_BOT_TOKEN (leave blank to keep current): ").strip()
+    if not telegram_token:
+        telegram_token = existing_telegram_token
+
+    existing_allowed_users = existing_value("TELEGRAM_ALLOWED_USERS")
+    allowed_users = input(
+        "TELEGRAM_ALLOWED_USERS (optional, comma-separated, blank keeps current): "
+    ).strip()
+    if not allowed_users:
+        allowed_users = existing_allowed_users
+
+    content = _set_env_value(content, "LLM_PROVIDER", provider_id)
+    content = _set_env_value(content, "LLM_MODEL", model)
+    content = _set_env_value(content, key_env, api_key)
+    content = _clear_other_provider_keys(content, keep_key=key_env)
+    content = _set_env_value(content, "TELEGRAM_BOT_TOKEN", telegram_token)
+    content = _set_env_value(content, "TELEGRAM_ALLOWED_USERS", allowed_users)
+
+    env_path.write_text(content, encoding="utf-8")
+    print(f"- Guided config applied: provider={provider_name}, model={model}")
+    return True
+
+
 def cmd_onboard(args: argparse.Namespace) -> int:
     home = _resolve_home(args.home)
     runtime_dir = home / RUNTIME_DIRNAME
@@ -151,24 +315,34 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     migrated = _migrate_legacy_workspace(home, workspace_dir)
     created_templates = _ensure_workspace_templates(workspace_dir, force=args.force)
 
+    env_existed = env_path.exists()
+    previous_env_content = env_path.read_text(encoding="utf-8") if env_existed else ""
     wrote_env = False
     upgraded_env = False
-    if env_path.exists() and not args.force:
+    reset_env = False
+    if env_existed and not args.force and not args.reset_env:
         original = env_path.read_text(encoding="utf-8")
         upgraded, changed = _upgrade_legacy_env_defaults(original)
         if changed:
             env_path.write_text(upgraded, encoding="utf-8")
             upgraded_env = True
+        elif _confirm_reset_env(env_path):
+            env_path.write_text(_patched_env_example(), encoding="utf-8")
+            wrote_env = True
+            reset_env = True
     else:
         env_path.write_text(_patched_env_example(), encoding="utf-8")
         wrote_env = True
+        reset_env = env_existed
 
     print("LightClaw onboard complete")
     print(f"- Home: {home}")
     print(f"- Runtime dir: {runtime_dir}")
     print(f"- Workspace: {workspace_dir}")
     print(f"- Database: {runtime_dir / 'lightclaw.db'}")
-    if wrote_env:
+    if wrote_env and reset_env:
+        print(f"- Reset config from template: {env_path}")
+    elif wrote_env:
         print(f"- Wrote config: {env_path}")
     elif upgraded_env:
         print(f"- Upgraded legacy defaults in config: {env_path}")
@@ -180,9 +354,29 @@ def cmd_onboard(args: argparse.Namespace) -> int:
         print("- Template files already present")
     if migrated:
         print(f"- Migrated {migrated} legacy file(s) from ./workspace")
+
+    configured = False
+    fallback_content = previous_env_content if reset_env else ""
+    if args.configure:
+        configured = _configure_env_interactive(
+            env_path,
+            force_prompt=True,
+            fallback_content=fallback_content,
+        )
+    elif wrote_env or reset_env:
+        print("")
+        configured = _configure_env_interactive(
+            env_path,
+            force_prompt=False,
+            fallback_content=fallback_content,
+        )
+
     print("")
     print("Next steps:")
-    print("1. Edit .env and set TELEGRAM_BOT_TOKEN + provider API key.")
+    if configured:
+        print("1. Review .env if needed.")
+    else:
+        print("1. Edit .env and set TELEGRAM_BOT_TOKEN + provider API key.")
     print("2. Run: lightclaw run")
     return 0
 
@@ -227,6 +421,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="Overwrite existing .env and workspace templates",
+    )
+    onboard.add_argument(
+        "--reset-env",
+        action="store_true",
+        help="Reset existing .env from template without overwriting workspace templates",
+    )
+    onboard.add_argument(
+        "--configure",
+        action="store_true",
+        help="Run guided provider/token configuration using current .env",
     )
     onboard.set_defaults(func=cmd_onboard)
 

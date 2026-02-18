@@ -219,6 +219,8 @@ That's it. Open Telegram, find your bot, say hello. 🦞
 
 ```bash
 lightclaw onboard   # initialize .env + .lightclaw/workspace in current directory
+lightclaw onboard --reset-env  # reset existing .env from latest template
+lightclaw onboard --configure  # guided provider/model/key setup on current .env
 lightclaw run       # run using the current directory as runtime home
 ```
 
