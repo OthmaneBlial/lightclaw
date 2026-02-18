@@ -4,6 +4,8 @@
 
   <h3>The Featherweight Core of OpenClaw — Your AI Agent in a Tiny Codebase</h3>
 
+  <p><strong>OpenClaw-inspired Python AI agent</strong> for Telegram, long-term memory, and multi-provider LLM support.</p>
+
   <p>
     <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python">
     <img src="https://img.shields.io/badge/Files-5-brightgreen" alt="Files">
@@ -25,6 +27,8 @@
 
 **LightClaw** is the opposite. It's the *distilled essence* of the OpenClaw idea, stripped down to the atomic minimum:
 
+If you are searching for an **OpenClaw alternative**, **OpenClaw in Python**, or a **self-hosted Telegram AI assistant with memory**, this repository is built for that exact use case.
+
 ```
 OpenClaw:     50+ packages │ 20k+ lines  │ TypeScript │ 10+ channels │ 12+ providers │ >1GB RAM
 LightClaw:    5 files       │ ~1300 lines │ Python │ Telegram only │ 5 providers │ <50MB RAM
@@ -35,6 +39,12 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 ```
 📱 Telegram Message → 🧠 Memory Recall → 🤖 LLM → 💡 HTML Format → 💬 Reply
 ```
+
+## Looking for OpenClaw?
+
+- OpenClaw GitHub: https://github.com/openclaw/openclaw
+- OpenClaw docs: https://docs.openclaw.ai/
+- LightClaw focuses on the lightweight Python path: Telegram-first, memory-enabled, and easy to fork.
 
 ## Who Is This For?
 
@@ -312,7 +322,7 @@ The point is: **you shouldn't need permission from a framework to add a feature*
 
 | Project | Language | Purpose | Complexity |
 |---------|----------|---------|------------|
-| **[OpenClaw](https://github.com/OthmaneBlial/openclaw)** | TypeScript | Full-featured AI agent platform | ████████░░ |
+| **[OpenClaw](https://github.com/openclaw/openclaw)** | TypeScript | Full-featured AI agent platform | ████████░░ |
 | **[LightClaw](https://github.com/OthmaneBlial/lightclaw)** | Python | Minimal forkable agent core (5 LLMs) | ██░░░░░░░░ |
 
 > **LightClaw** is where you start. **OpenClaw** is where you scale.
