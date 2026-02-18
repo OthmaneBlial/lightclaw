@@ -32,6 +32,7 @@ from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ChatAction, ParseMode
+from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -324,6 +325,43 @@ class LightClawBot:
             return True
         return str(user_id) in self.config.telegram_allowed_users
 
+    @staticmethod
+    def _session_id_from_update(update: Update | None) -> str:
+        if update and update.effective_chat:
+            return str(update.effective_chat.id)
+        return "unknown"
+
+    @staticmethod
+    def _trim_for_log(text: str, max_chars: int = 8000) -> str:
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars] + "\n...[truncated]"
+
+    @staticmethod
+    def _strip_html_for_log(text: str) -> str:
+        return re.sub(r"<[^>]+>", "", text)
+
+    def _log_user_message(self, session_id: str, text: str):
+        log.info(f"[{session_id}] User: {self._trim_for_log(text)}")
+
+    def _log_bot_message(self, session_id: str, text: str):
+        log.info(f"[{session_id}] Bot: {self._trim_for_log(text)}")
+
+    async def _reply_logged(
+        self,
+        update: Update,
+        text: str,
+        parse_mode: str | None = None,
+    ):
+        """Reply to Telegram and mirror the same content to terminal logs."""
+        session_id = self._session_id_from_update(update)
+        logged_text = self._strip_html_for_log(text) if parse_mode == ParseMode.HTML else text
+        self._log_bot_message(session_id, logged_text)
+
+        if parse_mode:
+            return await update.message.reply_text(text, parse_mode=parse_mode)
+        return await update.message.reply_text(text)
+
     # ── Token Estimation ─────────────────────────────────────
 
     @staticmethod
@@ -426,7 +464,10 @@ class LightClawBot:
         if not self.is_allowed(update.effective_user.id):
             return
 
-        await update.message.reply_text(
+        session_id = self._session_id_from_update(update)
+        self._log_user_message(session_id, "/start")
+        await self._reply_logged(
+            update,
             "🦞 <b>LightClaw</b> is ready!\n\n"
             "I'm your AI assistant with infinite memory. "
             "I remember everything we've talked about, even across sessions.\n\n"
@@ -448,7 +489,10 @@ class LightClawBot:
         if not self.is_allowed(update.effective_user.id):
             return
 
-        await update.message.reply_text(
+        session_id = self._session_id_from_update(update)
+        self._log_user_message(session_id, "/help")
+        await self._reply_logged(
+            update,
             "🦞 <b>LightClaw Commands</b>\n\n"
             "/start - Welcome message\n"
             "/help - This help message\n"
@@ -469,9 +513,11 @@ class LightClawBot:
             return
 
         session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        self._log_user_message(session_id, "/clear")
         self.memory.clear_session(session_id)
         self._session_summaries.pop(session_id, None)
-        await update.message.reply_text(
+        await self._reply_logged(
+            update,
             "🗑️ Conversation cleared. Your memories from this chat have been reset.\n"
             "Note: memories from other chats are preserved."
         )
@@ -484,8 +530,11 @@ class LightClawBot:
         if not self.is_allowed(update.effective_user.id):
             return
 
+        session_id = self._session_id_from_update(update)
+        self._log_user_message(session_id, "/memory")
         stats = self.memory.stats()
-        await update.message.reply_text(
+        await self._reply_logged(
+            update,
             f"🧠 <b>Memory Stats</b>\n\n"
             f"📝 Total interactions: {stats['total_interactions']}\n"
             f"💬 Unique sessions: {stats['unique_sessions']}\n"
@@ -502,13 +551,19 @@ class LightClawBot:
             return
 
         query = " ".join(context.args) if context.args else ""
+        session_id = self._session_id_from_update(update)
+        self._log_user_message(session_id, f"/recall {query}".strip())
         if not query:
-            await update.message.reply_text("Usage: /recall &lt;search query&gt;", parse_mode=ParseMode.HTML)
+            await self._reply_logged(
+                update,
+                "Usage: /recall &lt;search query&gt;",
+                parse_mode=ParseMode.HTML,
+            )
             return
 
         memories = self.memory.recall(query, top_k=5)
         if not memories:
-            await update.message.reply_text("🔍 No matching memories found.")
+            await self._reply_logged(update, "🔍 No matching memories found.")
             return
 
         lines = [f"🔍 <b>Top {len(memories)} memories for:</b> <i>{_escape_html(query)}</i>\n"]
@@ -518,7 +573,7 @@ class LightClawBot:
             preview = _escape_html(m.content[:100])
             lines.append(f"{i}. [{ts}] ({score}) {m.role}: {preview}")
 
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+        await self._reply_logged(update, "\n".join(lines), parse_mode=ParseMode.HTML)
 
     # ── /skills ───────────────────────────────────────────────
 
@@ -582,6 +637,7 @@ class LightClawBot:
 
         session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
         args = context.args or []
+        self._log_user_message(session_id, f"/skills {' '.join(args)}".strip())
         sub = args[0].lower() if args else "list"
 
         if sub in {"list", "ls"} and len(args) == 1:
@@ -589,13 +645,14 @@ class LightClawBot:
 
         if sub == "list":
             text = await asyncio.to_thread(self._render_skills_overview, session_id)
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await self._reply_logged(update, text, parse_mode=ParseMode.HTML)
             return
 
         if sub in {"search", "find"}:
             query = " ".join(args[1:]).strip() if len(args) > 1 else ""
             if not query:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills search &lt;query&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -604,14 +661,16 @@ class LightClawBot:
             try:
                 results = await asyncio.to_thread(self.skills.search_hub, query, 8)
             except SkillError as e:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Search failed: {_escape_html(str(e))}",
                     parse_mode=ParseMode.HTML,
                 )
                 return
 
             if not results:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"No skills found for <code>{_escape_html(query)}</code>.",
                     parse_mode=ParseMode.HTML,
                 )
@@ -630,12 +689,13 @@ class LightClawBot:
                     lines.append(f"  {summary}")
             lines.append("")
             lines.append("Install: <code>/skills add &lt;slug&gt;</code>")
-            await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            await self._reply_logged(update, "\n".join(lines), parse_mode=ParseMode.HTML)
             return
 
         if sub in {"add", "install", "grab"}:
             if len(args) < 2:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills add &lt;slug|owner/slug|url|slug@version&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -643,7 +703,7 @@ class LightClawBot:
 
             target = args[1]
             version = args[2].strip() if len(args) > 2 else None
-            progress = await update.message.reply_text("Installing skill from ClawHub...")
+            progress = await self._reply_logged(update, "Installing skill from ClawHub...")
 
             try:
                 skill, replaced = await asyncio.to_thread(
@@ -651,8 +711,10 @@ class LightClawBot:
                 )
                 await asyncio.to_thread(self.skills.activate, session_id, skill.skill_id)
             except SkillError as e:
+                fail_text = f"⚠️ Install failed: {_escape_html(str(e))}"
+                self._log_bot_message(session_id, self._strip_html_for_log(fail_text))
                 await progress.edit_text(
-                    f"⚠️ Install failed: {_escape_html(str(e))}",
+                    fail_text,
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -671,12 +733,15 @@ class LightClawBot:
                     "List skills: <code>/skills</code>",
                 ]
             )
-            await progress.edit_text("\n".join(lines), parse_mode=ParseMode.HTML)
+            success_text = "\n".join(lines)
+            self._log_bot_message(session_id, self._strip_html_for_log(success_text))
+            await progress.edit_text(success_text, parse_mode=ParseMode.HTML)
             return
 
         if sub in {"use", "enable", "on"}:
             if len(args) < 2:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills use &lt;id&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -685,14 +750,16 @@ class LightClawBot:
             ref = args[1]
             skill = await asyncio.to_thread(self.skills.resolve_skill, ref)
             if not skill:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Skill not found: <code>{_escape_html(ref)}</code>",
                     parse_mode=ParseMode.HTML,
                 )
                 return
 
             await asyncio.to_thread(self.skills.activate, session_id, skill.skill_id)
-            await update.message.reply_text(
+            await self._reply_logged(
+                update,
                 f"✅ Activated <code>{_escape_html(skill.skill_id)}</code> for this chat.",
                 parse_mode=ParseMode.HTML,
             )
@@ -700,7 +767,8 @@ class LightClawBot:
 
         if sub in {"off", "disable", "unuse"}:
             if len(args) < 2:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills off &lt;id&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -709,14 +777,16 @@ class LightClawBot:
             ref = args[1]
             skill = await asyncio.to_thread(self.skills.resolve_skill, ref)
             if not skill:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Skill not found: <code>{_escape_html(ref)}</code>",
                     parse_mode=ParseMode.HTML,
                 )
                 return
 
             await asyncio.to_thread(self.skills.deactivate, session_id, skill.skill_id)
-            await update.message.reply_text(
+            await self._reply_logged(
+                update,
                 f"✅ Deactivated <code>{_escape_html(skill.skill_id)}</code> for this chat.",
                 parse_mode=ParseMode.HTML,
             )
@@ -724,7 +794,8 @@ class LightClawBot:
 
         if sub in {"create", "new"}:
             if len(args) < 2:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills create &lt;name&gt; [description]</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -736,14 +807,16 @@ class LightClawBot:
                 skill = await asyncio.to_thread(self.skills.create_local_skill, name, description)
                 await asyncio.to_thread(self.skills.activate, session_id, skill.skill_id)
             except SkillError as e:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Create failed: {_escape_html(str(e))}",
                     parse_mode=ParseMode.HTML,
                 )
                 return
 
             rel_path = f"skills/local/{skill.directory.name}/SKILL.md"
-            await update.message.reply_text(
+            await self._reply_logged(
+                update,
                 "\n".join(
                     [
                         f"✅ Created local skill <code>{_escape_html(skill.skill_id)}</code>",
@@ -757,7 +830,8 @@ class LightClawBot:
 
         if sub in {"show", "view"}:
             if len(args) < 2:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills show &lt;id&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -766,7 +840,8 @@ class LightClawBot:
             ref = args[1]
             skill = await asyncio.to_thread(self.skills.resolve_skill, ref)
             if not skill:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Skill not found: <code>{_escape_html(ref)}</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -777,7 +852,8 @@ class LightClawBot:
                     skill.skill_path.read_text, "utf-8", "replace"
                 )
             except Exception as e:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Failed to read skill: {_escape_html(str(e))}",
                     parse_mode=ParseMode.HTML,
                 )
@@ -797,12 +873,13 @@ class LightClawBot:
             )
             if truncated:
                 msg += "\n<i>Preview truncated.</i>"
-            await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+            await self._reply_logged(update, msg, parse_mode=ParseMode.HTML)
             return
 
         if sub in {"remove", "delete", "rm", "uninstall"}:
             if len(args) < 2:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     "Usage: <code>/skills remove &lt;id&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
@@ -812,19 +889,22 @@ class LightClawBot:
             try:
                 removed = await asyncio.to_thread(self.skills.remove_skill, ref)
             except SkillError as e:
-                await update.message.reply_text(
+                await self._reply_logged(
+                    update,
                     f"⚠️ Remove failed: {_escape_html(str(e))}",
                     parse_mode=ParseMode.HTML,
                 )
                 return
 
-            await update.message.reply_text(
+            await self._reply_logged(
+                update,
                 f"🗑️ Removed <code>{_escape_html(removed.skill_id)}</code>.",
                 parse_mode=ParseMode.HTML,
             )
             return
 
-        await update.message.reply_text(
+        await self._reply_logged(
+            update,
             "Unknown /skills subcommand.\n\n" + self._skills_usage_text(),
             parse_mode=ParseMode.HTML,
         )
@@ -1249,19 +1329,22 @@ class LightClawBot:
         if not self.is_allowed(update.effective_user.id):
             return
 
+        session_id = str(update.effective_chat.id) if update.effective_chat else "?"
+        self._log_user_message(session_id, "/show")
+
         uptime = int(time.time() - self.start_time)
         hours, remainder = divmod(uptime, 3600)
         minutes, seconds = divmod(remainder, 60)
 
         stats = self.memory.stats()
-        session_id = str(update.effective_chat.id) if update.effective_chat else "?"
         summary_status = "✅" if session_id in self._session_summaries else "—"
         active_skills = self.skills.active_records(session_id)
         installed_skills = self.skills.list_skills()
 
         voice_status = "✅ Groq Whisper" if self.config.groq_api_key else "❌ No GROQ_API_KEY"
 
-        await update.message.reply_text(
+        await self._reply_logged(
+            update,
             f"🦞 <b>LightClaw Status</b>\n\n"
             f"<b>Provider:</b> {_escape_html(self.config.llm_provider)}\n"
             f"<b>Model:</b> {_escape_html(self.config.llm_model)}\n"
@@ -1296,7 +1379,7 @@ class LightClawBot:
             voice_bytes = await voice_file.download_as_bytearray()
         except Exception as e:
             log.error(f"Failed to download voice: {e}")
-            await update.message.reply_text("⚠️ Couldn't download voice message.")
+            await self._reply_logged(update, "⚠️ Couldn't download voice message.")
             return
 
         # Transcribe
@@ -1378,13 +1461,14 @@ class LightClawBot:
         chat_id = update.effective_chat.id if update.effective_chat else 0
         session_id = str(chat_id)
 
-        log.info(f"[{session_id}] User: {user_text[:80]}...")
+        self._log_user_message(session_id, user_text)
 
         # 1. Send typing + placeholder
         placeholder = None
         try:
             if update.effective_chat:
                 await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            self._log_bot_message(session_id, "Thinking... 💭")
             placeholder = await update.message.reply_text("Thinking... 💭")
         except Exception:
             pass
@@ -1439,7 +1523,7 @@ class LightClawBot:
             response = "⚠️ Failed to get a response after retries. Please try again."
 
         elapsed = time.monotonic() - start_time_mono
-        log.info(f"[{session_id}] LLM response ({elapsed:.1f}s): {response[:80]}...")
+        log.info(f"[{session_id}] LLM response ({elapsed:.1f}s)")
 
         # 8. Ingest into memory
         self.memory.ingest("user", user_text, session_id)
@@ -1538,8 +1622,10 @@ class LightClawBot:
         # First chunk the markdown (before HTML conversion which expands entities)
         markdown_chunks = self._chunk_message(markdown_response, max_len=3000)
         chat_id = update.effective_chat.id if update.effective_chat else 0
+        session_id = str(chat_id)
 
         for i, markdown_chunk in enumerate(markdown_chunks):
+            self._log_bot_message(session_id, markdown_chunk)
             # Convert each chunk to HTML separately
             html_chunk = markdown_to_telegram_html(markdown_chunk)
 
@@ -1561,6 +1647,24 @@ class LightClawBot:
         # If we had multiple chunks, log it
         if len(markdown_chunks) > 1:
             log.info(f"Long response split into {len(markdown_chunks)} messages ({len(markdown_response)} chars)")
+
+    # ── Global Telegram Error Handler ────────────────────────
+
+    async def on_error(self, update: object, context: ContextTypes.DEFAULT_TYPE):
+        """Handle Telegram framework errors without noisy unstructured tracebacks."""
+        err = context.error
+        session_id = "unknown"
+        if isinstance(update, Update):
+            session_id = self._session_id_from_update(update)
+
+        if isinstance(err, RetryAfter):
+            log.warning(f"[{session_id}] Telegram rate limit: retry after {err.retry_after}s")
+            return
+        if isinstance(err, (TimedOut, NetworkError)):
+            log.warning(f"[{session_id}] Telegram network issue: {err}")
+            return
+
+        log.exception(f"[{session_id}] Unhandled Telegram error", exc_info=err)
 
     async def _try_send(self, send_fn, text: str) -> bool:
         """Try to send/edit with HTML, fall back to plain text. Returns True on success."""
@@ -1662,6 +1766,7 @@ def main():
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message)
     )
+    app.add_error_handler(bot.on_error)
 
     log.info("🦞 LightClaw is running! Press Ctrl+C to stop.")
 
