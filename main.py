@@ -155,6 +155,8 @@ When creating NEW files (HTML, Python, CSS, Java, etc.):
 - Examples: ```html:landing.html, ```python:script.py, ```css:style.css
 - The file will be saved to the runtime workspace directory
 - DO NOT include explanatory text inside code blocks - only the actual code
+- If the output is large code, ALWAYS save to files and keep chat reply short.
+- Never dump full source code in chat when files are created.
 
 When editing EXISTING files:
 - ALWAYS use this EXACT format:
@@ -168,7 +170,8 @@ new text
 - SEARCH text must match the file exactly.
 - SEARCH text must be unique (only one match).
 - You may include multiple SEARCH/REPLACE hunks in one edit block.
-- Keep file paths relative to the runtime workspace root."""
+- Keep file paths relative to the runtime workspace root.
+- After edits, provide only a short summary (not full diff body)."""
 
 
 # ──────────────────────────────────────────────────────────────
@@ -985,6 +988,42 @@ class LightClawBot:
         return updated, None
 
     @staticmethod
+    def _diff_line_stats(diff_text: str) -> tuple[int, int]:
+        """Return added/deleted line counts from unified diff text."""
+        added = 0
+        deleted = 0
+        for line in diff_text.splitlines():
+            if line.startswith("+++ ") or line.startswith("--- "):
+                continue
+            if line.startswith("+"):
+                added += 1
+            elif line.startswith("-"):
+                deleted += 1
+        return added, deleted
+
+    @staticmethod
+    def _compact_response_for_file_ops(text: str) -> str:
+        """Compress verbose model prose when files were created/edited."""
+        if not text:
+            return ""
+
+        compact = re.sub(r"\[File (saved|updated|edited): [^\]]+\]", "", text)
+        compact = re.sub(r"\[No changes: [^\]]+\]", "", compact)
+        compact = re.sub(r"```[\s\S]*?```", "", compact)
+        compact = re.sub(r"\n{3,}", "\n\n", compact).strip()
+        if not compact:
+            return "Done."
+
+        if len(compact) > 320 or compact.count("\n") > 6:
+            # Keep only the first paragraph for speed/readability in Telegram.
+            first = compact.split("\n\n", 1)[0].strip()
+            if len(first) > 220:
+                first = first[:217].rstrip() + "..."
+            return first or "Done."
+
+        return compact
+
+    @staticmethod
     def _render_file_operations(
         operations: list[FileOperationResult],
         include_diffs: bool = True,
@@ -997,20 +1036,34 @@ class LightClawBot:
         success = [op for op in operations if op.action != "error"]
         failures = [op for op in operations if op.action == "error"]
         lines: list[str] = []
+        total_added = 0
+        total_deleted = 0
 
         if success:
             lines.append(f"✅ Applied {len(success)} file operation(s):")
             for op in success:
+                change_hint = ""
+                if op.diff:
+                    added, deleted = LightClawBot._diff_line_stats(op.diff)
+                    total_added += added
+                    total_deleted += deleted
+                    if include_diffs:
+                        change_hint = f" (+{added}/-{deleted} lines)"
+
                 if op.action in ("created", "auto_created"):
-                    lines.append(f"- Created `{op.path}`")
+                    lines.append(f"- Created `{op.path}`{change_hint}")
                 elif op.action == "updated":
-                    lines.append(f"- Updated `{op.path}`")
+                    lines.append(f"- Updated `{op.path}`{change_hint}")
                 elif op.action == "edited":
-                    lines.append(f"- Edited `{op.path}`")
+                    lines.append(f"- Edited `{op.path}`{change_hint}")
                 elif op.action == "unchanged":
                     lines.append(f"- No changes in `{op.path}`")
                 else:
                     lines.append(f"- `{op.path}`")
+
+            if include_diffs and (total_added or total_deleted):
+                lines.append(f"- Diff summary: +{total_added} / -{total_deleted} lines")
+
             lines.append("")
             lines.append(f"📁 Saved to {workspace_label}")
 
@@ -1021,35 +1074,6 @@ class LightClawBot:
             for op in failures:
                 detail = op.detail or "unknown error"
                 lines.append(f"- `{op.path}`: {detail}")
-
-        if include_diffs:
-            diff_ops = [op for op in success if op.diff]
-            if diff_ops:
-                lines.append("")
-                lines.append("Diff preview (applied):")
-                max_diff_lines = 220
-                used_lines = 0
-                truncated = False
-
-                for op in diff_ops:
-                    remaining = max_diff_lines - used_lines
-                    if remaining <= 0:
-                        truncated = True
-                        break
-
-                    diff_lines = op.diff.splitlines()
-                    shown = diff_lines[:remaining]
-                    if len(diff_lines) > remaining:
-                        truncated = True
-
-                    lines.append(f"`{op.path}`")
-                    lines.append("```diff")
-                    lines.extend(shown)
-                    lines.append("```")
-                    used_lines += len(shown)
-
-                if truncated:
-                    lines.append("_Diff output truncated._")
 
         return "\n".join(lines).strip()
 
@@ -1174,16 +1198,12 @@ class LightClawBot:
 
         cleaned_response = re.sub(edit_pattern, apply_edit_block, cleaned_response)
 
-        explicit_file_blocks_found = False
-
         pattern_named = re.compile(
             r"```([a-zA-Z0-9_+\-]+):([^\n`]+)\s*\n([\s\S]*?)```",
             re.MULTILINE,
         )
 
         def apply_named_file_block(match: re.Match) -> str:
-            nonlocal explicit_file_blocks_found
-            explicit_file_blocks_found = True
             raw_path = match.group(2).strip()
             content = match.group(3).strip()
             return write_workspace_file(raw_path, content)
@@ -1196,34 +1216,48 @@ class LightClawBot:
         )
 
         def apply_file_label_block(match: re.Match) -> str:
-            nonlocal explicit_file_blocks_found
-            explicit_file_blocks_found = True
             raw_path = match.group(1).strip()
             content = match.group(3).strip()
             return write_workspace_file(raw_path, content)
 
         cleaned_response = re.sub(pattern_file_label, apply_file_label_block, cleaned_response)
 
-        if not explicit_file_blocks_found and not edit_blocks_found:
-            file_counter = 1
-            pattern_auto = re.compile(r"```([a-zA-Z0-9_+\-]+)?\s*\n([\s\S]*?)```")
+        file_counter = 1
+        pattern_auto = re.compile(r"```([a-zA-Z0-9_+\-]+)?\s*\n([\s\S]*?)```")
 
-            def apply_auto_block(match: re.Match) -> str:
-                nonlocal file_counter
-                lang = (match.group(1) or "txt").strip().lower()
-                content = match.group(2).strip()
+        def is_code_like(lang: str, content: str) -> bool:
+            if lang and lang not in {"text", "txt", "plain"}:
+                return True
+            hints = ("<!doctype", "<html", "{", "};", "function ", "class ", "import ", "def ")
+            lowered = content.lower()
+            return any(h in lowered for h in hints)
 
-                if len(content) < 50:
-                    return match.group(0)
-                if lang == "diff":
-                    return match.group(0)
+        def apply_auto_block(match: re.Match) -> str:
+            nonlocal file_counter
+            lang = (match.group(1) or "txt").strip().lower()
+            content = match.group(2).strip()
 
-                ext = lang_extensions.get(lang, ".txt")
-                filename = f"output_{int(time.time())}_{file_counter}{ext}"
-                file_counter += 1
-                return write_workspace_file(filename, content, auto_generated=True)
+            # Keep tiny snippets inline; move large/code-like blocks to workspace.
+            if lang == "diff":
+                return match.group(0)
+            if len(content) < 120 and not is_code_like(lang, content):
+                return match.group(0)
 
-            cleaned_response = re.sub(pattern_auto, apply_auto_block, cleaned_response)
+            ext = lang_extensions.get(lang, ".txt")
+            filename = f"output_{int(time.time())}_{file_counter}{ext}"
+            file_counter += 1
+            return write_workspace_file(filename, content, auto_generated=True)
+
+        cleaned_response = re.sub(pattern_auto, apply_auto_block, cleaned_response)
+
+        # Never return huge fenced code in chat: remove any remaining large code blocks.
+        def strip_large_leftover_code(match: re.Match) -> str:
+            content = match.group(2).strip()
+            if len(content) >= 120:
+                return "[Large code omitted in chat]"
+            return match.group(0)
+
+        cleaned_response = re.sub(pattern_auto, strip_large_leftover_code, cleaned_response)
 
         return operations, cleaned_response.strip()
 
@@ -1550,9 +1584,17 @@ class LightClawBot:
                         ).strip()
                 file_ops.extend(retry_ops)
 
-        # 10. Build final message (text + file operation summary/diff)
+        # 10. Build final message (short text + file operation summary)
         workspace_label = self._workspace_display_path()
-        response_parts = [cleaned_response] if cleaned_response else []
+        visible_response = cleaned_response
+        if file_ops:
+            success_count = sum(1 for op in file_ops if op.action != "error")
+            if success_count > 0:
+                visible_response = "Done. Saved requested changes to files."
+            else:
+                visible_response = self._compact_response_for_file_ops(cleaned_response)
+
+        response_parts = [visible_response] if visible_response else []
         if file_ops:
             response_parts.append(
                 self._render_file_operations(
@@ -1566,7 +1608,8 @@ class LightClawBot:
             final_markdown_response = "Done."
 
         # Ingest a compact version into memory (without long diff blocks)
-        memory_parts = [cleaned_response] if cleaned_response else []
+        memory_text = visible_response if file_ops else cleaned_response
+        memory_parts = [memory_text] if memory_text else []
         if file_ops:
             memory_parts.append(
                 self._render_file_operations(
