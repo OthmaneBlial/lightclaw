@@ -85,6 +85,8 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 🎭 **Customizable Personality** — Edit `.lightclaw/workspace/SOUL.md`, `IDENTITY.md`, and `USER.md` to shape your bot's character, identity, and personal context.
 
+🧩 **Skill System (ClawHub + Local)** — Install skills from `clawhub.ai`, activate them per chat with `/skills`, and create your own custom skills locally.
+
 🎙️ **Voice Messages** — Automatic voice transcription via Groq Whisper (optional). Send a voice note and the bot transcribes + responds.
 
 📸 **Photo & Document Support** — Send images and files — the bot acknowledges them and processes captions through the agent loop.
@@ -122,7 +124,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 │  │     ├─ 5. Edit placeholder          5 providers unified       │
 │  │     └─ 6. Summarize if needed                                 │
 │  │                                                               │
-│  └── cmd_start/help/clear/memory/recall/show                     │
+│  └── cmd_start/help/clear/memory/recall/skills/show              │
 │                                                                  │
 │  config.py ◄── .env file                                          │
 └──────────────────────────────────────────────────────────────────┘
@@ -175,6 +177,10 @@ TELEGRAM_BOT_TOKEN=123456:ABC...
 
 # Optional: restrict to your user ID (get it from @userinfobot)
 TELEGRAM_ALLOWED_USERS=123456789
+
+# Skills (default registry)
+SKILLS_HUB_BASE_URL=https://clawhub.ai
+SKILLS_STATE_PATH=.lightclaw/skills_state.json
 ```
 
 **3. Customize (Optional)**
@@ -227,6 +233,25 @@ python scripts/provider_smoke_test.py
 
 It sends a tiny prompt to each provider with a configured API key and reports `OK`/`FAIL`/`SKIP`.
 
+## Skills (ClawHub + Local)
+
+Install and use skills directly from Telegram:
+
+```text
+/skills search sonos
+/skills add sonoscli
+/skills use sonoscli
+/skills off sonoscli
+/skills create my_custom_skill "My private workflow"
+/skills show sonoscli
+```
+
+Runtime skill paths:
+- Hub skills: `.lightclaw/workspace/skills/hub/<slug>/SKILL.md`
+- Local skills: `.lightclaw/workspace/skills/local/<name>/SKILL.md`
+
+Active skills are persisted per chat in `.lightclaw/skills_state.json`.
+
 ## Bot Commands
 
 | Command | Description |
@@ -235,6 +260,7 @@ It sends a tiny prompt to each provider with a configured API key and reports `O
 | `/help` | Show available commands |
 | `/memory` | Show memory statistics (total interactions, sessions, vocabulary) |
 | `/recall <query>` | Search past conversations by semantic similarity |
+| `/skills` | List/search/install/activate/create/remove skills |
 | `/clear` | Reset conversation history for the current chat |
 | `/show` | Show current model, provider, uptime, memory stats, voice status |
 
@@ -284,6 +310,7 @@ lightclaw/
 ├── lightclaw         # CLI entrypoint: onboard + run
 ├── setup.sh          # One-command interactive setup wizard
 ├── main.py           # Telegram bot + agent loop + HTML converter
+├── skills.py         # Skills manager (ClawHub + local + per-chat activation)
 ├── memory.py         # SQLite infinite memory + RAG
 ├── providers.py      # Unified LLM client for 5 providers
 ├── config.py         # .env configuration
@@ -293,6 +320,7 @@ lightclaw/
 │   └── personality/  # Onboarding templates (IDENTITY.md, SOUL.md, USER.md)
 ├── .lightclaw/       # Runtime data (created by `lightclaw onboard`)
 │   ├── workspace/    # Active personality files + generated artifacts
+│   │   └── skills/   # Installed hub skills + local custom skills
 │   └── lightclaw.db  # Runtime memory database
 ├── requirements.txt  # 6 dependencies
 ├── .env.example      # Configuration template
