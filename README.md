@@ -222,6 +222,7 @@ lightclaw onboard   # initialize .env + .lightclaw/workspace in current director
 lightclaw onboard --reset-env  # reset existing .env from latest template
 lightclaw onboard --configure  # guided provider/model/key setup on current .env
 lightclaw run       # run using the current directory as runtime home
+lightclaw run --provider deepseek --model deepseek-chat  # one-run provider/model override
 ```
 
 If `lightclaw` is not on your `PATH`, run `./lightclaw onboard` and `./lightclaw run`.
@@ -286,6 +287,18 @@ How it behaves:
 - `use` enables per-chat delegation mode (normal text messages are routed to that local agent).
 - `run` executes one explicit delegated task.
 - After each run, LightClaw reports a compact workspace delta (created/updated/deleted files).
+
+## Run-Time Provider Selection
+
+When you run `lightclaw run` in a terminal, LightClaw can prompt you to choose provider + model from configured keys in `.env` (numbered choices only).
+
+For explicit non-interactive startup, use:
+
+```bash
+lightclaw run --provider deepseek --model deepseek-chat
+```
+
+If you want a custom model ID outside the preset menu, set `LLM_MODEL` directly in `.env`.
 
 ## Workspace Code Generation & Editing
 

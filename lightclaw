@@ -25,12 +25,100 @@ RUNTIME_DIRNAME = ".lightclaw"
 RUNTIME_WORKSPACE = f"{RUNTIME_DIRNAME}/workspace"
 RUNTIME_DB = f"{RUNTIME_DIRNAME}/lightclaw.db"
 TEMPLATE_FILES = ("IDENTITY.md", "SOUL.md", "USER.md")
+RUN_PROVIDER_KEY_ENV = {
+    "openai": "OPENAI_API_KEY",
+    "xai": "XAI_API_KEY",
+    "claude": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "zai": "ZAI_API_KEY",
+}
+RUN_PROVIDER_MODELS = {
+    "openai": ["gpt-5.2", "gpt-5.2-mini"],
+    "xai": ["grok-4-latest", "grok-4-fast-non-reasoning"],
+    "claude": ["claude-opus-4-5", "claude-sonnet-4-5"],
+    "gemini": ["gemini-3-flash-preview", "gemini-2.5-flash"],
+    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "zai": ["glm-5", "glm-4.7"],
+}
 
 
 def _resolve_home(path_arg: str | None) -> Path:
     if path_arg:
         return Path(path_arg).expanduser().resolve()
     return Path.cwd().resolve()
+
+
+def _configured_run_providers() -> list[str]:
+    configured: list[str] = []
+    for provider, env_key in RUN_PROVIDER_KEY_ENV.items():
+        if os.getenv(env_key, "").strip():
+            configured.append(provider)
+    return configured
+
+
+def _pick_number(prompt: str, max_value: int, default_value: int) -> int:
+    raw = input(prompt).strip()
+    if not raw:
+        return default_value
+    try:
+        value = int(raw)
+    except ValueError:
+        return default_value
+    if 1 <= value <= max_value:
+        return value
+    return default_value
+
+
+def _prompt_run_provider_model(current_provider: str, current_model: str) -> tuple[str, str]:
+    if not sys.stdin.isatty():
+        return "", ""
+
+    available = _configured_run_providers()
+    if not available:
+        return "", ""
+
+    print("")
+    if len(available) == 1:
+        selected_provider = available[0]
+        print(f"Provider for this run: {selected_provider}")
+    else:
+        print("Choose provider for this run:")
+        for idx, provider in enumerate(available, start=1):
+            marker = " (current)" if provider == current_provider else ""
+            default_model = RUN_PROVIDER_MODELS.get(provider, ["latest"])[0]
+            print(f"  {idx}) {provider} ({default_model}){marker}")
+
+        default_provider_idx = (
+            available.index(current_provider) + 1 if current_provider in available else 1
+        )
+        provider_idx = _pick_number(
+            f"Provider [{default_provider_idx}]: ",
+            max_value=len(available),
+            default_value=default_provider_idx,
+        )
+        selected_provider = available[provider_idx - 1]
+
+    models = RUN_PROVIDER_MODELS.get(selected_provider, ["latest"])
+    print(f"\nChoose model for {selected_provider}:")
+    for idx, model in enumerate(models, start=1):
+        marker = " (current)" if selected_provider == current_provider and model == current_model else ""
+        print(f"  {idx}) {model}{marker}")
+
+    default_model_idx = 1
+    if selected_provider == current_provider and current_model in models:
+        default_model_idx = models.index(current_model) + 1
+
+    model_idx = _pick_number(
+        f"Model [{default_model_idx}]: ",
+        max_value=len(models),
+        default_value=default_model_idx,
+    )
+    selected_model = models[model_idx - 1]
+
+    print(f"\nUsing {selected_provider} ({selected_model}) for this run.")
+    print("Tip: for custom model IDs, set LLM_MODEL directly in .env.")
+    return selected_provider, selected_model
 
 
 def _patched_env_example() -> str:
@@ -395,6 +483,43 @@ def cmd_run(args: argparse.Namespace) -> int:
     if env_path.exists():
         load_dotenv(env_path, override=False)
 
+    current_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
+    current_model = os.getenv("LLM_MODEL", "").strip()
+    provider_override = (args.provider or "").strip().lower()
+    model_override = (args.model or "").strip()
+
+    if provider_override and provider_override not in RUN_PROVIDER_KEY_ENV:
+        supported = ", ".join(RUN_PROVIDER_KEY_ENV.keys())
+        print(f"Unsupported provider '{provider_override}'. Supported: {supported}")
+        return 2
+
+    if provider_override:
+        required_env_key = RUN_PROVIDER_KEY_ENV[provider_override]
+        if not os.getenv(required_env_key, "").strip():
+            print(
+                f"Provider '{provider_override}' requires {required_env_key} in .env. "
+                "Set it first, then retry."
+            )
+            return 2
+
+        os.environ["LLM_PROVIDER"] = provider_override
+        if model_override:
+            os.environ["LLM_MODEL"] = model_override
+        elif provider_override != current_provider or not current_model:
+            os.environ["LLM_MODEL"] = RUN_PROVIDER_MODELS.get(provider_override, ["latest"])[0]
+
+    elif model_override:
+        os.environ["LLM_MODEL"] = model_override
+
+    else:
+        selected_provider, selected_model = _prompt_run_provider_model(
+            current_provider=current_provider,
+            current_model=current_model,
+        )
+        if selected_provider:
+            os.environ["LLM_PROVIDER"] = selected_provider
+            os.environ["LLM_MODEL"] = selected_model
+
     os.environ["LIGHTCLAW_HOME"] = str(home)
     workspace_env = os.getenv("WORKSPACE_PATH", "").strip()
     memory_env = os.getenv("MEMORY_DB_PATH", "").strip()
@@ -434,8 +559,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     onboard.set_defaults(func=cmd_onboard)
 
-    run = sub.add_parser("run", help="Run LightClaw using current directory as runtime home")
+    run = sub.add_parser(
+        "run",
+        help="Run LightClaw using current directory as runtime home",
+        description=(
+            "Run LightClaw.\n"
+            "If --provider/--model are omitted and a TTY is attached, "
+            "you can choose provider/model interactively from configured API keys."
+        ),
+    )
     run.add_argument("--home", help="Runtime home directory (default: current directory)")
+    run.add_argument(
+        "--provider",
+        help="Override provider for this run (openai|xai|claude|gemini|deepseek|zai)",
+    )
+    run.add_argument(
+        "--model",
+        help="Override model for this run (used with current/overridden provider)",
+    )
     run.set_defaults(func=cmd_run)
 
     return parser
