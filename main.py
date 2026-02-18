@@ -35,7 +35,7 @@ from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ChatAction, ParseMode
-from telegram.error import NetworkError, RetryAfter, TimedOut
+from telegram.error import Conflict, NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -337,6 +337,8 @@ class LightClawBot:
         self._agent_mode_by_session: dict[str, str] = {}
         # Backoff window to avoid repeated background LLM calls during provider failures.
         self._llm_backoff_until: float = 0.0
+        # Throttle repeated Telegram polling conflict warnings.
+        self._last_telegram_conflict_log_at: float = 0.0
 
     def is_allowed(self, user_id: int) -> bool:
         """Check if this user is in the allowlist (empty = allow all)."""
@@ -3409,6 +3411,16 @@ class LightClawBot:
         if isinstance(update, Update):
             session_id = self._session_id_from_update(update)
 
+        if isinstance(err, Conflict):
+            now = time.time()
+            # Polling conflicts repeat every few seconds; avoid log spam.
+            if now - self._last_telegram_conflict_log_at >= 30:
+                self._last_telegram_conflict_log_at = now
+                log.warning(
+                    f"[{session_id}] Telegram polling conflict: another bot instance is using getUpdates. "
+                    "Keep only one `lightclaw run` active for this bot token."
+                )
+            return
         if isinstance(err, RetryAfter):
             log.warning(f"[{session_id}] Telegram rate limit: retry after {err.retry_after}s")
             return

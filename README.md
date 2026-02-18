@@ -223,7 +223,10 @@ lightclaw onboard --reset-env  # reset existing .env from latest template
 lightclaw onboard --configure  # guided provider/model/key setup on current .env
 lightclaw run       # run using the current directory as runtime home
 lightclaw run --provider deepseek --model deepseek-chat  # one-run provider/model override
+lightclaw chat      # local terminal chat mode (same memory/workspace/provider stack)
 ```
+
+`lightclaw chat` supports the same core slash commands as Telegram (`/help`, `/skills`, `/agent`, `/show`, etc.).
 
 If `lightclaw` is not on your `PATH`, run `./lightclaw onboard` and `./lightclaw run`.
 

@@ -5,14 +5,17 @@ LightClaw CLI
 Commands:
 - lightclaw onboard : Initialize runtime files in current directory.
 - lightclaw run     : Run the bot using current directory as runtime home.
+- lightclaw chat    : Chat in terminal using the same brain as Telegram.
 """
 
 from __future__ import annotations
 
+import asyncio
 import argparse
 import getpass
 import os
 import re
+import shlex
 import shutil
 import sys
 from pathlib import Path
@@ -469,8 +472,13 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    home = _resolve_home(args.home)
+def _prepare_runtime_environment(
+    home: Path,
+    provider_override_raw: str,
+    model_override_raw: str,
+    prompt_selection: bool = True,
+) -> int:
+    """Prepare runtime directories, load env, and apply provider/model selection."""
     runtime_dir = home / RUNTIME_DIRNAME
     workspace_dir = runtime_dir / "workspace"
 
@@ -485,8 +493,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     current_provider = os.getenv("LLM_PROVIDER", "").strip().lower()
     current_model = os.getenv("LLM_MODEL", "").strip()
-    provider_override = (args.provider or "").strip().lower()
-    model_override = (args.model or "").strip()
+    provider_override = (provider_override_raw or "").strip().lower()
+    model_override = (model_override_raw or "").strip()
 
     if provider_override and provider_override not in RUN_PROVIDER_KEY_ENV:
         supported = ", ".join(RUN_PROVIDER_KEY_ENV.keys())
@@ -511,7 +519,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     elif model_override:
         os.environ["LLM_MODEL"] = model_override
 
-    else:
+    elif prompt_selection:
         selected_provider, selected_model = _prompt_run_provider_model(
             current_provider=current_provider,
             current_model=current_model,
@@ -529,11 +537,273 @@ def cmd_run(args: argparse.Namespace) -> int:
         os.environ["MEMORY_DB_PATH"] = RUNTIME_DB
 
     os.chdir(home)
+    return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    home = _resolve_home(args.home)
+    prep_code = _prepare_runtime_environment(
+        home,
+        args.provider or "",
+        args.model or "",
+        prompt_selection=True,
+    )
+    if prep_code:
+        return prep_code
 
     from main import main as bot_main
 
     bot_main()
     return 0
+
+
+def cmd_chat(args: argparse.Namespace) -> int:
+    home = _resolve_home(args.home)
+    prep_code = _prepare_runtime_environment(
+        home,
+        args.provider or "",
+        args.model or "",
+        prompt_selection=False,
+    )
+    if prep_code:
+        return prep_code
+
+    from config import load_config
+    from main import LightClawBot, build_system_prompt, resolve_runtime_path
+
+    config = load_config()
+    config.workspace_path = str(resolve_runtime_path(config.workspace_path))
+    config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
+    config.skills_state_path = str(resolve_runtime_path(config.skills_state_path))
+
+    workspace = Path(config.workspace_path)
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    if not config.llm_provider:
+        print("No provider configured. Set LLM_PROVIDER + API key in .env.")
+        return 2
+
+    bot = LightClawBot(config)
+    session_id = (args.session or "cli").strip() or "cli"
+    cli_user_id = (
+        (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
+    )
+
+    print("")
+    print(f"🦞 LightClaw terminal chat")
+    print(f"Provider: {config.llm_provider} ({config.llm_model})")
+    print(f"Session: {session_id}")
+    print("Type /help for commands, /exit to quit.")
+    print("")
+
+    async def _chat_once(user_text: str) -> str:
+        if bot._llm_backoff_active():
+            remaining = bot._llm_backoff_remaining_sec()
+            wait_hint = f"{remaining}s" if remaining > 0 else "a short while"
+            bot.memory.ingest("user", user_text, session_id)
+            return (
+                f"⚠️ {config.llm_provider} is temporarily unavailable "
+                "(quota/billing or rate limit).\n"
+                f"Please retry in about {wait_hint}, or top up your provider balance."
+            )
+
+        memories = bot.memory.recall(user_text, top_k=config.memory_top_k)
+        memories = bot._filter_recalled_memories(memories)
+        memories_text = bot.memory.format_memories_for_prompt(memories)
+
+        recent = bot.memory.get_recent(session_id, limit=20)
+        recent = bot._clean_orphan_messages(recent)
+        recent = bot._filter_recent_context(recent)
+
+        summary = bot._get_session_summary(session_id)
+        skills_text = await asyncio.to_thread(bot.skills.prompt_context, session_id)
+
+        system_prompt = build_system_prompt(
+            config, bot.personality, memories_text, summary, skills_text
+        )
+        messages = list(recent)
+        messages.append({"role": "user", "content": user_text})
+
+        response = None
+        max_retries = 2
+        for retry in range(max_retries + 1):
+            try:
+                response = await bot.llm.chat(messages, system_prompt)
+                break
+            except Exception as e:
+                if retry < max_retries and bot._is_context_error(str(e)) and len(messages) > 4:
+                    mid = len(messages) // 2
+                    messages = (
+                        messages[:1]
+                        + [{"role": "system", "content": "[Emergency context compression]"}]
+                        + messages[mid:]
+                    )
+                    continue
+                response = f"⚠️ Error communicating with {config.llm_provider}: {e}"
+                break
+
+        if response is None:
+            response = "⚠️ Failed to get a response after retries. Please try again."
+
+        provider_error_response = bot._is_provider_error_text(response)
+        if provider_error_response:
+            bot._set_llm_backoff()
+        else:
+            bot._clear_llm_backoff()
+
+        bot.memory.ingest("user", user_text, session_id)
+
+        file_ops, cleaned_response = await bot._process_file_blocks(response)
+        repair_ops = await bot._repair_incomplete_html(session_id, user_text, file_ops)
+        if repair_ops:
+            repaired_paths = {op.path for op in repair_ops if op.action != "error"}
+            if repaired_paths:
+                file_ops = [op for op in file_ops if op.path not in repaired_paths]
+            file_ops.extend(repair_ops)
+
+        success_ops = [op for op in file_ops if op.action != "error" and op.path]
+        if success_ops:
+            bot._last_file_by_session[session_id] = success_ops[-1].path
+
+        workspace_label = bot._workspace_display_path()
+        visible_response = cleaned_response
+        if file_ops:
+            success_count = sum(1 for op in file_ops if op.action != "error")
+            if success_count > 0:
+                visible_response = "Done. Saved requested changes to files."
+            else:
+                visible_response = bot._compact_response_for_file_ops(cleaned_response)
+
+        response_parts = [visible_response] if visible_response else []
+        if file_ops:
+            response_parts.append(
+                bot._render_file_operations(
+                    file_ops,
+                    include_diffs=False,
+                    workspace_label=workspace_label,
+                )
+            )
+        final_text = "\n\n".join(part for part in response_parts if part).strip() or "Done."
+
+        memory_text = visible_response if file_ops else cleaned_response
+        memory_parts = [memory_text] if memory_text else []
+        if file_ops:
+            memory_parts.append(
+                bot._render_file_operations(
+                    file_ops,
+                    include_diffs=False,
+                    workspace_label=workspace_label,
+                )
+            )
+        memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
+        bot.memory.ingest("assistant", memory_response, session_id)
+
+        if not provider_error_response:
+            await bot.maybe_summarize(session_id)
+        return final_text
+
+    def _render_terminal_reply(text: str, parse_mode: str | None = None):
+        rendered = bot._strip_html_for_log(text) if parse_mode else text
+        print(f"bot> {rendered}\n")
+
+    class _CliSentMessage:
+        def __init__(self):
+            self.text = ""
+
+        async def edit_text(self, text: str, parse_mode: str | None = None):
+            _render_terminal_reply(text, parse_mode=parse_mode)
+            self.text = text
+            return self
+
+    class _CliIncomingMessage:
+        def __init__(self, text: str):
+            self.text = text
+
+        async def reply_text(self, text: str, parse_mode: str | None = None):
+            _render_terminal_reply(text, parse_mode=parse_mode)
+            sent = _CliSentMessage()
+            sent.text = text
+            return sent
+
+    class _CliBotAPI:
+        async def send_chat_action(self, chat_id, action):
+            return None
+
+    class _CliContext:
+        def __init__(self, args_list: list[str]):
+            self.args = args_list
+            self.bot = _CliBotAPI()
+
+    async def _run_terminal_command(raw_line: str) -> bool:
+        if raw_line.lower() in {"/exit", "/quit"}:
+            print("bye.")
+            return True
+
+        try:
+            parts = shlex.split(raw_line[1:])
+        except ValueError as e:
+            print(f"bot> ⚠️ Invalid command syntax: {e}\n")
+            return False
+
+        if not parts:
+            return False
+
+        command = parts[0].lower()
+        args_list = parts[1:]
+
+        handler_map = {
+            "start": bot.cmd_start,
+            "help": bot.cmd_help,
+            "clear": bot.cmd_clear,
+            "wipe_memory": bot.cmd_wipe_memory,
+            "wipe": bot.cmd_wipe_memory,
+            "memory": bot.cmd_memory,
+            "recall": bot.cmd_recall,
+            "skills": bot.cmd_skills,
+            "agent": bot.cmd_agent,
+            "show": bot.cmd_show,
+        }
+        handler = handler_map.get(command)
+        if not handler:
+            print("bot> Unknown command. Type /help for available commands.\n")
+            return False
+
+        class _CliUpdate:
+            def __init__(self, line_text: str):
+                self.effective_user = type("U", (), {"id": cli_user_id})()
+                self.effective_chat = type("C", (), {"id": session_id})()
+                self.message = _CliIncomingMessage(line_text)
+
+        update = _CliUpdate(raw_line)
+        context = _CliContext(args_list)
+        await handler(update, context)
+        return False
+
+    while True:
+        try:
+            user_text = input("you> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nbye.")
+            return 0
+
+        if not user_text:
+            continue
+
+        if user_text.startswith("/"):
+            try:
+                should_exit = asyncio.run(_run_terminal_command(user_text))
+            except Exception as e:
+                print(f"bot> ⚠️ Command failed: {e}\n")
+                should_exit = False
+            if should_exit:
+                return 0
+            continue
+
+        try:
+            reply = asyncio.run(_chat_once(user_text))
+        except Exception as e:
+            reply = f"⚠️ Internal error: {e}"
+        print(f"bot> {reply}\n")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -578,6 +848,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override model for this run (used with current/overridden provider)",
     )
     run.set_defaults(func=cmd_run)
+
+    chat = sub.add_parser(
+        "chat",
+        help="Run a local terminal chat session",
+        description=(
+            "Run terminal chat with LightClaw.\n"
+            "Uses the same memory DB/workspace/provider stack as Telegram."
+        ),
+    )
+    chat.add_argument("--home", help="Runtime home directory (default: current directory)")
+    chat.add_argument(
+        "--provider",
+        help="Override provider for this session (openai|xai|claude|gemini|deepseek|zai)",
+    )
+    chat.add_argument(
+        "--model",
+        help="Override model for this session (used with current/overridden provider)",
+    )
+    chat.add_argument(
+        "--session",
+        default="cli",
+        help="Session id for terminal memory (default: cli)",
+    )
+    chat.set_defaults(func=cmd_chat)
 
     return parser
 
