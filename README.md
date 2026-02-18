@@ -9,8 +9,8 @@
   <p>
     <img src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white" alt="Python">
     <img src="https://img.shields.io/badge/Core-lean-brightgreen" alt="Core">
-    <img src="https://img.shields.io/badge/Repo-~5k_lines-blue" alt="Lines">
-    <img src="https://img.shields.io/badge/LLM_Providers-5-purple" alt="Providers">
+    <img src="https://img.shields.io/badge/Repo-lightweight_core-blue" alt="Repo">
+    <img src="https://img.shields.io/badge/LLM_Providers-6-purple" alt="Providers">
     <img src="https://img.shields.io/badge/RAM-<50MB-orange" alt="RAM">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
   </p>
@@ -30,9 +30,11 @@
 If you are searching for an **OpenClaw alternative**, **OpenClaw in Python**, or a **self-hosted Telegram AI assistant with memory**, this repository is built for that exact use case.
 
 ```
-OpenClaw:     50+ packages │ 20k+ lines  │ TypeScript │ 10+ channels │ 12+ providers │ >1GB RAM
-LightClaw:    5 files       │ ~1300 lines │ Python │ Telegram only │ 6 providers │ <50MB RAM
+OpenClaw:     Large multi-app monorepo │ TypeScript-first │ many channels + platform apps
+LightClaw:    Focused Python core       │ Telegram-first   │ 6 providers │ lightweight runtime
 ```
+
+As of February 2026, the official OpenClaw repository shows 12k+ commits and 200k+ GitHub stars.
 
 Think of LightClaw as **the starter engine** — the part of a rocket that ignites first. It contains the core DNA of OpenClaw (LLM routing, memory, conversational agent) but removes everything else. No message bus. No plugin registry. No tool orchestration. Just a direct pipeline:
 
