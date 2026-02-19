@@ -842,27 +842,70 @@ class BotCommandsMixin:
                 file_ops = [op for op in file_ops if op.path not in repaired_paths]
             file_ops.extend(repair_ops)
 
-        workspace_label = self._workspace_display_path()
-        visible_response = cleaned_response
-        if file_ops:
-            success_count = sum(1 for op in file_ops if op.action != "error")
-            if success_count > 0:
-                visible_response = "Done. Saved requested changes to files."
-            else:
-                visible_response = self._compact_response_for_file_ops(cleaned_response)
-
-        response_parts = [visible_response] if visible_response else []
-        if file_ops:
-            response_parts.append(
-                self._render_file_operations(
-                    file_ops,
-                    include_diffs=False,
-                    workspace_label=workspace_label,
-                )
+        success_ops = [op for op in file_ops if op.action != "error" and op.path]
+        if not success_ops:
+            force_prompt = (
+                "Heartbeat follow-up.\n"
+                "If HEARTBEAT.md requires creating or editing files, return ONLY valid file blocks now.\n"
+                "Allowed formats:\n"
+                "1) ```lang:path/to/file.ext ...```\n"
+                "2) ```edit:path/to/file.ext ...```\n"
+                "Do not include prose outside blocks.\n"
+                "If no file updates are needed, respond exactly with: NO_UPDATE\n\n"
+                "HEARTBEAT.md:\n"
+                f"{heartbeat_body}\n"
             )
-        final_response = "\n\n".join(part for part in response_parts if part).strip() or "Done."
-        if self._is_large_code_leak(final_response):
-            final_response = "Heartbeat ran. Large code output was suppressed."
+            try:
+                forced_response = await self.llm.chat(
+                    [{"role": "user", "content": force_prompt}],
+                    system_prompt=system_prompt,
+                )
+            except Exception as e:
+                log.error(f"[{session_id}] Heartbeat file-op follow-up failed: {e}")
+                forced_response = ""
+
+            if forced_response and not self._is_provider_error_text(forced_response):
+                if forced_response.strip().upper() == "NO_UPDATE":
+                    cleaned_response = "No file changes this run."
+                else:
+                    forced_ops, forced_cleaned = await self._process_file_blocks(forced_response)
+                    forced_repair_ops = await self._repair_incomplete_html(
+                        session_id, force_prompt, forced_ops
+                    )
+                    if forced_repair_ops:
+                        repaired_paths = {
+                            op.path for op in forced_repair_ops if op.action != "error"
+                        }
+                        if repaired_paths:
+                            forced_ops = [
+                                op for op in forced_ops if op.path not in repaired_paths
+                            ]
+                        forced_ops.extend(forced_repair_ops)
+
+                    forced_success = [
+                        op for op in forced_ops if op.action != "error" and op.path
+                    ]
+                    if forced_success:
+                        file_ops = forced_ops
+                        cleaned_response = forced_cleaned
+                        success_ops = forced_success
+
+        workspace_label = self._workspace_display_path()
+        if success_ops:
+            paths = [op.path for op in success_ops if op.path]
+            preview = ", ".join(f"`{path}`" for path in paths[:3])
+            if len(paths) > 3:
+                preview += f", +{len(paths) - 3} more"
+            final_response = (
+                f"Created {len(paths)} file(s) in `{workspace_label}`.\n"
+                f"Files: {preview}"
+            )
+        else:
+            compact = self._compact_response_for_file_ops(cleaned_response)
+            compact = compact.strip() or "No file changes this run."
+            if len(compact) > 240:
+                compact = compact[:237].rstrip() + "..."
+            final_response = compact
 
         final_markdown = f"💓 Heartbeat update\n\n{final_response}"
         chunks = self._chunk_message(final_markdown, max_len=3000)
@@ -880,18 +923,7 @@ class BotCommandsMixin:
             return
 
         self._heartbeat_last_run_at = time.time()
-        memory_text = visible_response if file_ops else cleaned_response
-        memory_parts = [memory_text] if memory_text else []
-        if file_ops:
-            memory_parts.append(
-                self._render_file_operations(
-                    file_ops,
-                    include_diffs=False,
-                    workspace_label=workspace_label,
-                )
-            )
-        memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
-        self.memory.ingest("assistant", f"[heartbeat]\n\n{memory_response}", session_id)
+        self.memory.ingest("assistant", f"[heartbeat]\n\n{final_response}", session_id)
 
     async def cmd_heartbeat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
