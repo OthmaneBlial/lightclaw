@@ -21,6 +21,10 @@
 
 ---
 
+<div align="center">
+  <img src="logo.png" alt="LightClaw logo" width="420">
+</div>
+
 ## Why LightClaw Exists
 
 **OpenClaw** is a powerful, full-featured AI agent platform — but it's also *big*. Dozens of packages, multiple channels, tool registries, message buses, plugin systems. It's built for scale and enterprise use.
