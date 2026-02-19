@@ -175,7 +175,13 @@ class SkillManager:
         hub_base_url: str = DEFAULT_HUB_BASE_URL,
     ):
         self.workspace = Path(workspace_path).resolve()
-        self.skills_root = self.workspace / "skills"
+        self.runtime_root = self.workspace.parent if self.workspace.name == "workspace" else self.workspace
+        self.skills_root = self.runtime_root / "skills"
+        self.legacy_skills_root = (
+            self.workspace / "skills"
+            if (self.workspace / "skills").resolve() != self.skills_root
+            else None
+        )
         self.hub_dir = self.skills_root / "hub"
         self.local_dir = self.skills_root / "local"
         self.state_path = Path(skills_state_path).resolve()
@@ -192,6 +198,18 @@ class SkillManager:
         self._ensure_dirs()
 
     def _ensure_dirs(self):
+        # Backward compatibility: migrate legacy workspace/skills into runtime-root skills.
+        if self.legacy_skills_root and self.legacy_skills_root.exists():
+            for src in self.legacy_skills_root.rglob("*"):
+                if not src.is_file():
+                    continue
+                rel = src.relative_to(self.legacy_skills_root)
+                dst = self.skills_root / rel
+                if dst.exists():
+                    continue
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
+
         self.hub_dir.mkdir(parents=True, exist_ok=True)
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)

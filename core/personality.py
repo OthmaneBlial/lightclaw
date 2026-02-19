@@ -11,6 +11,24 @@ from config import Config
 from .constants import FALLBACK_IDENTITY, FILE_IO_RULES, PROJECT_ROOT
 
 
+def runtime_root_from_workspace(workspace_path: str) -> Path:
+    """Derive runtime root from workspace path."""
+    workspace = Path(workspace_path).resolve()
+    if workspace.name == "workspace":
+        return workspace.parent
+    return workspace
+
+
+def personality_search_paths(workspace_path: str) -> list[Path]:
+    """Return preferred locations for personality files (new path first, legacy fallback)."""
+    workspace = Path(workspace_path).resolve()
+    runtime_root = runtime_root_from_workspace(workspace_path)
+    paths = [runtime_root]
+    if workspace != runtime_root:
+        paths.append(workspace)
+    return paths
+
+
 def resolve_runtime_path(path_value: str) -> Path:
     """Resolve configured paths relative to LIGHTCLAW_HOME or project root."""
     runtime_home = os.getenv("LIGHTCLAW_HOME", "").strip()
@@ -22,22 +40,26 @@ def resolve_runtime_path(path_value: str) -> Path:
 
 
 def load_personality(workspace_path: str) -> str:
-    """Load personality from runtime workspace files (SOUL.md, IDENTITY.md, USER.md).
+    """Load personality from runtime files (SOUL.md, IDENTITY.md, USER.md).
 
-    Falls back to a hardcoded identity if no files exist.
+    Preferred path is runtime root (e.g. .lightclaw/). Falls back to legacy workspace path.
     """
     files = ["IDENTITY.md", "SOUL.md", "USER.md"]
     parts = []
+    search_paths = personality_search_paths(workspace_path)
 
     for filename in files:
-        filepath = Path(workspace_path) / filename
-        if filepath.exists():
+        for base in search_paths:
+            filepath = base / filename
+            if not filepath.exists():
+                continue
             try:
                 content = filepath.read_text(encoding="utf-8").strip()
                 if content:
                     parts.append(content)
+                    break
             except Exception:
-                pass
+                continue
 
     if not parts:
         return FALLBACK_IDENTITY

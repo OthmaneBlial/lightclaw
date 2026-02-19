@@ -85,7 +85,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 📱 **Telegram Native** — Polling-based bot with "Thinking… 💭" placeholders, HTML-formatted responses, typing indicators, and rich commands.
 
-🎭 **Customizable Personality** — Edit `.lightclaw/workspace/SOUL.md`, `IDENTITY.md`, and `USER.md` to shape your bot's character, identity, and personal context.
+🎭 **Customizable Personality** — Edit `.lightclaw/SOUL.md`, `IDENTITY.md`, and `USER.md` to shape your bot's character, identity, and personal context.
 
 🧩 **Skill System (ClawHub + Local)** — Install skills from `clawhub.ai`, activate them per chat with `/skills`, and create your own custom skills locally.
 
@@ -162,7 +162,10 @@ pip install -r requirements.txt
 
 This creates:
 - `.env` (if missing)
-- `.lightclaw/workspace/` (runtime personality files)
+- `.lightclaw/workspace/` (generated artifacts workspace)
+- `.lightclaw/IDENTITY.md`, `.lightclaw/SOUL.md`, `.lightclaw/USER.md` (personality files)
+- `.lightclaw/HEARTBEAT.md` (optional heartbeat instructions)
+- `.lightclaw/skills/` (installed skills root)
 - `.lightclaw/lightclaw.db` (runtime DB path)
 
 Then edit `.env` with your API key and Telegram bot token:
@@ -195,13 +198,14 @@ SKILLS_STATE_PATH=.lightclaw/skills_state.json
 
 **3. Customize (Optional)**
 
-Edit the personality files in `.lightclaw/workspace/`:
+Edit the personality files in `.lightclaw/`:
 
 ```
-.lightclaw/workspace/
+.lightclaw/
 ├── IDENTITY.md   # Bot's name, purpose, philosophy
 ├── SOUL.md       # Personality traits and values
-└── USER.md       # Your preferences and personal context
+├── USER.md       # Your preferences and personal context
+└── HEARTBEAT.md  # Optional heartbeat scheduler instructions
 ```
 
 **4. Run**
@@ -217,7 +221,7 @@ That's it. Open Telegram, find your bot, say hello. 🦞
 ## CLI Commands
 
 ```bash
-lightclaw onboard   # initialize .env + .lightclaw/workspace in current directory
+lightclaw onboard   # initialize .env + .lightclaw runtime files in current directory
 lightclaw onboard --reset-env  # reset existing .env from latest template
 lightclaw onboard --configure  # guided provider/model/key setup on current .env
 lightclaw run       # run using the current directory as runtime home
@@ -264,8 +268,8 @@ Install and use skills directly from Telegram:
 ```
 
 Runtime skill paths:
-- Hub skills: `.lightclaw/workspace/skills/hub/<slug>/SKILL.md`
-- Local skills: `.lightclaw/workspace/skills/local/<name>/SKILL.md`
+- Hub skills: `.lightclaw/skills/hub/<slug>/SKILL.md`
+- Local skills: `.lightclaw/skills/local/<name>/SKILL.md`
 
 Active skills are persisted per chat in `.lightclaw/skills_state.json`.
 
@@ -436,8 +440,12 @@ lightclaw/
 ├── templates/
 │   └── personality/  # Onboarding templates (IDENTITY.md, SOUL.md, USER.md)
 ├── .lightclaw/       # Runtime data (created by `lightclaw onboard`)
-│   ├── workspace/    # Active personality files + generated artifacts
-│   │   └── skills/   # Installed hub skills + local custom skills
+│   ├── workspace/    # Generated artifacts/code files
+│   ├── skills/       # Installed hub skills + local custom skills
+│   ├── IDENTITY.md   # Personality identity template
+│   ├── SOUL.md       # Personality traits template
+│   ├── USER.md       # User context template
+│   ├── HEARTBEAT.md  # Optional heartbeat instructions
 │   ├── lightclaw.db  # Runtime memory database
 │   └── skills_state.json # Per-chat active skills state
 ├── requirements.txt  # 6 dependencies
@@ -458,7 +466,7 @@ LightClaw is designed to be forked. Here are some ideas:
 | Better embeddings | Swap TF-IDF in `memory.py` for `sentence-transformers` or OpenAI embeddings |
 | Tool calling | Add tool definitions to `providers.py` and tool execution in `core/bot/handlers.py` |
 | Web search | Add a search function and inject results into the prompt |
-| Multi-user personas | Extend `.lightclaw/workspace/` with per-user personality files |
+| Multi-user personas | Extend `.lightclaw/` with per-user personality files |
 | Webhook mode | Replace polling in `core/app.py` with `python-telegram-bot` webhook setup |
 | Vision support | Extend `handle_photo()` in `core/bot/handlers.py` to call vision models |
 

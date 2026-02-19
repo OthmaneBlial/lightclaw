@@ -10,7 +10,7 @@ from config import load_config
 
 from .bot import LightClawBot
 from .logging_setup import log
-from .personality import resolve_runtime_path
+from .personality import personality_search_paths, resolve_runtime_path
 
 
 def main():
@@ -72,10 +72,14 @@ def main():
     log.info(f"   Skills: {skill_count} installed")
 
     # Print personality source
-    ws = Path(config.workspace_path)
-    loaded = [f for f in ["IDENTITY.md", "SOUL.md", "USER.md"] if (ws / f).exists()]
+    search_paths = personality_search_paths(config.workspace_path)
+    loaded = []
+    for filename in ["IDENTITY.md", "SOUL.md", "USER.md"]:
+        if any((base / filename).exists() for base in search_paths):
+            loaded.append(filename)
     if loaded:
-        log.info(f"   Personality: {', '.join(loaded)}")
+        primary = search_paths[0]
+        log.info(f"   Personality: {', '.join(loaded)} ({primary})")
     else:
         log.info("   Personality: built-in default")
 

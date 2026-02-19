@@ -28,7 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 RUNTIME_DIRNAME = ".lightclaw"
 RUNTIME_WORKSPACE = f"{RUNTIME_DIRNAME}/workspace"
 RUNTIME_DB = f"{RUNTIME_DIRNAME}/lightclaw.db"
-TEMPLATE_FILES = ("IDENTITY.md", "SOUL.md", "USER.md")
+TEMPLATE_FILES = ("IDENTITY.md", "SOUL.md", "USER.md", "HEARTBEAT.md")
 RUN_PROVIDER_KEY_ENV = {
     "openai": "OPENAI_API_KEY",
     "xai": "XAI_API_KEY",
@@ -217,7 +217,59 @@ def _migrate_legacy_workspace(home: Path, workspace_dir: Path) -> int:
     return migrated
 
 
-def _ensure_workspace_templates(workspace_dir: Path, force: bool) -> list[str]:
+def _copy_tree_missing(src_dir: Path, dst_dir: Path) -> int:
+    """Copy files from src to dst, skipping any file that already exists."""
+    if not src_dir.exists() or not src_dir.is_dir():
+        return 0
+
+    copied = 0
+    for src in src_dir.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(src_dir)
+        dst = dst_dir / rel
+        if dst.exists():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        copied += 1
+    return copied
+
+
+def _migrate_legacy_runtime_layout(runtime_dir: Path, workspace_dir: Path) -> tuple[int, int]:
+    """Migrate legacy personality files and skills out of workspace/ into runtime root."""
+    personality_moved = 0
+    for filename in TEMPLATE_FILES:
+        src = workspace_dir / filename
+        dst = runtime_dir / filename
+        if not src.exists():
+            continue
+        if dst.exists():
+            # If both exist and contents match, remove legacy duplicate to keep workspace clean.
+            try:
+                if src.read_text(encoding="utf-8") == dst.read_text(encoding="utf-8"):
+                    src.unlink(missing_ok=True)
+                continue
+            except Exception:
+                continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(src), str(dst))
+        personality_moved += 1
+
+    legacy_skills = workspace_dir / "skills"
+    runtime_skills = runtime_dir / "skills"
+    skills_moved = 0
+    if legacy_skills.exists() and legacy_skills.is_dir():
+        if not runtime_skills.exists():
+            shutil.move(str(legacy_skills), str(runtime_skills))
+            skills_moved = sum(1 for p in runtime_skills.rglob("*") if p.is_file())
+        else:
+            skills_moved = _copy_tree_missing(legacy_skills, runtime_skills)
+
+    return personality_moved, skills_moved
+
+
+def _ensure_workspace_templates(runtime_dir: Path, force: bool) -> list[str]:
     created: list[str] = []
     source_workspace = PROJECT_ROOT / "templates" / "personality"
     if not source_workspace.exists():
@@ -227,10 +279,17 @@ def _ensure_workspace_templates(workspace_dir: Path, force: bool) -> list[str]:
         "IDENTITY.md": "# LightClaw\n\nA focused personal AI assistant.",
         "SOUL.md": "# Soul\n\nBe helpful, accurate, and concise.",
         "USER.md": "# User\n\nPersonal preferences go here.",
+        "HEARTBEAT.md": (
+            "# Heartbeat\n\n"
+            "Run every interval and send a short proactive update.\n\n"
+            "Rules\n"
+            "- Keep updates concise and useful.\n"
+            "- If no meaningful update exists, respond with NO_UPDATE.\n"
+        ),
     }
 
     for filename in TEMPLATE_FILES:
-        target = workspace_dir / filename
+        target = runtime_dir / filename
         if target.exists() and not force:
             continue
 
@@ -418,7 +477,10 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     migrated = _migrate_legacy_workspace(home, workspace_dir)
-    created_templates = _ensure_workspace_templates(workspace_dir, force=args.force)
+    migrated_personality, migrated_skills = _migrate_legacy_runtime_layout(
+        runtime_dir, workspace_dir
+    )
+    created_templates = _ensure_workspace_templates(runtime_dir, force=args.force)
 
     env_existed = env_path.exists()
     previous_env_content = env_path.read_text(encoding="utf-8") if env_existed else ""
@@ -444,6 +506,8 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     print(f"- Home: {home}")
     print(f"- Runtime dir: {runtime_dir}")
     print(f"- Workspace: {workspace_dir}")
+    print(f"- Personality templates: {runtime_dir}")
+    print(f"- Skills root: {runtime_dir / 'skills'}")
     print(f"- Database: {runtime_dir / 'lightclaw.db'}")
     if wrote_env and reset_env:
         print(f"- Reset config from template: {env_path}")
@@ -459,6 +523,10 @@ def cmd_onboard(args: argparse.Namespace) -> int:
         print("- Template files already present")
     if migrated:
         print(f"- Migrated {migrated} legacy file(s) from ./workspace")
+    if migrated_personality:
+        print(f"- Migrated {migrated_personality} personality file(s) from workspace/")
+    if migrated_skills:
+        print(f"- Migrated {migrated_skills} skill file(s) from workspace/skills/")
 
     configured = False
     fallback_content = previous_env_content if reset_env else ""
@@ -499,7 +567,8 @@ def _prepare_runtime_environment(
     runtime_dir.mkdir(parents=True, exist_ok=True)
     workspace_dir.mkdir(parents=True, exist_ok=True)
     _migrate_legacy_workspace(home, workspace_dir)
-    _ensure_workspace_templates(workspace_dir, force=False)
+    _migrate_legacy_runtime_layout(runtime_dir, workspace_dir)
+    _ensure_workspace_templates(runtime_dir, force=False)
 
     env_path = home / ".env"
     if env_path.exists():
@@ -837,12 +906,12 @@ def build_parser() -> argparse.ArgumentParser:
     onboard.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing .env and workspace templates",
+        help="Overwrite existing .env and runtime templates",
     )
     onboard.add_argument(
         "--reset-env",
         action="store_true",
-        help="Reset existing .env from template without overwriting workspace templates",
+        help="Reset existing .env from template without overwriting runtime templates",
     )
     onboard.add_argument(
         "--configure",

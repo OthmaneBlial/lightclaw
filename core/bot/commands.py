@@ -14,7 +14,7 @@ from skills import SkillError
 
 from ..logging_setup import log
 from ..markdown import _escape_html, markdown_to_telegram_html
-from ..personality import build_system_prompt
+from ..personality import build_system_prompt, runtime_root_from_workspace
 
 
 class BotCommandsMixin:
@@ -704,7 +704,8 @@ class BotCommandsMixin:
         )
 
     def _heartbeat_file_path(self) -> Path:
-        return Path(self.config.workspace_path).resolve() / "HEARTBEAT.md"
+        runtime_root = runtime_root_from_workspace(self.config.workspace_path)
+        return runtime_root / "HEARTBEAT.md"
 
     @staticmethod
     def _format_elapsed(seconds: float) -> str:
