@@ -82,6 +82,19 @@ def _prompt_run_provider_model(current_provider: str, current_model: str) -> tup
     if not available:
         return "", ""
 
+    if current_provider in available:
+        suggested_model = current_model or RUN_PROVIDER_MODELS.get(
+            current_provider, ["latest"]
+        )[0]
+        print("")
+        answer = input(
+            f"Continue with current provider/model ({current_provider} / {suggested_model})? [Y/n]: "
+        ).strip().lower()
+        if answer in {"", "y", "yes", "ok"}:
+            print(f"Using {current_provider} ({suggested_model}) for this run.")
+            print("Tip: for custom model IDs, set LLM_MODEL directly in .env.")
+            return current_provider, suggested_model
+
     print("")
     if len(available) == 1:
         selected_provider = available[0]
