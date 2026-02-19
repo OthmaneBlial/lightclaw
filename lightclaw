@@ -782,6 +782,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             "recall": bot.cmd_recall,
             "skills": bot.cmd_skills,
             "agent": bot.cmd_agent,
+            "heartbeat": bot.cmd_heartbeat,
             "show": bot.cmd_show,
         }
         handler = handler_map.get(command)

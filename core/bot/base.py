@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import time
@@ -47,6 +48,19 @@ class BotBaseMixin:
         self._llm_backoff_until: float = 0.0
         # Throttle repeated Telegram polling conflict warnings.
         self._last_telegram_conflict_log_at: float = 0.0
+        # Optional HEARTBEAT scheduler state (disabled by default).
+        heartbeat_minutes = 15
+        try:
+            heartbeat_minutes = int(
+                (os.getenv("HEARTBEAT_INTERVAL_MIN", "15") or "15").strip()
+            )
+        except Exception:
+            heartbeat_minutes = 15
+        self._heartbeat_enabled: bool = False
+        self._heartbeat_interval_sec: int = max(5, heartbeat_minutes) * 60
+        self._heartbeat_last_chat_id: str = ""
+        self._heartbeat_last_run_at: float = 0.0
+        self._heartbeat_task = None
         # Compiled strict-mode deny patterns for delegated local-agent tasks.
         self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
 
@@ -223,4 +237,3 @@ class BotBaseMixin:
         return await update.message.reply_text(text)
 
     # ── Token Estimation ─────────────────────────────────────
-

@@ -92,6 +92,7 @@ def main():
     app.add_handler(CommandHandler("recall", bot.cmd_recall))
     app.add_handler(CommandHandler("skills", bot.cmd_skills))
     app.add_handler(CommandHandler("agent", bot.cmd_agent))
+    app.add_handler(CommandHandler("heartbeat", bot.cmd_heartbeat))
     app.add_handler(CommandHandler("show", bot.cmd_show))
     app.add_handler(MessageHandler(filters.VOICE, bot.handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))

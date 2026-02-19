@@ -11,14 +11,14 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 ## Prioritized Proposals
 
-## Progress (Updated 2026-02-18)
+## Progress (Updated 2026-02-19)
 
 - [DONE] P0.1 Atomic state writes for non-DB runtime files (`8acb95d`)
 - [DONE] P0.2 Delegation preflight checks (`/agent doctor`) (`9ce48e9`)
 - [DONE] P0.3 stronger workspace path/symlink guard
 - [DONE] P0.4 delegation safety policy layer (`LOCAL_AGENT_SAFETY_MODE`, `LOCAL_AGENT_DENY_PATTERNS`)
 - [SKIP] P0.5 per-chat task lock/queue for delegated runs
-- [NEXT] P1.6 Heartbeat automation via `HEARTBEAT.md`
+- [DONE] P1.6 Heartbeat automation via `HEARTBEAT.md`
 - [SKIP] P2.11 Migration command with dry-run
 - [SKIP] P2.12 Optional built-in web tools (`web_search`, `web_fetch`)
 
@@ -67,7 +67,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 ## P1 (High Value, Medium Effort)
 
-### 6) Heartbeat automation via `HEARTBEAT.md` [NEXT]
+### 6) Heartbeat automation via `HEARTBEAT.md` [DONE]
 - Why: proactive automation without constant prompts.
 - Scope:
   - Optional scheduler reads `.lightclaw/workspace/HEARTBEAT.md`.
@@ -130,7 +130,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 3. [DONE] P0.3 path/symlink hardening
 4. [DONE] P0.4 delegation safety policy
 5. [SKIP] P0.5 per-chat lock/queue
-6. [NEXT] P1.6 heartbeat
+6. [DONE] P1.6 heartbeat
 7. P1.8 health endpoint
 8. P1.7 cron
 9. P1.9 JSON logs
