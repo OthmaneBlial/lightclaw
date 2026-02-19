@@ -101,41 +101,34 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 🧹 **Smart Context Management** — Auto-summarization when conversations grow too long, plus emergency context window compression with retry on overflow.
 
-📦 **Small Core** — `main.py` + `memory.py` + `providers.py` + `config.py` + `lightclaw` CLI. No hidden complexity. No abstractions for the sake of abstractions.
+📦 **Small Core, Modular Layout** — `core/` is split into focused modules (`core/app.py`, `core/bot/*`, `core/markdown.py`, `core/personality.py`) with `main.py` kept as a compatibility entrypoint.
 
 🚀 **Instant Startup** — No compilation, no Docker, no build pipeline. `./lightclaw run` and you're running.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                      main.py                                      │
-│                                                                  │
-│  ┌─────────────────────────────────────────┐                     │
-│  │ markdown_to_telegram_html()             │  MD → HTML converter│
-│  │ load_personality()                      │  .lightclaw/workspace/*.md │
-│  │ build_system_prompt()                   │  Dynamic prompts    │
-│  │ transcribe_voice()                      │  Groq Whisper       │
-│  └─────────────────────────────────────────┘                     │
-│                                                                  │
-│  LightClawBot                                                    │
-│  ├── handle_message()    ← text messages                         │
-│  ├── handle_voice()      ← voice transcription                   │
-│  ├── handle_photo()      ← image handling                        │
-│  ├── handle_document()   ← file handling                         │
-│  ├── _process_user_message()                                     │
-│  │     │                                                         │
-│  │     ├─ 1. Send "Thinking… 💭"  placeholder                   │
-│  │     ├─ 2. Recall memories      ◄── memory.py                  │
-│  │     ├─ 3. Build prompt              SQLite + TF-IDF RAG      │
-│  │     ├─ 4. Call LLM + retry     ◄── providers.py               │
-│  │     ├─ 5. Edit placeholder          6 providers unified       │
-│  │     └─ 6. Summarize if needed                                 │
-│  │                                                               │
-│  └── cmd_start/help/clear/wipe_memory/memory/recall/skills/agent/show │
-│                                                                  │
-│  config.py ◄── .env file                                          │
-└──────────────────────────────────────────────────────────────────┘
+lightclaw CLI
+  └── `lightclaw run` / `lightclaw chat`
+      └── `main.py` (compat facade)
+          └── `core/app.py::main()`
+              └── Telegram Application + handler wiring
+                  └── `core/bot/LightClawBot` (composed mixins)
+                      ├── `base.py`       (state, allowlist, logging helpers)
+                      ├── `commands.py`   (/start /help /skills /agent ...)
+                      ├── `handlers.py`   (text/voice/photo/document + main loop)
+                      ├── `file_ops.py`   (create/edit/retry/repair pipelines)
+                      ├── `delegation.py` (local Codex/Claude/OpenCode delegation)
+                      ├── `context.py`    (summarization + context filtering)
+                      └── `messaging.py`  (chunking, send fallback, Telegram errors)
+
+Supporting modules:
+  - `core/markdown.py`    Markdown → Telegram HTML
+  - `core/personality.py` runtime path + personality + prompt building
+  - `core/voice.py`       Groq Whisper transcription
+  - `memory.py`           SQLite + TF-IDF recall
+  - `providers.py`        6-provider LLM client
+  - `config.py`           `.env` loading + validation
 ```
 
 ## Quick Start
@@ -415,7 +408,25 @@ LightClaw automatically manages conversation length so you never hit context win
 lightclaw/
 ├── lightclaw         # CLI entrypoint: onboard + run
 ├── setup.sh          # One-command interactive setup wizard
-├── main.py           # Telegram bot + agent loop + HTML converter
+├── main.py           # Compatibility facade (imports/exports + entrypoint)
+├── core/
+│   ├── __init__.py   # Public core exports
+│   ├── app.py        # Runtime startup + Telegram handler wiring
+│   ├── constants.py  # Shared prompt/runtime constants
+│   ├── logging_setup.py # Logger setup + noisy transport log filtering
+│   ├── markdown.py   # Markdown → Telegram HTML conversion
+│   ├── personality.py # Runtime path resolution + personality/prompt builder
+│   ├── voice.py      # Groq Whisper transcription helper
+│   ├── types.py      # Shared dataclasses (file operation results)
+│   └── bot/
+│       ├── __init__.py   # Composed LightClawBot class
+│       ├── base.py       # Shared bot state + utility methods
+│       ├── commands.py   # /start /help /clear /skills /agent /show
+│       ├── handlers.py   # Message/media handling + main processing loop
+│       ├── file_ops.py   # Workspace file create/edit/retry/repair
+│       ├── delegation.py # Local external-agent delegation logic
+│       ├── context.py    # Summarization + prompt context filtering
+│       └── messaging.py  # Telegram send/chunk/error handling
 ├── skills.py         # Skills manager (ClawHub + local + per-chat activation)
 ├── memory.py         # SQLite infinite memory + RAG
 ├── providers.py      # Unified LLM client for 6 providers
@@ -443,13 +454,13 @@ LightClaw is designed to be forked. Here are some ideas:
 
 | What You Want | What to Change |
 |---------------|----------------|
-| Add Discord support | Add a Discord handler in `main.py` (~50 lines) |
+| Add Discord support | Add a Discord-style transport handler alongside `core/bot/handlers.py` |
 | Better embeddings | Swap TF-IDF in `memory.py` for `sentence-transformers` or OpenAI embeddings |
-| Tool calling | Add tool definitions to `providers.py` and a tool executor in `main.py` |
+| Tool calling | Add tool definitions to `providers.py` and tool execution in `core/bot/handlers.py` |
 | Web search | Add a search function and inject results into the prompt |
 | Multi-user personas | Extend `.lightclaw/workspace/` with per-user personality files |
-| Webhook mode | Replace polling with `python-telegram-bot`'s webhook handler |
-| Vision support | Send photos to GPT-5.2 or GPT-4.1 vision APIs in `handle_photo()` |
+| Webhook mode | Replace polling in `core/app.py` with `python-telegram-bot` webhook setup |
+| Vision support | Extend `handle_photo()` in `core/bot/handlers.py` to call vision models |
 
 The point is: **you shouldn't need permission from a framework to add a feature**. The code is small enough to understand in an afternoon and modify with confidence.
 
