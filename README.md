@@ -19,11 +19,12 @@
 
 </div>
 
----
 
 <div align="center">
   <img src="logo.png" alt="LightClaw logo" width="420">
 </div>
+
+---
 
 ## Why LightClaw Exists
 
