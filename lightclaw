@@ -654,6 +654,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
     os.environ["LIGHTCLAW_CHAT_MODE"] = "1"
 
     from config import load_config
+    from core.logging_setup import configure_optional_json_logging
+    from core.personality import runtime_root_from_workspace
     from main import LightClawBot, build_system_prompt, resolve_runtime_path
 
     # Keep terminal chat clean: suppress noisy transport/client logs.
@@ -665,6 +667,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
     config.workspace_path = str(resolve_runtime_path(config.workspace_path))
     config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
     config.skills_state_path = str(resolve_runtime_path(config.skills_state_path))
+    configure_optional_json_logging(runtime_root_from_workspace(config.workspace_path))
 
     workspace = Path(config.workspace_path)
     workspace.mkdir(parents=True, exist_ok=True)

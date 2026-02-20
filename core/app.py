@@ -9,8 +9,12 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 from config import load_config
 
 from .bot import LightClawBot
-from .logging_setup import log
-from .personality import personality_search_paths, resolve_runtime_path
+from .logging_setup import configure_optional_json_logging, log
+from .personality import (
+    personality_search_paths,
+    resolve_runtime_path,
+    runtime_root_from_workspace,
+)
 
 
 def main():
@@ -21,6 +25,8 @@ def main():
     config.workspace_path = str(resolve_runtime_path(config.workspace_path))
     config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
     config.skills_state_path = str(resolve_runtime_path(config.skills_state_path))
+    runtime_root = runtime_root_from_workspace(config.workspace_path)
+    configure_optional_json_logging(runtime_root)
 
     # Ensure workspace directory exists
     workspace = Path(config.workspace_path)

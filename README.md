@@ -199,6 +199,10 @@ LOCAL_AGENT_DENY_PATTERNS=
 # Skills (default registry)
 SKILLS_HUB_BASE_URL=https://clawhub.ai
 SKILLS_STATE_PATH=.lightclaw/skills_state.json
+
+# Optional structured JSON logs (dual output, human logs stay on stdout)
+JSON_LOG_ENABLED=0
+JSON_LOG_PATH=.lightclaw/logs/lightclaw.jsonl
 ```
 
 **3. Customize (Optional)**

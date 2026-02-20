@@ -20,6 +20,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 - [SKIP] P0.5 per-chat task lock/queue for delegated runs
 - [DONE] P1.6 Heartbeat automation via `HEARTBEAT.md`
 - [DONE] P1.7 Minimal cron jobs (`/cron`) backed by JSON store
+- [DONE] P1.9 Structured JSON logging mode
 - [SKIP] P2.11 Migration command with dry-run
 - [SKIP] P2.12 Optional built-in web tools (`web_search`, `web_fetch`)
 
@@ -93,7 +94,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - Controlled by env vars (`HEALTH_ENABLED`, `HEALTH_PORT`).
 - Effort: medium.
 
-### 9) Structured JSON logging mode
+### 9) Structured JSON logging mode [DONE]
 - Why: easier debugging and future dashboard integration.
 - Scope:
   - Keep current human logs as default.
@@ -134,7 +135,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 6. [DONE] P1.6 heartbeat
 7. [SKIP] P1.8 health endpoint
 8. [DONE] P1.7 cron
-9. [NEXT] P1.9 JSON logs
+9. [DONE] P1.9 JSON logs
 10. [SKIP] P2.11 migrate command (dry-run)
 11. [SKIP] P2.12 web tools
 12. [SKIP] P2.10 skill discovery precedence (as needed)
