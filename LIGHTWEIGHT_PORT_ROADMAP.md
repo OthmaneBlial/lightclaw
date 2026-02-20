@@ -11,7 +11,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 ## Prioritized Proposals
 
-## Progress (Updated 2026-02-19)
+## Progress (Updated 2026-02-20)
 
 - [DONE] P0.1 Atomic state writes for non-DB runtime files (`8acb95d`)
 - [DONE] P0.2 Delegation preflight checks (`/agent doctor`) (`9ce48e9`)
@@ -19,6 +19,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 - [DONE] P0.4 delegation safety policy layer (`LOCAL_AGENT_SAFETY_MODE`, `LOCAL_AGENT_DENY_PATTERNS`)
 - [SKIP] P0.5 per-chat task lock/queue for delegated runs
 - [DONE] P1.6 Heartbeat automation via `HEARTBEAT.md`
+- [DONE] P1.7 Minimal cron jobs (`/cron`) backed by JSON store
 - [SKIP] P2.11 Migration command with dry-run
 - [SKIP] P2.12 Optional built-in web tools (`web_search`, `web_fetch`)
 
@@ -75,7 +76,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - New commands: `/heartbeat on|off|show`.
 - Effort: medium.
 
-### 7) Minimal cron jobs (`/cron`) backed by JSON store
+### 7) Minimal cron jobs (`/cron`) backed by JSON store [DONE]
 - Why: explicit scheduled reminders/tasks users can control.
 - Scope:
   - Keep only `every` and `at` modes initially (skip full cron expr first).
@@ -132,7 +133,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 5. [SKIP] P0.5 per-chat lock/queue
 6. [DONE] P1.6 heartbeat
 7. P1.8 health endpoint
-8. P1.7 cron
+8. [DONE] P1.7 cron
 9. P1.9 JSON logs
 10. [SKIP] P2.11 migrate command (dry-run)
 11. [SKIP] P2.12 web tools

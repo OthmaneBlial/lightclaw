@@ -83,8 +83,11 @@ def main():
     else:
         log.info("   Personality: built-in default")
 
+    async def _post_init(application: Application):
+        await bot._ensure_cron_task(application.bot)
+
     # Build Telegram application
-    app = Application.builder().token(config.telegram_bot_token).build()
+    app = Application.builder().token(config.telegram_bot_token).post_init(_post_init).build()
 
     # Register handlers
     app.add_handler(CommandHandler("start", bot.cmd_start))
@@ -97,6 +100,7 @@ def main():
     app.add_handler(CommandHandler("skills", bot.cmd_skills))
     app.add_handler(CommandHandler("agent", bot.cmd_agent))
     app.add_handler(CommandHandler("heartbeat", bot.cmd_heartbeat))
+    app.add_handler(CommandHandler("cron", bot.cmd_cron))
     app.add_handler(CommandHandler("show", bot.cmd_show))
     app.add_handler(MessageHandler(filters.VOICE, bot.handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))

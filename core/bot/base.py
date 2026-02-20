@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shutil
@@ -61,6 +62,11 @@ class BotBaseMixin:
         self._heartbeat_last_chat_id: str = ""
         self._heartbeat_last_run_at: float = 0.0
         self._heartbeat_task = None
+        # Optional minimal cron scheduler state.
+        self._cron_poll_sec: int = 30
+        self._cron_last_run_at: float = 0.0
+        self._cron_task = None
+        self._cron_lock = asyncio.Lock()
         # Compiled strict-mode deny patterns for delegated local-agent tasks.
         self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
 
