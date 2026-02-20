@@ -84,7 +84,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
   - Commands: `/cron add`, `/cron list`, `/cron remove`.
 - Effort: medium.
 
-### 8) Health/readiness HTTP endpoint
+### 8) Health/readiness HTTP endpoint [SKIP]
 - Why: production/dev observability and uptime checks.
 - Scope:
   - Optional tiny HTTP server:
@@ -103,7 +103,7 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 
 ## P2 (Nice-to-Have, Still Lightweight If Scoped)
 
-### 10) Multi-layer skill discovery precedence
+### 10) Multi-layer skill discovery precedence [SKIP]
 - Why: lets advanced users keep reusable global skills.
 - Scope:
   - Resolve skills in order: workspace > global > built-in template dir.
@@ -132,12 +132,12 @@ This document tracks practical upgrades while keeping LightClaw small, fast, and
 4. [DONE] P0.4 delegation safety policy
 5. [SKIP] P0.5 per-chat lock/queue
 6. [DONE] P1.6 heartbeat
-7. P1.8 health endpoint
+7. [SKIP] P1.8 health endpoint
 8. [DONE] P1.7 cron
-9. P1.9 JSON logs
+9. [NEXT] P1.9 JSON logs
 10. [SKIP] P2.11 migrate command (dry-run)
 11. [SKIP] P2.12 web tools
-12. P2.10 skill discovery precedence (as needed)
+12. [SKIP] P2.10 skill discovery precedence (as needed)
 
 ## What We Should Not Port (to stay lightweight)
 
