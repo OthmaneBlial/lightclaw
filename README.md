@@ -26,6 +26,24 @@
 
 ---
 
+## ⚠️ Security Disclaimer (Read First)
+
+LightClaw is powerful, but it is not a "safe by default" security product.
+
+- It can write/edit files from model output.
+- If you enable `/agent`, it can invoke local coding-agent CLIs that may run impactful commands.
+- Skills are instruction bundles; treat all third-party skills as untrusted until you review them.
+- This is a solo-maintainer project in early stage: no formal external security audit, no dedicated security team, a still-small community, and no guarantee of comprehensive hardening.
+
+Potential security upside (inference): because LightClaw is extra-light and easy to fork, the codebase is easier to review and constrain than larger frameworks. That can reduce accidental attack surface only if you actively review, lock down, and remove what you do not need.
+
+Practical baseline:
+- Run with least privilege and preferably in an isolated VM/container.
+- Restrict Telegram access with `TELEGRAM_ALLOWED_USERS`.
+- Keep `LOCAL_AGENT_SAFETY_MODE=strict` unless you intentionally need broader behavior.
+- Install only skills you trust and have manually reviewed; even "scanned/verified" labels should be treated as signals, not guarantees.
+- Rotate/revoke API keys and bot tokens immediately if exposed.
+
 ## Why LightClaw Exists
 
 **OpenClaw** is a powerful, full-featured AI agent platform — but it's also *big*. Dozens of packages, multiple channels, tool registries, message buses, plugin systems. It's built for scale and enterprise use.
@@ -190,6 +208,7 @@ TELEGRAM_ALLOWED_USERS=123456789
 
 # Optional tuning for large code/file generation
 MAX_OUTPUT_TOKENS=12000
+LIGHTCLAW_DANGER_ACK=            # optional: set to yes to bypass onboarding safety confirmation
 LOCAL_AGENT_TIMEOUT_SEC=1800
 
 # Optional delegated local-agent safety policy
@@ -222,6 +241,8 @@ Edit the personality files in `.lightclaw/`:
 ```bash
 ./lightclaw run
 ```
+
+During onboarding, LightClaw requires an explicit safety confirmation (`type yes`) before continuing. For non-interactive environments, set `LIGHTCLAW_DANGER_ACK=yes`.
 
 That's it. Open Telegram, find your bot, say hello. 🦞
 

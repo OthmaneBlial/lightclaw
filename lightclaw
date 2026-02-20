@@ -45,12 +45,43 @@ RUN_PROVIDER_MODELS = {
     "deepseek": ["deepseek-chat", "deepseek-reasoner"],
     "zai": ["glm-5", "glm-4.7"],
 }
+DANGER_ACK_ENV = "LIGHTCLAW_DANGER_ACK"
 
 
 def _resolve_home(path_arg: str | None) -> Path:
     if path_arg:
         return Path(path_arg).expanduser().resolve()
     return Path.cwd().resolve()
+
+
+def _danger_ack_enabled() -> bool:
+    value = os.getenv(DANGER_ACK_ENV, "").strip().lower()
+    return value in {"yes", "y", "1", "true", "on"}
+
+
+def _confirm_danger_ack() -> bool:
+    """Require explicit confirmation before onboarding."""
+    if _danger_ack_enabled():
+        return True
+
+    print("")
+    print("⚠️  LightClaw Safety Notice")
+    print("LightClaw can execute model-influenced file changes and, if enabled, local agent commands.")
+    print("It is not formally security-audited.")
+    print("Use least privilege, review skills/prompts, and run in an isolated environment.")
+    print("")
+    if not sys.stdin.isatty():
+        print(
+            f"Non-interactive session detected. Set {DANGER_ACK_ENV}=yes to continue, "
+            "or run interactively and type yes."
+        )
+        return False
+
+    answer = input("Type 'yes' to continue: ").strip().lower()
+    if answer != "yes":
+        print("Safety confirmation not accepted. Exiting.")
+        return False
+    return True
 
 
 def _configured_run_providers() -> list[str]:
@@ -472,6 +503,11 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     runtime_dir = home / RUNTIME_DIRNAME
     workspace_dir = runtime_dir / "workspace"
     env_path = home / ".env"
+
+    if env_path.exists():
+        load_dotenv(env_path, override=False)
+    if not _confirm_danger_ack():
+        return 1
 
     runtime_dir.mkdir(parents=True, exist_ok=True)
     workspace_dir.mkdir(parents=True, exist_ok=True)
