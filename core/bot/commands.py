@@ -755,6 +755,7 @@ class BotCommandsMixin:
                     agent=agent,
                     task=worker_task,
                     progress_cb=_worker_progress_update,
+                    include_workspace_delta=False,
                 )
 
                 try:

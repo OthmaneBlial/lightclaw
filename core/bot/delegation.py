@@ -759,6 +759,7 @@ class BotDelegationMixin:
                 "codex",
                 "exec",
                 "--json",
+                "--ephemeral",
                 "--dangerously-bypass-approvals-and-sandbox",
                 "--skip-git-repo-check",
                 "--color",
@@ -1331,6 +1332,7 @@ class BotDelegationMixin:
         agent: str,
         task: str,
         progress_cb: Callable[[str], Awaitable[None]] | None = None,
+        include_workspace_delta: bool = True,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -1392,8 +1394,9 @@ class BotDelegationMixin:
             lines.append("")
             lines.append(summary)
 
-        lines.append("")
-        lines.append(delta_summary)
+        if include_workspace_delta:
+            lines.append("")
+            lines.append(delta_summary)
 
         if not result.get("ok") and stderr_excerpt:
             lines.append("")
