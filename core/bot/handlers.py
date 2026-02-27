@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import time
 
 from telegram import Update
@@ -196,6 +195,12 @@ class BotHandlersMixin:
                 progress_cb=_delegation_progress_update,
             )
             self.memory.ingest("assistant", delegated_response, session_id)
+            delegation_context = self._build_single_delegation_memory_entry(
+                agent=active_agent,
+                task=user_text,
+                result_text=delegated_response,
+            )
+            self.memory.ingest("assistant", delegation_context, session_id)
             await self._send_response(placeholder, update, delegated_response)
             if not self._llm_backoff_active():
                 asyncio.create_task(self.maybe_summarize(session_id))

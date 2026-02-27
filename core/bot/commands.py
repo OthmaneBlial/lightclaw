@@ -981,6 +981,23 @@ class BotCommandsMixin:
 
             final_lines.append(multi_delta)
 
+            request_entry = (
+                "[delegation-request]\n"
+                "mode: multi\n"
+                f"goal: {goal}\n"
+                f"workers: {', '.join(f'{label}={agent}' for label, agent in workers)}"
+            )
+            self.memory.ingest("user", request_entry, session_id)
+            memory_entry = self._build_multi_delegation_memory_entry(
+                goal=goal,
+                workspace_label=multi_workspace_label,
+                workers=workers,
+                results_by_label=results_by_label,
+            )
+            self.memory.ingest("assistant", memory_entry, session_id)
+            if not self._llm_backoff_active():
+                asyncio.create_task(self.maybe_summarize(session_id))
+
             await self._send_response(None, update, "\n".join(final_lines).strip())
             return
 
@@ -1013,6 +1030,21 @@ class BotCommandsMixin:
                 task,
                 progress_cb=_delegation_progress_update,
             )
+            request_entry = (
+                "[delegation-request]\n"
+                "mode: single\n"
+                f"agent: {direct_agent}\n"
+                f"task: {task}"
+            )
+            self.memory.ingest("user", request_entry, session_id)
+            memory_entry = self._build_single_delegation_memory_entry(
+                agent=direct_agent,
+                task=task,
+                result_text=result_text,
+            )
+            self.memory.ingest("assistant", memory_entry, session_id)
+            if not self._llm_backoff_active():
+                asyncio.create_task(self.maybe_summarize(session_id))
             await self._send_response(progress, update, result_text)
             return
 
@@ -1068,6 +1100,21 @@ class BotCommandsMixin:
                 task,
                 progress_cb=_delegation_progress_update,
             )
+            request_entry = (
+                "[delegation-request]\n"
+                "mode: single\n"
+                f"agent: {agent}\n"
+                f"task: {task}"
+            )
+            self.memory.ingest("user", request_entry, session_id)
+            memory_entry = self._build_single_delegation_memory_entry(
+                agent=agent,
+                task=task,
+                result_text=result_text,
+            )
+            self.memory.ingest("assistant", memory_entry, session_id)
+            if not self._llm_backoff_active():
+                asyncio.create_task(self.maybe_summarize(session_id))
             await self._send_response(progress, update, result_text)
             return
 

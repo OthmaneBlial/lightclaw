@@ -906,6 +906,124 @@ class BotDelegationMixin:
             compact = compact[:max_chars].rstrip() + "..."
         return compact
 
+    @staticmethod
+    def _strip_markdown_links(text: str) -> str:
+        return re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text or "")
+
+    @staticmethod
+    def _delegation_result_state(result_text: str) -> str:
+        text = (result_text or "")
+        if "⚠️ Timed out" in text:
+            return "timed_out"
+        if "⚠️ Worker failed:" in text:
+            return "failed"
+        if "⚠️ `" in text and "exited with code" in text:
+            return "failed"
+        if "⚠️ Skipped" in text:
+            return "skipped"
+        if "✅ Finished in " in text:
+            return "success"
+        return "unknown"
+
+    def _extract_delegation_highlight(self, result_text: str, max_chars: int = 280) -> str:
+        raw = self._strip_markdown_links(self._strip_ansi(result_text))
+        if not raw.strip():
+            return ""
+
+        summary_match = re.search(
+            r"(?ims)^Summary:\s*(.+?)(?:^\w[^:\n]{0,40}:\s*$|\Z)",
+            raw,
+        )
+        if summary_match:
+            summary_text = re.sub(r"\s+", " ", summary_match.group(1)).strip()
+            return self._short_progress_text(summary_text, max_chars=max_chars)
+
+        ignored_prefixes = (
+            "🤖 Delegated to",
+            "📁 Task workspace:",
+            "✅ Finished in ",
+            "⚠️ ",
+            "✅ Workspace changes detected:",
+            "- Created:",
+            "- Updated:",
+            "- Deleted:",
+            "stderr:",
+            "Outputs:",
+            "Handoff:",
+        )
+
+        informative: list[str] = []
+        for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if any(stripped.startswith(prefix) for prefix in ignored_prefixes):
+                continue
+            if stripped.startswith("- ") or stripped.startswith("• "):
+                continue
+            informative.append(stripped)
+            if len(informative) >= 2:
+                break
+
+        merged = " ".join(informative).strip()
+        return self._short_progress_text(merged, max_chars=max_chars) if merged else ""
+
+    def _extract_workspace_label_from_result(self, result_text: str) -> str:
+        match = re.search(r"(?m)^📁 Task workspace:\s*`?([^`\n]+)`?\s*$", result_text or "")
+        if not match:
+            return ""
+        return str(match.group(1) or "").strip()
+
+    def _build_single_delegation_memory_entry(
+        self,
+        agent: str,
+        task: str,
+        result_text: str,
+        workspace_label: str = "",
+    ) -> str:
+        state = self._delegation_result_state(result_text)
+        workspace = workspace_label.strip() or self._extract_workspace_label_from_result(result_text)
+        highlight = self._extract_delegation_highlight(result_text, max_chars=320)
+        task_text = self._short_progress_text(task, max_chars=260)
+
+        lines = [
+            "[delegation-context]",
+            "mode: single",
+            f"agent: {agent}",
+            f"status: {state}",
+            f"task: {task_text}",
+        ]
+        if workspace:
+            lines.append(f"workspace: {workspace}")
+        if highlight:
+            lines.append(f"highlight: {highlight}")
+        return "\n".join(lines)
+
+    def _build_multi_delegation_memory_entry(
+        self,
+        goal: str,
+        workspace_label: str,
+        workers: list[tuple[str, str]],
+        results_by_label: dict[str, object],
+    ) -> str:
+        lines = [
+            "[delegation-context]",
+            "mode: multi",
+            f"goal: {self._short_progress_text(goal, max_chars=260)}",
+            f"workspace: {workspace_label}",
+            "workers:",
+        ]
+
+        for label, agent in workers:
+            result_text = str(results_by_label.get(label, ""))
+            state = self._delegation_result_state(result_text)
+            lines.append(f"- {label}/{agent}: {state}")
+            highlight = self._extract_delegation_highlight(result_text, max_chars=220)
+            if highlight:
+                lines.append(f"  highlight: {highlight}")
+
+        return "\n".join(lines)
+
     def _parse_codex_exec_output(self, stdout: str) -> str:
         parts: list[str] = []
         last_error = ""
