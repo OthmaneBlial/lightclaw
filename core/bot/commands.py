@@ -714,8 +714,17 @@ class BotCommandsMixin:
                     return
                 workers.append((label, agent))
 
+            multi_workspace = await asyncio.to_thread(self._create_task_workspace, goal)
+            multi_workspace_label = self._workspace_rel_label(multi_workspace)
+            before_multi = await asyncio.to_thread(
+                self._snapshot_workspace_state, multi_workspace
+            )
+
             plan_lines = ["🤖 <b>Multi-Agent Delegation Plan</b>", ""]
             plan_lines.append(f"<b>Goal:</b> {_escape_html(goal)}")
+            plan_lines.append(
+                f"<b>Task workspace:</b> <code>{_escape_html(multi_workspace_label)}</code>"
+            )
             plan_lines.append("")
             plan_lines.append("<b>Workers (parallel):</b>")
             for index, (label, agent) in enumerate(workers):
@@ -756,6 +765,7 @@ class BotCommandsMixin:
                     task=worker_task,
                     progress_cb=_worker_progress_update,
                     include_workspace_delta=False,
+                    workspace_dir=multi_workspace,
                 )
 
                 try:
@@ -770,10 +780,15 @@ class BotCommandsMixin:
                 for index, (label, agent) in enumerate(workers)
             ]
             results = await asyncio.gather(*run_tasks, return_exceptions=True)
+            after_multi = await asyncio.to_thread(
+                self._snapshot_workspace_state, multi_workspace
+            )
+            multi_delta = self._summarize_workspace_delta(before_multi, after_multi)
 
             final_lines = [
                 "🤖 Multi-agent run finished.",
                 f"Goal: {goal}",
+                f"Task workspace: {multi_workspace_label}",
                 "",
             ]
 
@@ -789,6 +804,8 @@ class BotCommandsMixin:
                 final_lines.append(f"{tag}")
                 final_lines.append(worker_result)
                 final_lines.append("")
+
+            final_lines.append(multi_delta)
 
             await self._send_response(None, update, "\n".join(final_lines).strip())
             return

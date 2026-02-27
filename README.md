@@ -325,6 +325,8 @@ How it behaves:
 - `use` enables per-chat delegation mode (normal text messages are routed to that local agent).
 - `run` executes one explicit delegated task.
 - `multi` runs multiple explicitly-defined workers in parallel (`--agent label=agent` repeated).
+- Every delegated run creates a new goal-named folder under `.lightclaw/workspace/` and runs inside it.
+- In `multi`, all workers share the same new goal folder (isolated from previous runs).
 - Multi-agent progress streams are tagged per worker with distinct color-coded labels.
 - During long delegated runs, LightClaw posts live summarized progress heartbeats (default every 30s).
 - After each run, LightClaw reports a compact workspace delta (created/updated/deleted files).

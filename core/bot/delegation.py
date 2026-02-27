@@ -540,11 +540,42 @@ class BotDelegationMixin:
         lines.append("Run this before <code>/agent use ...</code> when delegation fails.")
         return "\n".join(lines).strip()
 
-    def _build_delegation_prompt(self, task: str) -> str:
-        workspace = Path(self.config.workspace_path).resolve().as_posix()
+    @staticmethod
+    def _slugify_goal_name(text: str, max_len: int = 56) -> str:
+        slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+        if not slug:
+            return "task"
+        slug = slug[:max_len].strip("-")
+        return slug or "task"
+
+    def _create_task_workspace(self, goal_text: str) -> Path:
+        root = Path(self.config.workspace_path).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        slug = self._slugify_goal_name(goal_text)
+        base_name = f"{stamp}_{slug}"
+        candidate = root / base_name
+        idx = 2
+        while candidate.exists():
+            candidate = root / f"{base_name}_{idx}"
+            idx += 1
+        candidate.mkdir(parents=True, exist_ok=False)
+        return candidate
+
+    def _workspace_rel_label(self, workspace: Path) -> str:
+        root = Path(self.config.workspace_path).resolve()
+        try:
+            return workspace.resolve().relative_to(root).as_posix()
+        except Exception:
+            return workspace.resolve().as_posix()
+
+    def _build_delegation_prompt(self, task: str, workspace: Path | None = None) -> str:
+        target_workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
+        workspace_path = target_workspace.as_posix()
         return (
             "You are a local coding agent delegated by LightClaw.\n"
-            f"Workspace root: {workspace}\n\n"
+            f"Workspace root: {workspace_path}\n\n"
             "Requirements:\n"
             "- Implement the task directly by creating/editing files in this workspace.\n"
             "- Do not ask for confirmation; make reasonable assumptions and proceed.\n"
@@ -555,9 +586,12 @@ class BotDelegationMixin:
             f"{task}\n"
         )
 
-    def _snapshot_workspace_state(self) -> dict[str, tuple[int, int]]:
+    def _snapshot_workspace_state(
+        self,
+        workspace: Path | None = None,
+    ) -> dict[str, tuple[int, int]]:
         """Snapshot workspace file metadata for before/after change detection."""
-        workspace = Path(self.config.workspace_path).resolve()
+        workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
         snapshot: dict[str, tuple[int, int]] = {}
         for path in workspace.rglob("*"):
             if not path.is_file():
@@ -1083,12 +1117,13 @@ class BotDelegationMixin:
         self,
         agent: str,
         task: str,
+        workspace: Path | None = None,
         progress_cb: Callable[[str], Awaitable[None]] | None = None,
     ) -> dict:
-        workspace = Path(self.config.workspace_path).resolve()
+        workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
         timeout_sec = max(60, int(self.config.local_agent_timeout_sec))
         progress_interval = max(10, int(self.config.local_agent_progress_interval_sec))
-        prompt = self._build_delegation_prompt(task)
+        prompt = self._build_delegation_prompt(task, workspace=workspace)
         env = os.environ.copy()
         env["LIGHTCLAW_DELEGATED_AGENT"] = "1"
         env["CI"] = "1"
@@ -1242,10 +1277,15 @@ class BotDelegationMixin:
             "timed_out": timed_out,
         }
 
-    def _invoke_local_agent_sync(self, agent: str, task: str) -> dict:
-        workspace = Path(self.config.workspace_path).resolve()
+    def _invoke_local_agent_sync(
+        self,
+        agent: str,
+        task: str,
+        workspace: Path | None = None,
+    ) -> dict:
+        workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
         timeout_sec = max(60, int(self.config.local_agent_timeout_sec))
-        prompt = self._build_delegation_prompt(task)
+        prompt = self._build_delegation_prompt(task, workspace=workspace)
         env = os.environ.copy()
         env["LIGHTCLAW_DELEGATED_AGENT"] = "1"
         env["CI"] = "1"
@@ -1333,6 +1373,7 @@ class BotDelegationMixin:
         task: str,
         progress_cb: Callable[[str], Awaitable[None]] | None = None,
         include_workspace_delta: bool = True,
+        workspace_dir: Path | str | None = None,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -1356,21 +1397,35 @@ class BotDelegationMixin:
             )
 
         progress_interval = max(10, int(self.config.local_agent_progress_interval_sec))
+
+        target_workspace: Path
+        if workspace_dir is None:
+            target_workspace = await asyncio.to_thread(self._create_task_workspace, task)
+        else:
+            target_workspace = Path(workspace_dir).expanduser().resolve()
+            target_workspace.mkdir(parents=True, exist_ok=True)
+        workspace_label = self._workspace_rel_label(target_workspace)
+
         if progress_cb:
             try:
                 await progress_cb(
-                    f"🧠 {agent} started. I'll post summarized progress about every {progress_interval}s."
+                    (
+                        f"🧠 {agent} started. I'll post summarized progress about every "
+                        f"{progress_interval}s.\n"
+                        f"📁 Task workspace: `{workspace_label}`"
+                    )
                 )
             except Exception:
                 pass
 
-        before = await asyncio.to_thread(self._snapshot_workspace_state)
+        before = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
         result = await self._invoke_local_agent_streaming(
             agent=agent,
             task=task,
+            workspace=target_workspace,
             progress_cb=progress_cb,
         )
-        after = await asyncio.to_thread(self._snapshot_workspace_state)
+        after = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
 
         summary = self._compact_external_agent_summary(str(result.get("summary") or ""))
         delta_summary = self._summarize_workspace_delta(before, after)
@@ -1379,6 +1434,7 @@ class BotDelegationMixin:
         )
 
         lines = [f"🤖 Delegated to `{agent}`"]
+        lines.append(f"📁 Task workspace: `{workspace_label}`")
         if result.get("ok"):
             lines.append(f"✅ Finished in {float(result.get('elapsed', 0.0)):.1f}s")
         elif result.get("timed_out"):
