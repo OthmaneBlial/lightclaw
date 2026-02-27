@@ -50,6 +50,7 @@ class BotHandlersMixin:
             f"<b>Session summary:</b> {summary_status}\n"
             f"<b>Skills:</b> {len(active_skills)} active / {len(installed_skills)} installed\n"
             f"<b>Delegation:</b> {_escape_html(active_agent)}\n"
+            f"<b>Delegation progress interval:</b> {self.config.local_agent_progress_interval_sec}s\n"
             f"<b>Delegation safety:</b> {_escape_html(self.config.local_agent_safety_mode)}\n"
             f"<b>Voice:</b> {voice_status}",
             parse_mode=ParseMode.HTML,
@@ -179,10 +180,20 @@ class BotHandlersMixin:
                 f"[{session_id}] Delegation mode active ({active_agent}); routing message to local agent"
             )
             self.memory.ingest("user", user_text, session_id)
+
+            async def _delegation_progress_update(text: str):
+                if not placeholder:
+                    return
+                try:
+                    await placeholder.edit_text(text)
+                except Exception:
+                    pass
+
             delegated_response = await self._run_local_agent_task(
                 session_id=session_id,
                 agent=active_agent,
                 task=user_text,
+                progress_cb=_delegation_progress_update,
             )
             self.memory.ingest("assistant", delegated_response, session_id)
             await self._send_response(placeholder, update, delegated_response)

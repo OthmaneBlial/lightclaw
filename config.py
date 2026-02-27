@@ -96,6 +96,7 @@ class Config:
     context_window: int = 128000
     max_output_tokens: int = 12000
     local_agent_timeout_sec: int = 1800
+    local_agent_progress_interval_sec: int = 30
     local_agent_safety_mode: str = "off"
     local_agent_deny_patterns: list[str] = field(default_factory=list)
 
@@ -138,6 +139,9 @@ def load_config() -> Config:
         context_window=int(os.getenv("CONTEXT_WINDOW", "128000")),
         max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "12000")),
         local_agent_timeout_sec=int(os.getenv("LOCAL_AGENT_TIMEOUT_SEC", "1800")),
+        local_agent_progress_interval_sec=int(
+            os.getenv("LOCAL_AGENT_PROGRESS_INTERVAL_SEC", "30")
+        ),
         local_agent_safety_mode=os.getenv("LOCAL_AGENT_SAFETY_MODE", "off"),
         local_agent_deny_patterns=_parse_deny_patterns(
             os.getenv("LOCAL_AGENT_DENY_PATTERNS", "")
@@ -166,6 +170,9 @@ def load_config() -> Config:
     cfg.llm_model = _resolve_model(cfg.llm_provider, cfg.llm_model)
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
     cfg.local_agent_timeout_sec = max(60, int(cfg.local_agent_timeout_sec))
+    cfg.local_agent_progress_interval_sec = max(
+        10, int(cfg.local_agent_progress_interval_sec)
+    )
     cfg.local_agent_safety_mode = _strip_inline_comment(
         cfg.local_agent_safety_mode or "off"
     ).lower()

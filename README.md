@@ -210,6 +210,7 @@ TELEGRAM_ALLOWED_USERS=123456789
 MAX_OUTPUT_TOKENS=12000
 LIGHTCLAW_DANGER_ACK=            # optional: set to yes to bypass onboarding safety confirmation
 LOCAL_AGENT_TIMEOUT_SEC=1800
+LOCAL_AGENT_PROGRESS_INTERVAL_SEC=30  # live summarized delegation updates cadence (seconds, min 10)
 
 # Optional delegated local-agent safety policy
 LOCAL_AGENT_SAFETY_MODE=off
@@ -313,6 +314,7 @@ Use local coding agents for bigger project work while keeping LightClaw as the s
 /agent codex Build a complete SaaS landing page with pricing + FAQ
 /agent run Build a full React dashboard in this workspace
 /agent run claude Add auth + routing to the current project
+/agent multi --agent backend=codex --agent frontend=claude --agent docs=codex Build a full-stack Todo app with docs
 /agent off
 ```
 
@@ -322,6 +324,9 @@ You should authenticate these CLIs once on the host machine before using delegat
 How it behaves:
 - `use` enables per-chat delegation mode (normal text messages are routed to that local agent).
 - `run` executes one explicit delegated task.
+- `multi` runs multiple explicitly-defined workers in parallel (`--agent label=agent` repeated).
+- Multi-agent progress streams are tagged per worker with distinct color-coded labels.
+- During long delegated runs, LightClaw posts live summarized progress heartbeats (default every 30s).
 - After each run, LightClaw reports a compact workspace delta (created/updated/deleted files).
 
 Optional delegation safety policy:

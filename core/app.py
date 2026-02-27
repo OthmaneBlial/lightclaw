@@ -53,6 +53,10 @@ def main():
     log.info(f"   Max output: {config.max_output_tokens:,} tokens")
     log.info(f"   Local agent timeout: {config.local_agent_timeout_sec}s")
     log.info(
+        "   Local agent progress summary interval: "
+        f"{config.local_agent_progress_interval_sec}s"
+    )
+    log.info(
         f"   Delegation safety: {config.local_agent_safety_mode} "
         f"({len(config.local_agent_deny_patterns)} custom pattern(s))"
     )

@@ -88,6 +88,7 @@ class BotCommandsMixin:
             "/recall &lt;query&gt; - Search my memories\n"
             "/skills - Manage skills (install/use/create)\n"
             "/agent - Delegate tasks to local coding agents\n"
+            "/agent multi - Run multiple local agents in parallel\n"
             "/agent doctor - Check local agent install/auth health\n"
             "/heartbeat - HEARTBEAT.md scheduler (on/off/show)\n"
             "/cron - Minimal scheduler (add/list/remove)\n"
@@ -116,6 +117,7 @@ class BotCommandsMixin:
             "/recall &lt;query&gt; - Search past conversations\n"
             "/skills - Install/use/create skills\n"
             "/agent - Delegate tasks to local coding agents\n"
+            "/agent multi - Run multiple local agents in parallel\n"
             "/agent doctor - Check local agent install/auth health\n"
             "/heartbeat - HEARTBEAT.md scheduler (on/off/show)\n"
             "/cron - Minimal scheduler (add/list/remove)\n"
@@ -674,6 +676,122 @@ class BotCommandsMixin:
                 )
             return
 
+        if sub == "multi":
+            specs, goal, parse_error = self._parse_multi_agent_args(args[1:])
+            if parse_error:
+                await self._reply_logged(
+                    update,
+                    "Usage: <code>/agent multi --agent backend=codex --agent frontend=claude --agent docs=codex &lt;goal&gt;</code>\n\n"
+                    + parse_error,
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            available = self._available_local_agents()
+            workers: list[tuple[str, str]] = []
+            for label, raw_agent in specs:
+                agent = self._resolve_local_agent_name(raw_agent)
+                if not agent:
+                    await self._reply_logged(
+                        update,
+                        (
+                            f"Unknown agent in <code>{_escape_html(label)}={_escape_html(raw_agent)}</code>.\n"
+                            "Use one of: <code>codex</code>, <code>claude</code>, <code>opencode</code>."
+                        ),
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+                if agent not in available:
+                    installed = ", ".join(sorted(available.keys())) if available else "none"
+                    await self._reply_logged(
+                        update,
+                        (
+                            f"⚠️ <code>{_escape_html(agent)}</code> is not installed.\n"
+                            f"Installed: <code>{_escape_html(installed)}</code>"
+                        ),
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+                workers.append((label, agent))
+
+            plan_lines = ["🤖 <b>Multi-Agent Delegation Plan</b>", ""]
+            plan_lines.append(f"<b>Goal:</b> {_escape_html(goal)}")
+            plan_lines.append("")
+            plan_lines.append("<b>Workers (parallel):</b>")
+            for index, (label, agent) in enumerate(workers):
+                tag = self._multi_agent_tag(label, agent, index)
+                plan_lines.append(f"• <code>{_escape_html(tag)}</code>")
+            plan_lines.append("")
+            plan_lines.append("Starting all workers now...")
+
+            await self._reply_logged(update, "\n".join(plan_lines), parse_mode=ParseMode.HTML)
+
+            worker_msgs = []
+            for index, (label, agent) in enumerate(workers):
+                tag = self._multi_agent_tag(label, agent, index)
+                worker_msg = await self._reply_logged(
+                    update,
+                    f"<code>{_escape_html(tag)}</code>\nQueued...",
+                    parse_mode=ParseMode.HTML,
+                )
+                worker_msgs.append(worker_msg)
+
+            async def _run_worker(index: int, label: str, agent: str, progress_msg):
+                tag = self._multi_agent_tag(label, agent, index)
+                worker_task = self._build_multi_agent_worker_task(
+                    label=label,
+                    goal=goal,
+                    workers=workers,
+                )
+
+                async def _worker_progress_update(text: str):
+                    try:
+                        await progress_msg.edit_text(f"{tag}\n{text}")
+                    except Exception:
+                        pass
+
+                result = await self._run_local_agent_task(
+                    session_id=session_id,
+                    agent=agent,
+                    task=worker_task,
+                    progress_cb=_worker_progress_update,
+                )
+
+                try:
+                    await progress_msg.edit_text(f"{tag}\n✅ Worker completed.")
+                except Exception:
+                    pass
+
+                return (label, agent, result)
+
+            run_tasks = [
+                _run_worker(index, label, agent, worker_msgs[index])
+                for index, (label, agent) in enumerate(workers)
+            ]
+            results = await asyncio.gather(*run_tasks, return_exceptions=True)
+
+            final_lines = [
+                "🤖 Multi-agent run finished.",
+                f"Goal: {goal}",
+                "",
+            ]
+
+            for index, result in enumerate(results):
+                label, agent = workers[index]
+                tag = self._multi_agent_tag(label, agent, index)
+                if isinstance(result, Exception):
+                    final_lines.append(f"{tag}")
+                    final_lines.append(f"⚠️ Worker failed: {result}")
+                    final_lines.append("")
+                    continue
+                _, _, worker_result = result
+                final_lines.append(f"{tag}")
+                final_lines.append(worker_result)
+                final_lines.append("")
+
+            await self._send_response(None, update, "\n".join(final_lines).strip())
+            return
+
         # One-shot convenience: /agent codex <task...>
         direct_agent = self._resolve_local_agent_name(sub)
         if direct_agent:
@@ -690,7 +808,19 @@ class BotCommandsMixin:
                 f"🤖 Delegating to <code>{_escape_html(direct_agent)}</code>...",
                 parse_mode=ParseMode.HTML,
             )
-            result_text = await self._run_local_agent_task(session_id, direct_agent, task)
+
+            async def _delegation_progress_update(text: str):
+                try:
+                    await progress.edit_text(text)
+                except Exception:
+                    pass
+
+            result_text = await self._run_local_agent_task(
+                session_id,
+                direct_agent,
+                task,
+                progress_cb=_delegation_progress_update,
+            )
             await self._send_response(progress, update, result_text)
             return
 
@@ -733,7 +863,19 @@ class BotCommandsMixin:
                 f"🤖 Delegating to <code>{_escape_html(agent)}</code>...",
                 parse_mode=ParseMode.HTML,
             )
-            result_text = await self._run_local_agent_task(session_id, agent, task)
+
+            async def _delegation_progress_update(text: str):
+                try:
+                    await progress.edit_text(text)
+                except Exception:
+                    pass
+
+            result_text = await self._run_local_agent_task(
+                session_id,
+                agent,
+                task,
+                progress_cb=_delegation_progress_update,
+            )
             await self._send_response(progress, update, result_text)
             return
 
