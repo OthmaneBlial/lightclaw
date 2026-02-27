@@ -269,7 +269,6 @@ class BotDelegationMixin:
         workers: list[tuple[str, str]],
     ) -> dict[str, object]:
         labels = [label for label, _ in workers]
-        backend_labels = [label for label in labels if "backend" in label.lower()]
         docs_labels = [label for label in labels if "doc" in label.lower()]
         nondocs_labels = [label for label in labels if label not in docs_labels]
 
@@ -299,13 +298,13 @@ class BotDelegationMixin:
                 handoff_to = [lane_label for lane_label in labels if lane_label != label]
             elif "frontend" in lowered:
                 role = "frontend"
-                depends_on = [dep for dep in backend_labels if dep != label]
                 responsibilities = [
                     "Implement frontend UI and API client integration.",
                     "Align request/response usage with backend contract.",
                 ]
                 expected_inputs = [
-                    "API contract from AGENTS.md and backend handoff notes.",
+                    "API contract and constraints from AGENTS.md.",
+                    "Backend handoff notes if available during the run.",
                 ]
                 expected_outputs = [
                     "Frontend source code, run commands, and env configuration.",

@@ -869,6 +869,22 @@ class BotCommandsMixin:
             failed: set[str] = set()
             results_by_label: dict[str, object] = {}
             index_by_label = {label: idx for idx, (label, _) in enumerate(workers)}
+            wait_status_by_label: dict[str, str] = {}
+
+            async def _set_worker_status(label: str, status_text: str):
+                if wait_status_by_label.get(label) == status_text:
+                    return
+                wait_status_by_label[label] = status_text
+                msg = worker_msgs[index_by_label[label]]
+                tag = self._multi_agent_tag(
+                    label,
+                    workers_by_label[label],
+                    index_by_label[label],
+                )
+                try:
+                    await msg.edit_text(f"{tag}\n{status_text}")
+                except Exception:
+                    pass
 
             for label in list(pending):
                 unknown_deps = unknown_dependency_map.get(label) or []
@@ -879,12 +895,7 @@ class BotCommandsMixin:
                 reason = ", ".join(unknown_deps)
                 skip_text = f"⚠️ Skipped because AGENTS.md references unknown dependency: {reason}"
                 results_by_label[label] = skip_text
-                msg = worker_msgs[index_by_label[label]]
-                tag = self._multi_agent_tag(label, workers_by_label[label], index_by_label[label])
-                try:
-                    await msg.edit_text(f"{tag}\n{skip_text}")
-                except Exception:
-                    pass
+                await _set_worker_status(label, skip_text)
 
             while pending:
                 # Mark workers blocked by failed dependencies as skipped.
@@ -901,18 +912,21 @@ class BotCommandsMixin:
                     reason = ", ".join(d for d in dep_list if d in failed) or "failed dependency"
                     skip_text = f"⚠️ Skipped because dependency failed: {reason}"
                     results_by_label[label] = skip_text
-                    msg = worker_msgs[index_by_label[label]]
-                    tag = self._multi_agent_tag(label, workers_by_label[label], index_by_label[label])
-                    try:
-                        await msg.edit_text(f"{tag}\n{skip_text}")
-                    except Exception:
-                        pass
+                    await _set_worker_status(label, skip_text)
 
                 ready: list[str] = []
                 for label in list(pending):
                     dep_list = dependency_map.get(label) or []
-                    if all(dep in completed_ok for dep in dep_list):
+                    unresolved = [dep for dep in dep_list if dep not in completed_ok]
+                    if not unresolved:
                         ready.append(label)
+                        continue
+                    resolved_count = len(dep_list) - len(unresolved)
+                    wait_text = (
+                        f"⏳ Waiting for dependencies ({resolved_count}/{len(dep_list)} ready): "
+                        + ", ".join(unresolved)
+                    )
+                    await _set_worker_status(label, wait_text)
 
                 if not ready:
                     # Dependency cycle or invalid plan; skip remaining workers safely.
@@ -921,12 +935,7 @@ class BotCommandsMixin:
                         failed.add(label)
                         skip_text = "⚠️ Skipped due to unresolved dependency cycle in AGENTS.md."
                         results_by_label[label] = skip_text
-                        msg = worker_msgs[index_by_label[label]]
-                        tag = self._multi_agent_tag(label, workers_by_label[label], index_by_label[label])
-                        try:
-                            await msg.edit_text(f"{tag}\n{skip_text}")
-                        except Exception:
-                            pass
+                        await _set_worker_status(label, skip_text)
                     break
 
                 run_tasks = [
