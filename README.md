@@ -112,7 +112,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 🧩 **Skill System (ClawHub + Local)** — Install skills from `clawhub.ai`, activate them per chat with `/skills`, and create your own custom skills locally.
 
-🤖 **Local Agent Delegation** — Delegate large build tasks to installed local coding agents (`codex`, `claude`, `opencode`) with `/agent`, while LightClaw reports workspace change summaries back in Telegram.
+🤖 **Local Agent Delegation + Multi-Agent Runs** — Use `/agent run` for one-shot delegation or `/agent multi` for parallel workers (`codex`, `claude`, `opencode`), with live summarized progress and per-run isolated task folders.
 
 🛠️ **Workspace File Operations + Diff Summaries** — Large code is written directly to `.lightclaw/workspace` (not dumped in chat). LightClaw applies create/edit operations, then returns concise operation + diff line summaries.
 
@@ -138,7 +138,7 @@ lightclaw CLI
               └── Telegram Application + handler wiring
                   └── `core/bot/LightClawBot` (composed mixins)
                       ├── `base.py`       (state, allowlist, logging helpers)
-                      ├── `commands.py`   (/start /help /skills /agent ...)
+                      ├── `commands.py`   (/start /help /skills /agent /heartbeat /cron ...)
                       ├── `handlers.py`   (text/voice/photo/document + main loop)
                       ├── `file_ops.py`   (create/edit/retry/repair pipelines)
                       ├── `delegation.py` (local Codex/Claude/OpenCode delegation)
@@ -328,8 +328,10 @@ How it behaves:
 - Every delegated run creates a new goal-named folder under `.lightclaw/workspace/` and runs inside it.
 - In `multi`, all workers share the same new goal folder (isolated from previous runs).
 - Multi-agent progress streams are tagged per worker with distinct color-coded labels.
+- In terminal chat, worker tags use ANSI colors; in Telegram, tags use emoji + labels (Telegram text-color limits).
 - During long delegated runs, LightClaw posts live summarized progress heartbeats (default every 30s).
 - After each run, LightClaw reports a compact workspace delta (created/updated/deleted files).
+- Path format for run folders: `.lightclaw/workspace/<YYYYMMDD_HHMMSS_goal-slug>/`.
 
 Optional delegation safety policy:
 - `LOCAL_AGENT_SAFETY_MODE=off|strict`
@@ -398,6 +400,10 @@ new text
 | `/recall <query>` | Search past conversations by semantic similarity |
 | `/skills` | List/search/install/activate/create/remove skills |
 | `/agent` | Delegate tasks to local coding agents (`codex`, `claude`, `opencode`) |
+| `/agent doctor` | Run local delegated-agent install/version/auth diagnostics |
+| `/agent multi --agent <label=agent> ... <goal>` | Run multiple delegated workers in parallel with live tagged progress |
+| `/heartbeat` | HEARTBEAT scheduler control (`show/on/off`) |
+| `/cron` | Minimal scheduler control (`add/list/remove`) |
 | `/clear` | Reset conversation history for the current chat |
 | `/wipe_memory` | Wipe all saved memory (requires explicit confirmation) |
 | `/wipe` | Alias of `/wipe_memory` |
@@ -462,7 +468,7 @@ lightclaw/
 │   └── bot/
 │       ├── __init__.py   # Composed LightClawBot class
 │       ├── base.py       # Shared bot state + utility methods
-│       ├── commands.py   # /start /help /clear /skills /agent /show
+│       ├── commands.py   # /start /help /clear /skills /agent /heartbeat /cron /show
 │       ├── handlers.py   # Message/media handling + main processing loop
 │       ├── file_ops.py   # Workspace file create/edit/retry/repair
 │       ├── delegation.py # Local external-agent delegation logic
