@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import difflib
 import os
 import re
@@ -209,7 +208,11 @@ class BotFileOpsMixin:
 
     # ── File Operation Tool ───────────────────────────────────
 
-    async def _process_file_blocks(self, response: str) -> tuple[list[FileOperationResult], str]:
+    async def _process_file_blocks(
+        self,
+        response: str,
+        allow_file_writes: bool = True,
+    ) -> tuple[list[FileOperationResult], str]:
         """Apply edit/create instructions from model response and return cleaned text."""
         operations: list[FileOperationResult] = []
         cleaned_response = response
@@ -476,7 +479,8 @@ class BotFileOpsMixin:
             log.info(f"Applied edit block: {target}")
             return f"[File edited: {rel_path}]"
 
-        cleaned_response = re.sub(edit_pattern, apply_edit_block, cleaned_response)
+        if allow_file_writes:
+            cleaned_response = re.sub(edit_pattern, apply_edit_block, cleaned_response)
 
         pattern_named = re.compile(
             r"```([a-zA-Z0-9_+\-]+):([^\n`]+)\s*\n([\s\S]*?)```",
@@ -488,7 +492,8 @@ class BotFileOpsMixin:
             content = match.group(3).strip()
             return write_workspace_file(raw_path, content)
 
-        cleaned_response = re.sub(pattern_named, apply_named_file_block, cleaned_response)
+        if allow_file_writes:
+            cleaned_response = re.sub(pattern_named, apply_named_file_block, cleaned_response)
 
         # Common malformed style: ```index.html ... ```
         pattern_filename_fence = re.compile(
@@ -501,7 +506,8 @@ class BotFileOpsMixin:
             content = match.group("body").strip()
             return write_workspace_file(raw_path, content)
 
-        cleaned_response = re.sub(pattern_filename_fence, apply_filename_fence_block, cleaned_response)
+        if allow_file_writes:
+            cleaned_response = re.sub(pattern_filename_fence, apply_filename_fence_block, cleaned_response)
 
         pattern_file_label = re.compile(
             r"File:\s*([^\n`]+)\s*\n```([a-zA-Z0-9_+\-]+)?\s*\n?([\s\S]*?)```",
@@ -513,7 +519,8 @@ class BotFileOpsMixin:
             content = match.group(3).strip()
             return write_workspace_file(raw_path, content)
 
-        cleaned_response = re.sub(pattern_file_label, apply_file_label_block, cleaned_response)
+        if allow_file_writes:
+            cleaned_response = re.sub(pattern_file_label, apply_file_label_block, cleaned_response)
 
         file_counter = 1
         pattern_auto = re.compile(r"```([a-zA-Z0-9_+\-]+)?\s*\n([\s\S]*?)```")
@@ -541,10 +548,11 @@ class BotFileOpsMixin:
             file_counter += 1
             return write_workspace_file(filename, content, auto_generated=True)
 
-        cleaned_response = re.sub(pattern_auto, apply_auto_block, cleaned_response)
+        if allow_file_writes:
+            cleaned_response = re.sub(pattern_auto, apply_auto_block, cleaned_response)
 
         # Salvage malformed/unclosed named fence: ```html:index.html ...EOF
-        if success_count() == 0:
+        if allow_file_writes and success_count() == 0:
             unclosed_named = re.search(
                 r"```([a-zA-Z0-9_+\-]+):([^\n`]+)\s*\n([\s\S]+)$",
                 cleaned_response,
@@ -580,7 +588,7 @@ class BotFileOpsMixin:
                     ).strip()
 
         # Salvage malformed/unclosed generic fence: ```html ...EOF
-        if success_count() == 0:
+        if allow_file_writes and success_count() == 0:
             unclosed_generic = re.search(
                 r"```([a-zA-Z0-9_+\-]+)?\s*\n([\s\S]+)$",
                 cleaned_response,
@@ -614,7 +622,7 @@ class BotFileOpsMixin:
                     ).strip()
 
         # Last resort: HTML document without fences.
-        if success_count() == 0:
+        if allow_file_writes and success_count() == 0:
             html_start = cleaned_response.lower().find("<!doctype html")
             if html_start < 0:
                 html_start = cleaned_response.lower().find("<html")

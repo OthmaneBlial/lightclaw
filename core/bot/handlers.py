@@ -282,7 +282,13 @@ class BotHandlersMixin:
         self.memory.ingest("user", user_text, session_id)
 
         # 9. Apply file operations (create/edit) and clean the response
-        file_ops, cleaned_response = await self._process_file_blocks(response)
+        allow_file_writes = self._is_file_intent(user_text)
+        if not allow_file_writes:
+            log.debug(f"[{session_id}] File writes disabled for non-coding prompt")
+        file_ops, cleaned_response = await self._process_file_blocks(
+            response,
+            allow_file_writes=allow_file_writes,
+        )
         failed_ops = [op for op in file_ops if op.action == "error"]
         if failed_ops:
             retry_ops, retry_cleaned = await self._retry_failed_edits(
@@ -305,7 +311,7 @@ class BotHandlersMixin:
 
         # 9b. Force a second pass when the model returned no-op prose for file tasks.
         success_ops = [op for op in file_ops if op.action != "error"]
-        if not success_ops and (
+        if allow_file_writes and not success_ops and (
             self._is_file_intent(user_text)
             or self._is_deferral_response(response)
             or self._is_deferral_response(cleaned_response)
@@ -326,7 +332,11 @@ class BotHandlersMixin:
                     ).strip()
 
         # 9c. Repair likely-truncated HTML outputs before user-facing response.
-        repair_ops = await self._repair_incomplete_html(session_id, user_text, file_ops)
+        repair_ops = (
+            await self._repair_incomplete_html(session_id, user_text, file_ops)
+            if allow_file_writes
+            else []
+        )
         if repair_ops:
             repaired_paths = {op.path for op in repair_ops if op.action != "error"}
             if repaired_paths:
