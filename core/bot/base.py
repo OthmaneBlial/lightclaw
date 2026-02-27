@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import os
 import re
-import shutil
 import time
 from pathlib import Path
 
@@ -45,6 +44,8 @@ class BotBaseMixin:
         self._last_file_by_session: dict[str, str] = {}
         # Per-chat local delegation mode (codex/claude/opencode).
         self._agent_mode_by_session: dict[str, str] = {}
+        # Per-chat file write mode (`chat`=read-only answers, `edit`=allow workspace writes).
+        self._file_mode_by_session: dict[str, str] = {}
         # Backoff window to avoid repeated background LLM calls during provider failures.
         self._llm_backoff_until: float = 0.0
         # Throttle repeated Telegram polling conflict warnings.
@@ -104,15 +105,36 @@ class BotBaseMixin:
         return [m.group(1) for m in pattern.finditer(text or "")]
 
     def _is_file_intent(self, user_text: str) -> bool:
-        lower = (user_text or "").lower()
-        keywords = (
-            "build", "create", "make", "generate", "landing page", "website",
-            "html", "css", "javascript", "python", "script", "edit", "modify",
-            "update", "improve", "enhance", "add more", "add feature", "refactor", "fix",
-        )
-        if any(k in lower for k in keywords):
+        text = (user_text or "").strip()
+        if not text:
+            return False
+        lower = text.lower()
+
+        # Explicit fenced edit/file syntax from user.
+        if "```edit:" in lower or re.search(r"```[a-z0-9_+\-]+:[^\n`]+", lower):
             return True
-        return bool(self._extract_file_mentions(user_text))
+
+        # Remove common workspace task-folder slugs to avoid false positives
+        # such as ".../20260227_120233_build-a-...".
+        normalized = re.sub(r"\b\d{8}_\d{6}_[a-z0-9][a-z0-9_-]*\b", " ", lower)
+        file_mentions = self._extract_file_mentions(text)
+        if file_mentions:
+            # Only treat file references as write-intent when paired with explicit change verbs.
+            if re.search(
+                r"\b(edit|modify|update|refactor|fix|patch|rewrite|create|write|add|remove|delete|implement|build|generate|make)\b",
+                normalized,
+            ):
+                return True
+
+        # Command-style coding/edit requests.
+        command_patterns = (
+            r"\b(build|create|generate|make|implement|write|code|develop|scaffold)\s+(a|an|the|this|that|it|me|new)\b",
+            r"\b(edit|modify|update|refactor|fix|patch|rewrite)\b",
+            r"\badd\s+(feature|tests?|docs?|endpoint|api|route|component|file|code)\b",
+            r"\b(save|write)\s+(to|into)\s+[^\s]+",
+            r"\bcreate\s+file\b",
+        )
+        return any(re.search(pattern, normalized) for pattern in command_patterns)
 
     @staticmethod
     def _is_deferral_response(text: str) -> bool:
@@ -225,6 +247,16 @@ class BotBaseMixin:
             if len(unique) >= limit:
                 break
         return unique
+
+    def _get_file_mode(self, session_id: str) -> str:
+        mode = (self._file_mode_by_session.get(session_id) or "chat").strip().lower()
+        return "edit" if mode == "edit" else "chat"
+
+    def _set_file_mode(self, session_id: str, mode: str) -> str:
+        normalized = (mode or "").strip().lower()
+        target = "edit" if normalized == "edit" else "chat"
+        self._file_mode_by_session[session_id] = target
+        return target
 
 
     async def _reply_logged(

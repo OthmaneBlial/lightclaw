@@ -34,6 +34,7 @@ class BotHandlersMixin:
         active_skills = self.skills.active_records(session_id)
         installed_skills = self.skills.list_skills()
         active_agent = self._agent_mode_by_session.get(session_id, "none")
+        file_mode = self._get_file_mode(session_id)
 
         voice_status = "✅ Groq Whisper" if self.config.groq_api_key else "❌ No GROQ_API_KEY"
 
@@ -49,6 +50,7 @@ class BotHandlersMixin:
             f"<b>Session summary:</b> {summary_status}\n"
             f"<b>Skills:</b> {len(active_skills)} active / {len(installed_skills)} installed\n"
             f"<b>Delegation:</b> {_escape_html(active_agent)}\n"
+            f"<b>File mode:</b> {_escape_html(file_mode)}\n"
             f"<b>Delegation progress interval:</b> {self.config.local_agent_progress_interval_sec}s\n"
             f"<b>Delegation safety:</b> {_escape_html(self.config.local_agent_safety_mode)}\n"
             f"<b>Voice:</b> {voice_status}",
@@ -232,11 +234,18 @@ class BotHandlersMixin:
         # 4. Get session summary
         summary = self._get_session_summary(session_id)
         skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
+        file_mode = self._get_file_mode(session_id)
 
         # 5. Build system prompt with personality
         system_prompt = build_system_prompt(
             self.config, self.personality, memories_text, summary, skills_text
         )
+        if file_mode != "edit":
+            system_prompt += (
+                "\n\n## Chat Mode Constraint\n"
+                "You are in chat mode (read-only). Do not output file-writing instructions or fenced code blocks "
+                "intended for saving to files. Give a direct conversational answer."
+            )
 
         # 6. Build messages for LLM
         messages = list(recent)
@@ -282,13 +291,23 @@ class BotHandlersMixin:
         self.memory.ingest("user", user_text, session_id)
 
         # 9. Apply file operations (create/edit) and clean the response
-        allow_file_writes = self._is_file_intent(user_text)
-        if not allow_file_writes:
+        requested_file_intent = self._is_file_intent(user_text)
+        allow_file_writes = file_mode == "edit" and requested_file_intent
+        mode_hint = ""
+        if requested_file_intent and file_mode != "edit":
+            mode_hint = (
+                "ℹ️ File writes are currently disabled (`/mode chat`). "
+                "Use `/mode edit` to enable workspace changes."
+            )
+            log.debug(f"[{session_id}] File writes blocked by mode=chat")
+        elif not requested_file_intent:
             log.debug(f"[{session_id}] File writes disabled for non-coding prompt")
         file_ops, cleaned_response = await self._process_file_blocks(
             response,
             allow_file_writes=allow_file_writes,
         )
+        if file_mode != "edit":
+            cleaned_response = self._strip_fenced_code_for_chat(cleaned_response)
         failed_ops = [op for op in file_ops if op.action == "error"]
         if failed_ops:
             retry_ops, retry_cleaned = await self._retry_failed_edits(
@@ -312,7 +331,7 @@ class BotHandlersMixin:
         # 9b. Force a second pass when the model returned no-op prose for file tasks.
         success_ops = [op for op in file_ops if op.action != "error"]
         if allow_file_writes and not success_ops and (
-            self._is_file_intent(user_text)
+            requested_file_intent
             or self._is_deferral_response(response)
             or self._is_deferral_response(cleaned_response)
         ):
@@ -368,6 +387,10 @@ class BotHandlersMixin:
                 )
             )
         final_markdown_response = "\n\n".join(part for part in response_parts if part).strip()
+        if mode_hint and not file_ops:
+            final_markdown_response = "\n\n".join(
+                part for part in [final_markdown_response, mode_hint] if part
+            )
         if self._is_large_code_leak(final_markdown_response):
             # Hard guardrail: never send giant code dumps to Telegram.
             if file_ops:

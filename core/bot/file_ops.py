@@ -139,6 +139,16 @@ class BotFileOpsMixin:
         return compact
 
     @staticmethod
+    def _strip_fenced_code_for_chat(text: str) -> str:
+        """Remove fenced code blocks from conversational replies in chat mode."""
+        source = text or ""
+        if "```" not in source:
+            return source
+        cleaned = re.sub(r"```[\s\S]*?```", "", source)
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+        return cleaned
+
+    @staticmethod
     def _is_incomplete_html_text(text: str) -> bool:
         """Heuristic detection for likely-truncated HTML documents."""
         lower = (text or "").lower()

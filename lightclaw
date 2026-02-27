@@ -717,11 +717,13 @@ def cmd_chat(args: argparse.Namespace) -> int:
     cli_user_id = (
         (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
     )
+    bot._set_file_mode(session_id, "chat")
 
     print("")
     print(f"🦞 LightClaw terminal chat")
     print(f"Provider: {config.llm_provider} ({config.llm_model})")
     print(f"Session: {session_id}")
+    print(f"File mode: {bot._get_file_mode(session_id)} (use /mode edit to enable writes)")
     print("Type /help for commands, /exit to quit.")
     print("")
 
@@ -746,10 +748,17 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
         summary = bot._get_session_summary(session_id)
         skills_text = await asyncio.to_thread(bot.skills.prompt_context, session_id)
+        file_mode = bot._get_file_mode(session_id)
 
         system_prompt = build_system_prompt(
             config, bot.personality, memories_text, summary, skills_text
         )
+        if file_mode != "edit":
+            system_prompt += (
+                "\n\n## Chat Mode Constraint\n"
+                "You are in chat mode (read-only). Do not output file-writing instructions or fenced code blocks "
+                "intended for saving to files. Give a direct conversational answer."
+            )
         messages = list(recent)
         messages.append({"role": "user", "content": user_text})
 
@@ -782,8 +791,26 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
         bot.memory.ingest("user", user_text, session_id)
 
-        file_ops, cleaned_response = await bot._process_file_blocks(response)
-        repair_ops = await bot._repair_incomplete_html(session_id, user_text, file_ops)
+        requested_file_intent = bot._is_file_intent(user_text)
+        allow_file_writes = file_mode == "edit" and requested_file_intent
+        mode_hint = ""
+        if requested_file_intent and file_mode != "edit":
+            mode_hint = (
+                "ℹ️ File writes are currently disabled (`/mode chat`). "
+                "Use `/mode edit` to enable workspace changes."
+            )
+
+        file_ops, cleaned_response = await bot._process_file_blocks(
+            response,
+            allow_file_writes=allow_file_writes,
+        )
+        if file_mode != "edit":
+            cleaned_response = bot._strip_fenced_code_for_chat(cleaned_response)
+        repair_ops = (
+            await bot._repair_incomplete_html(session_id, user_text, file_ops)
+            if allow_file_writes
+            else []
+        )
         if repair_ops:
             repaired_paths = {op.path for op in repair_ops if op.action != "error"}
             if repaired_paths:
@@ -812,6 +839,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     workspace_label=workspace_label,
                 )
             )
+        if mode_hint and not file_ops:
+            response_parts.append(mode_hint)
         final_text = "\n\n".join(part for part in response_parts if part).strip() or "Done."
 
         memory_text = visible_response if file_ops else cleaned_response
@@ -890,6 +919,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             "recall": bot.cmd_recall,
             "skills": bot.cmd_skills,
             "agent": bot.cmd_agent,
+            "mode": bot.cmd_mode,
             "heartbeat": bot.cmd_heartbeat,
             "cron": bot.cmd_cron,
             "show": bot.cmd_show,

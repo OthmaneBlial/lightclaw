@@ -90,6 +90,7 @@ class BotCommandsMixin:
             "/agent - Delegate tasks to local coding agents\n"
             "/agent multi - Run multiple local agents in parallel\n"
             "/agent doctor - Check local agent install/auth health\n"
+            "/mode - File write mode (chat/edit)\n"
             "/heartbeat - HEARTBEAT.md scheduler (on/off/show)\n"
             "/cron - Minimal scheduler (add/list/remove)\n"
             "/show - Show current config",
@@ -119,6 +120,7 @@ class BotCommandsMixin:
             "/agent - Delegate tasks to local coding agents\n"
             "/agent multi - Run multiple local agents in parallel\n"
             "/agent doctor - Check local agent install/auth health\n"
+            "/mode - File write mode (chat/edit)\n"
             "/heartbeat - HEARTBEAT.md scheduler (on/off/show)\n"
             "/cron - Minimal scheduler (add/list/remove)\n"
             "/show - Show current model, provider, uptime",
@@ -243,6 +245,59 @@ class BotCommandsMixin:
             lines.append(f"{i}. [{ts}] ({score}) {m.role}: {preview}")
 
         await self._reply_logged(update, "\n".join(lines), parse_mode=ParseMode.HTML)
+
+    # ── /mode ────────────────────────────────────────────────
+
+    async def cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user or not update.message:
+            return
+        if not self.is_allowed(update.effective_user.id):
+            return
+
+        session_id = self._session_id_from_update(update)
+        raw = " ".join(context.args or []).strip().lower()
+        self._log_user_message(session_id, f"/mode {raw}".strip())
+
+        if not raw:
+            mode = self._get_file_mode(session_id)
+            await self._reply_logged(
+                update,
+                "🧭 <b>File Write Mode</b>\n\n"
+                f"<b>Current:</b> <code>{_escape_html(mode)}</code>\n\n"
+                "<b>Modes:</b>\n"
+                "• <code>chat</code> — never write workspace files from normal chat replies\n"
+                "• <code>edit</code> — allow file writes when prompt is coding/edit intent\n\n"
+                "Use:\n"
+                "<code>/mode chat</code>\n"
+                "<code>/mode edit</code>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        if raw not in {"chat", "edit"}:
+            await self._reply_logged(
+                update,
+                "Usage: <code>/mode chat</code> or <code>/mode edit</code>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        active = self._set_file_mode(session_id, raw)
+        if active == "chat":
+            await self._reply_logged(
+                update,
+                "✅ File write mode set to <code>chat</code>.\n"
+                "Normal chat replies will stay in chat without creating files.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        await self._reply_logged(
+            update,
+            "✅ File write mode set to <code>edit</code>.\n"
+            "Coding/edit prompts can now write files in the workspace.",
+            parse_mode=ParseMode.HTML,
+        )
 
     # ── /skills ───────────────────────────────────────────────
 
