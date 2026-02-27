@@ -327,6 +327,9 @@ How it behaves:
 - `multi` runs multiple explicitly-defined workers in parallel (`--agent label=agent` repeated).
 - Every delegated run creates a new goal-named folder under `.lightclaw/workspace/` and runs inside it.
 - In `multi`, all workers share the same new goal folder (isolated from previous runs).
+- In `multi`, LightClaw auto-generates `AGENTS.md` in that goal folder with worker contracts, dependencies, and handoff expectations.
+- Multi-worker execution is dependency-phased from `AGENTS.md`: workers with satisfied dependencies run in parallel, blocked workers are skipped with explicit reasons.
+- Workers are instructed to write lane handoff notes under `handoff/<lane>.md` for downstream lanes.
 - Multi-agent progress streams are tagged per worker with distinct color-coded labels.
 - In terminal chat, worker tags use ANSI colors; in Telegram, tags use emoji + labels (Telegram text-color limits).
 - During long delegated runs, LightClaw posts live summarized progress heartbeats (default every 30s).

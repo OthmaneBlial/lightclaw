@@ -9,7 +9,6 @@ import os
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
@@ -165,6 +164,8 @@ class BotDelegationMixin:
         label: str,
         goal: str,
         workers: list[tuple[str, str]],
+        worker_plan: dict[str, object] | None = None,
+        task_workspace_label: str = "",
     ) -> str:
         roster = ", ".join(f"{name}={agent}" for name, agent in workers)
         lane = label.lower()
@@ -182,21 +183,271 @@ class BotDelegationMixin:
                 "Focus on documentation: setup, architecture, usage, and developer workflow."
             )
 
+        worker_plan = worker_plan or {}
+        deps = worker_plan.get("depends_on")
+        depends_on = [str(d).strip() for d in deps] if isinstance(deps, list) else []
+        responsibilities = worker_plan.get("responsibilities")
+        responsibilities_list = (
+            [str(item).strip() for item in responsibilities]
+            if isinstance(responsibilities, list)
+            else []
+        )
+        expected_inputs = worker_plan.get("expected_inputs")
+        expected_inputs_list = (
+            [str(item).strip() for item in expected_inputs]
+            if isinstance(expected_inputs, list)
+            else []
+        )
+        expected_outputs = worker_plan.get("expected_outputs")
+        expected_outputs_list = (
+            [str(item).strip() for item in expected_outputs]
+            if isinstance(expected_outputs, list)
+            else []
+        )
+        handoff_to = worker_plan.get("handoff_to")
+        handoff_to_list = (
+            [str(item).strip() for item in handoff_to]
+            if isinstance(handoff_to, list)
+            else []
+        )
+
+        deps_text = ", ".join(depends_on) if depends_on else "(none)"
+        responsibilities_text = (
+            "\n".join(f"- {item}" for item in responsibilities_list) if responsibilities_list else "- (none)"
+        )
+        expected_inputs_text = (
+            "\n".join(f"- {item}" for item in expected_inputs_list) if expected_inputs_list else "- (none)"
+        )
+        expected_outputs_text = (
+            "\n".join(f"- {item}" for item in expected_outputs_list) if expected_outputs_list else "- (none)"
+        )
+        handoff_text = (
+            ", ".join(handoff_to_list) if handoff_to_list else "(none)"
+        )
+
         return (
             "You are one worker in a LightClaw multi-agent delegation run.\n\n"
             "GLOBAL GOAL:\n"
             f"{goal}\n\n"
+            "EXECUTION MODE:\n"
+            "- The master orchestrator generated AGENTS.md for this run.\n"
+            "- Read AGENTS.md first and follow your worker contract exactly.\n"
+            "- Do not duplicate other workers' scope.\n\n"
+            "TASK WORKSPACE:\n"
+            f"{task_workspace_label or '(unknown)'}\n\n"
             "WORKER ROSTER:\n"
             f"{roster}\n\n"
             "YOUR LANE:\n"
             f"{label}\n\n"
+            "YOUR DEPENDENCIES:\n"
+            f"{deps_text}\n\n"
+            "YOUR RESPONSIBILITIES:\n"
+            f"{responsibilities_text}\n\n"
+            "YOUR EXPECTED INPUTS:\n"
+            f"{expected_inputs_text}\n\n"
+            "YOUR EXPECTED OUTPUTS:\n"
+            f"{expected_outputs_text}\n\n"
+            "YOUR HANDOFF TARGETS:\n"
+            f"{handoff_text}\n\n"
             "RULES:\n"
             "- Work only on your own lane.\n"
             "- Do not wait for confirmations.\n"
             "- Make practical assumptions and implement directly.\n"
             "- Keep output concise and summarize created/updated files.\n"
+            f"- Write handoff notes to `handoff/{lane}.md` for downstream workers.\n"
+            "- Do not output planning narrative in final answer.\n"
+            "- Final answer format must be:\n"
+            "  1) `Summary:` one short paragraph\n"
+            "  2) `Outputs:` bullet list of key files\n"
+            "  3) `Handoff:` bullet list for downstream workers\n"
             f"- {lane_hint}\n"
         )
+
+    def _build_agents_plan_payload(
+        self,
+        goal: str,
+        workers: list[tuple[str, str]],
+    ) -> dict[str, object]:
+        labels = [label for label, _ in workers]
+        backend_labels = [label for label in labels if "backend" in label.lower()]
+        docs_labels = [label for label in labels if "doc" in label.lower()]
+        nondocs_labels = [label for label in labels if label not in docs_labels]
+
+        plan_workers: list[dict[str, object]] = []
+        for label, agent in workers:
+            lowered = label.lower()
+            role = "implementation"
+            depends_on: list[str] = []
+            responsibilities: list[str] = []
+            expected_inputs: list[str] = []
+            expected_outputs: list[str] = []
+            handoff_to: list[str] = []
+
+            if "backend" in lowered:
+                role = "backend"
+                responsibilities = [
+                    "Implement backend API, persistence, and backend tests.",
+                    "Define stable API contract and payload schemas for consumers.",
+                ]
+                expected_inputs = [
+                    "Global goal and shared constraints from AGENTS.md.",
+                ]
+                expected_outputs = [
+                    "Backend source code and run/test instructions.",
+                    "API contract details (routes, request/response schema, ports).",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif "frontend" in lowered:
+                role = "frontend"
+                depends_on = [dep for dep in backend_labels if dep != label]
+                responsibilities = [
+                    "Implement frontend UI and API client integration.",
+                    "Align request/response usage with backend contract.",
+                ]
+                expected_inputs = [
+                    "API contract from AGENTS.md and backend handoff notes.",
+                ]
+                expected_outputs = [
+                    "Frontend source code, run commands, and env configuration.",
+                    "UI behavior notes and integration assumptions.",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif "doc" in lowered:
+                role = "documentation"
+                depends_on = [lane_label for lane_label in nondocs_labels if lane_label != label]
+                responsibilities = [
+                    "Produce consolidated project documentation.",
+                    "Reflect final backend/frontend structure and usage accurately.",
+                ]
+                expected_inputs = [
+                    "Handoff files from implementation workers.",
+                    "Generated project files in this task workspace.",
+                ]
+                expected_outputs = [
+                    "README and docs covering setup, architecture, APIs, and workflow.",
+                ]
+                handoff_to = []
+            else:
+                role = "implementation"
+                responsibilities = [
+                    "Implement assigned lane based on goal and AGENTS contract.",
+                ]
+                expected_inputs = [
+                    "Global goal and dependencies in AGENTS.md.",
+                ]
+                expected_outputs = [
+                    "Lane-specific implementation artifacts and handoff notes.",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+
+            plan_workers.append(
+                {
+                    "label": label,
+                    "agent": agent,
+                    "role": role,
+                    "depends_on": depends_on,
+                    "responsibilities": responsibilities,
+                    "expected_inputs": expected_inputs,
+                    "expected_outputs": expected_outputs,
+                    "handoff_to": handoff_to,
+                }
+            )
+
+        return {
+            "version": 1,
+            "goal": goal,
+            "coordination_rules": {
+                "mode": "dependency-phased-parallel",
+                "shared_workspace": True,
+                "handoff_dir": "handoff",
+                "contract_file": "AGENTS.md",
+            },
+            "workers": plan_workers,
+        }
+
+    def _render_agents_markdown(self, payload: dict[str, object]) -> str:
+        workers = payload.get("workers")
+        workers_list = workers if isinstance(workers, list) else []
+
+        lines = [
+            "# AGENTS.md",
+            "",
+            "Auto-generated by LightClaw multi-agent orchestrator.",
+            "",
+            "## Goal",
+            "",
+            str(payload.get("goal") or ""),
+            "",
+            "## Worker Contracts",
+            "",
+        ]
+
+        for item in workers_list:
+            if not isinstance(item, dict):
+                continue
+            label = str(item.get("label") or "").strip()
+            agent = str(item.get("agent") or "").strip()
+            role = str(item.get("role") or "implementation").strip()
+            depends_on = item.get("depends_on")
+            deps = [str(d).strip() for d in depends_on] if isinstance(depends_on, list) else []
+            responsibilities = item.get("responsibilities")
+            resp = [str(v).strip() for v in responsibilities] if isinstance(responsibilities, list) else []
+            expected_inputs = item.get("expected_inputs")
+            exp_in = [str(v).strip() for v in expected_inputs] if isinstance(expected_inputs, list) else []
+            expected_outputs = item.get("expected_outputs")
+            exp_out = [str(v).strip() for v in expected_outputs] if isinstance(expected_outputs, list) else []
+            handoff_to = item.get("handoff_to")
+            handoff = [str(v).strip() for v in handoff_to] if isinstance(handoff_to, list) else []
+
+            lines.append(f"### {label}")
+            lines.append(f"- agent: {agent}")
+            lines.append(f"- role: {role}")
+            lines.append(f"- depends_on: {', '.join(deps) if deps else '(none)'}")
+            lines.append("- responsibilities:")
+            lines.extend(f"  - {r}" for r in (resp or ["(none)"]))
+            lines.append("- expected_inputs:")
+            lines.extend(f"  - {r}" for r in (exp_in or ["(none)"]))
+            lines.append("- expected_outputs:")
+            lines.extend(f"  - {r}" for r in (exp_out or ["(none)"]))
+            lines.append(f"- handoff_to: {', '.join(handoff) if handoff else '(none)'}")
+            lines.append("")
+
+        lines.append("## Machine Plan")
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps(payload, indent=2))
+        lines.append("```")
+        lines.append("")
+
+        return "\n".join(lines)
+
+    def _write_agents_plan_file(
+        self,
+        workspace: Path,
+        payload: dict[str, object],
+    ) -> Path:
+        target = workspace / "AGENTS.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(self._render_agents_markdown(payload), encoding="utf-8")
+        return target
+
+    def _load_agents_plan_file(self, workspace: Path) -> dict[str, object]:
+        path = workspace / "AGENTS.md"
+        if not path.exists():
+            return {}
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception:
+            return {}
+        match = re.search(r"```json\s*([\s\S]*?)```", text)
+        if not match:
+            return {}
+        raw = match.group(1).strip()
+        try:
+            obj = json.loads(raw)
+        except Exception:
+            return {}
+        return obj if isinstance(obj, dict) else {}
 
     def _render_agent_status(self, session_id: str) -> str:
         available = self._available_local_agents()
@@ -682,7 +933,8 @@ class BotDelegationMixin:
                     last_error = str(err.get("message") or last_error)
 
         if parts:
-            return "\n".join(parts).strip()
+            # Codex streams interim messages; keep only the final assistant message.
+            return parts[-1].strip()
         if last_error:
             return f"Error: {last_error}"
         return (stdout or "").strip()[-2000:]

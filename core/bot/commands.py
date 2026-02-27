@@ -716,6 +716,17 @@ class BotCommandsMixin:
 
             multi_workspace = await asyncio.to_thread(self._create_task_workspace, goal)
             multi_workspace_label = self._workspace_rel_label(multi_workspace)
+            plan_payload = self._build_agents_plan_payload(goal=goal, workers=workers)
+            agents_path = await asyncio.to_thread(
+                self._write_agents_plan_file, multi_workspace, plan_payload
+            )
+            loaded_payload = await asyncio.to_thread(
+                self._load_agents_plan_file, multi_workspace
+            )
+            if loaded_payload:
+                plan_payload = loaded_payload
+            handoff_dir = multi_workspace / "handoff"
+            handoff_dir.mkdir(parents=True, exist_ok=True)
             before_multi = await asyncio.to_thread(
                 self._snapshot_workspace_state, multi_workspace
             )
@@ -725,13 +736,52 @@ class BotCommandsMixin:
             plan_lines.append(
                 f"<b>Task workspace:</b> <code>{_escape_html(multi_workspace_label)}</code>"
             )
+            plan_lines.append(
+                f"<b>AGENTS.md:</b> <code>{_escape_html(agents_path.name)}</code>"
+            )
             plan_lines.append("")
-            plan_lines.append("<b>Workers (parallel):</b>")
+            plan_lines.append("<b>Worker Contracts:</b>")
+            worker_contracts = plan_payload.get("workers")
+            contract_list = worker_contracts if isinstance(worker_contracts, list) else []
+            workers_by_label = {label: agent for label, agent in workers}
+            worker_contract_by_label: dict[str, dict[str, object]] = {
+                label: {} for label, _ in workers
+            }
+            for contract in contract_list:
+                if not isinstance(contract, dict):
+                    continue
+                label = str(contract.get("label") or "").strip()
+                if not label or label not in workers_by_label:
+                    continue
+                worker_contract_by_label[label] = contract
+
             for index, (label, agent) in enumerate(workers):
                 tag = self._multi_agent_tag(label, agent, index)
-                plan_lines.append(f"• <code>{_escape_html(tag)}</code>")
+                role_text = "implementation"
+                deps_text = "(none)"
+                objective_text = ""
+                contract = worker_contract_by_label.get(label, {})
+                role_text = str(contract.get("role") or "implementation").strip() or "implementation"
+                depends_on = contract.get("depends_on")
+                deps = [str(dep).strip() for dep in depends_on] if isinstance(depends_on, list) else []
+                deps_text = ", ".join(deps) if deps else "(none)"
+                responsibilities = contract.get("responsibilities")
+                if isinstance(responsibilities, list):
+                    for item in responsibilities:
+                        candidate = str(item or "").strip()
+                        if candidate:
+                            objective_text = candidate
+                            break
+                plan_lines.append(
+                    f"• <code>{_escape_html(tag)}</code> — role: <code>{_escape_html(role_text)}</code> — depends_on: <code>{_escape_html(deps_text)}</code>"
+                )
+                if objective_text:
+                    plan_lines.append(f"  task: {_escape_html(objective_text)}")
             plan_lines.append("")
-            plan_lines.append("Starting all workers now...")
+            plan_lines.append(
+                "Execution: dependency-phased parallel (workers with satisfied deps run together)."
+            )
+            plan_lines.append("Generating AGENTS.md done. Starting workers...")
 
             await self._reply_logged(update, "\n".join(plan_lines), parse_mode=ParseMode.HTML)
 
@@ -745,12 +795,43 @@ class BotCommandsMixin:
                 )
                 worker_msgs.append(worker_msg)
 
+            def _is_success_result(worker_result: str) -> bool:
+                return "✅ Finished in " in (worker_result or "")
+
+            dependency_map: dict[str, list[str]] = {}
+            unknown_dependency_map: dict[str, list[str]] = {}
+            for label, _ in workers:
+                contract = worker_contract_by_label.get(label, {})
+                depends_obj = contract.get("depends_on")
+                raw_deps = (
+                    [str(dep).strip() for dep in depends_obj]
+                    if isinstance(depends_obj, list)
+                    else []
+                )
+                valid_deps: list[str] = []
+                unknown_deps: list[str] = []
+                seen: set[str] = set()
+                for dep in raw_deps:
+                    if not dep or dep == label or dep in seen:
+                        continue
+                    seen.add(dep)
+                    if dep in workers_by_label:
+                        valid_deps.append(dep)
+                    else:
+                        unknown_deps.append(dep)
+                dependency_map[label] = valid_deps
+                unknown_dependency_map[label] = unknown_deps
+                contract["depends_on"] = valid_deps
+
             async def _run_worker(index: int, label: str, agent: str, progress_msg):
                 tag = self._multi_agent_tag(label, agent, index)
+                worker_contract = worker_contract_by_label.get(label, {})
                 worker_task = self._build_multi_agent_worker_task(
                     label=label,
                     goal=goal,
                     workers=workers,
+                    worker_plan=worker_contract,
+                    task_workspace_label=multi_workspace_label,
                 )
 
                 async def _worker_progress_update(text: str):
@@ -759,27 +840,117 @@ class BotCommandsMixin:
                     except Exception:
                         pass
 
-                result = await self._run_local_agent_task(
-                    session_id=session_id,
-                    agent=agent,
-                    task=worker_task,
-                    progress_cb=_worker_progress_update,
-                    include_workspace_delta=False,
-                    workspace_dir=multi_workspace,
-                )
-
                 try:
-                    await progress_msg.edit_text(f"{tag}\n✅ Worker completed.")
+                    result = await self._run_local_agent_task(
+                        session_id=session_id,
+                        agent=agent,
+                        task=worker_task,
+                        progress_cb=_worker_progress_update,
+                        include_workspace_delta=False,
+                        workspace_dir=multi_workspace,
+                    )
+                    ok = _is_success_result(result)
+                    status_text = "✅ Worker completed." if ok else "⚠️ Worker finished with issues."
+                    try:
+                        await progress_msg.edit_text(f"{tag}\n{status_text}")
+                    except Exception:
+                        pass
+                    return (label, agent, result, ok)
+                except Exception as e:
+                    fail_result = f"⚠️ Worker failed: {e}"
+                    try:
+                        await progress_msg.edit_text(f"{tag}\n{fail_result}")
+                    except Exception:
+                        pass
+                    return (label, agent, fail_result, False)
+
+            pending = set(workers_by_label.keys())
+            completed_ok: set[str] = set()
+            failed: set[str] = set()
+            results_by_label: dict[str, object] = {}
+            index_by_label = {label: idx for idx, (label, _) in enumerate(workers)}
+
+            for label in list(pending):
+                unknown_deps = unknown_dependency_map.get(label) or []
+                if not unknown_deps:
+                    continue
+                pending.discard(label)
+                failed.add(label)
+                reason = ", ".join(unknown_deps)
+                skip_text = f"⚠️ Skipped because AGENTS.md references unknown dependency: {reason}"
+                results_by_label[label] = skip_text
+                msg = worker_msgs[index_by_label[label]]
+                tag = self._multi_agent_tag(label, workers_by_label[label], index_by_label[label])
+                try:
+                    await msg.edit_text(f"{tag}\n{skip_text}")
                 except Exception:
                     pass
 
-                return (label, agent, result)
+            while pending:
+                # Mark workers blocked by failed dependencies as skipped.
+                blocked_now: list[str] = []
+                for label in list(pending):
+                    dep_list = dependency_map.get(label) or []
+                    if any(dep in failed for dep in dep_list):
+                        blocked_now.append(label)
 
-            run_tasks = [
-                _run_worker(index, label, agent, worker_msgs[index])
-                for index, (label, agent) in enumerate(workers)
-            ]
-            results = await asyncio.gather(*run_tasks, return_exceptions=True)
+                for label in blocked_now:
+                    pending.discard(label)
+                    failed.add(label)
+                    dep_list = dependency_map.get(label) or []
+                    reason = ", ".join(d for d in dep_list if d in failed) or "failed dependency"
+                    skip_text = f"⚠️ Skipped because dependency failed: {reason}"
+                    results_by_label[label] = skip_text
+                    msg = worker_msgs[index_by_label[label]]
+                    tag = self._multi_agent_tag(label, workers_by_label[label], index_by_label[label])
+                    try:
+                        await msg.edit_text(f"{tag}\n{skip_text}")
+                    except Exception:
+                        pass
+
+                ready: list[str] = []
+                for label in list(pending):
+                    dep_list = dependency_map.get(label) or []
+                    if all(dep in completed_ok for dep in dep_list):
+                        ready.append(label)
+
+                if not ready:
+                    # Dependency cycle or invalid plan; skip remaining workers safely.
+                    for label in list(pending):
+                        pending.discard(label)
+                        failed.add(label)
+                        skip_text = "⚠️ Skipped due to unresolved dependency cycle in AGENTS.md."
+                        results_by_label[label] = skip_text
+                        msg = worker_msgs[index_by_label[label]]
+                        tag = self._multi_agent_tag(label, workers_by_label[label], index_by_label[label])
+                        try:
+                            await msg.edit_text(f"{tag}\n{skip_text}")
+                        except Exception:
+                            pass
+                    break
+
+                run_tasks = [
+                    _run_worker(
+                        index_by_label[label],
+                        label,
+                        workers_by_label[label],
+                        worker_msgs[index_by_label[label]],
+                    )
+                    for label in ready
+                ]
+                phase_results = await asyncio.gather(*run_tasks)
+
+                for label in ready:
+                    pending.discard(label)
+
+                for result in phase_results:
+                    label, agent, worker_result, ok = result
+                    results_by_label[label] = worker_result
+                    if ok:
+                        completed_ok.add(label)
+                    else:
+                        failed.add(label)
+
             after_multi = await asyncio.to_thread(
                 self._snapshot_workspace_state, multi_workspace
             )
@@ -792,15 +963,9 @@ class BotCommandsMixin:
                 "",
             ]
 
-            for index, result in enumerate(results):
-                label, agent = workers[index]
+            for index, (label, agent) in enumerate(workers):
                 tag = self._multi_agent_tag(label, agent, index)
-                if isinstance(result, Exception):
-                    final_lines.append(f"{tag}")
-                    final_lines.append(f"⚠️ Worker failed: {result}")
-                    final_lines.append("")
-                    continue
-                _, _, worker_result = result
+                worker_result = str(results_by_label.get(label, "⚠️ Worker did not produce output."))
                 final_lines.append(f"{tag}")
                 final_lines.append(worker_result)
                 final_lines.append("")
