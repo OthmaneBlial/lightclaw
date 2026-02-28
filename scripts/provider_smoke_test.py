@@ -21,13 +21,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from config import Config, LATEST_MODEL_DEFAULTS, load_config
 from providers import LLMClient
 
-PROVIDER_KEY_ATTRS = {
-    "openai": "openai_api_key",
-    "xai": "xai_api_key",
-    "claude": "anthropic_api_key",
-    "gemini": "gemini_api_key",
-    "deepseek": "deepseek_api_key",
-    "zai": "zai_api_key",
+PROVIDER_AUTH_ATTRS = {
+    "openai": ("openai_api_key",),
+    "xai": ("xai_api_key",),
+    "claude": ("anthropic_api_key", "anthropic_auth_token"),
+    "gemini": ("gemini_api_key",),
+    "deepseek": ("deepseek_api_key",),
+    "zai": ("zai_api_key",),
 }
 
 
@@ -39,6 +39,8 @@ def _build_provider_config(source_cfg: Config, provider: str, model: str) -> Con
         openai_api_key=source_cfg.openai_api_key,
         xai_api_key=source_cfg.xai_api_key,
         anthropic_api_key=source_cfg.anthropic_api_key,
+        anthropic_auth_token=source_cfg.anthropic_auth_token,
+        anthropic_base_url=source_cfg.anthropic_base_url,
         gemini_api_key=source_cfg.gemini_api_key,
         deepseek_api_key=source_cfg.deepseek_api_key,
         zai_api_key=source_cfg.zai_api_key,
@@ -59,9 +61,11 @@ async def _check_provider(
     prompt: str,
     timeout_seconds: int,
 ) -> Tuple[str, str]:
-    key_attr = PROVIDER_KEY_ATTRS[provider]
-    if not getattr(root_cfg, key_attr):
-        return "SKIP", f"missing {key_attr}"
+    auth_attrs = PROVIDER_AUTH_ATTRS[provider]
+    if not any(getattr(root_cfg, attr) for attr in auth_attrs):
+        if len(auth_attrs) == 1:
+            return "SKIP", f"missing {auth_attrs[0]}"
+        return "SKIP", f"missing {' or '.join(auth_attrs)}"
 
     cfg = _build_provider_config(root_cfg, provider, model)
     client = LLMClient(cfg)
@@ -85,10 +89,10 @@ async def _run(args: argparse.Namespace) -> int:
     root_cfg = load_config()
     providers = [p.strip().lower() for p in args.providers.split(",") if p.strip()]
 
-    invalid = [p for p in providers if p not in PROVIDER_KEY_ATTRS]
+    invalid = [p for p in providers if p not in PROVIDER_AUTH_ATTRS]
     if invalid:
         print(f"Invalid providers: {', '.join(invalid)}")
-        print(f"Valid providers: {', '.join(PROVIDER_KEY_ATTRS.keys())}")
+        print(f"Valid providers: {', '.join(PROVIDER_AUTH_ATTRS.keys())}")
         return 2
 
     failures = 0

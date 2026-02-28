@@ -21,6 +21,7 @@ LATEST_MODEL_DEFAULTS = {
 }
 
 _MODEL_DEFAULT_SENTINELS = {"", "latest", "auto", "default"}
+DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 
 
 def _strip_inline_comment(value: str) -> str:
@@ -69,16 +70,51 @@ def _parse_deny_patterns(raw: str) -> list[str]:
     return patterns
 
 
+def _parse_bool(raw: str, default: bool = False) -> bool:
+    cleaned = _strip_inline_comment(raw or "")
+    if not cleaned:
+        return default
+    return cleaned.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _parse_multi_default_agents(raw: str) -> list[str]:
+    alias_map = {
+        "codex": "codex",
+        "codex-cli": "codex",
+        "claude": "claude",
+        "claude-code": "claude",
+    }
+
+    cleaned = _strip_inline_comment(raw or "")
+    if not cleaned:
+        return ["claude", "codex"]
+
+    agents: list[str] = []
+    for chunk in re.split(r"[,\s;]+", cleaned):
+        token = chunk.strip().lower()
+        if not token:
+            continue
+        canonical = alias_map.get(token)
+        if not canonical:
+            continue
+        if canonical not in agents:
+            agents.append(canonical)
+
+    return agents or ["claude", "codex"]
+
+
 @dataclass
 class Config:
     # LLM Provider
     llm_provider: str = ""
     llm_model: str = ""
 
-    # API Keys
+    # Provider credentials
     openai_api_key: str = ""
     xai_api_key: str = ""
     anthropic_api_key: str = ""
+    anthropic_auth_token: str = ""
+    anthropic_base_url: str = DEFAULT_ANTHROPIC_BASE_URL
     gemini_api_key: str = ""
     deepseek_api_key: str = ""
     zai_api_key: str = ""
@@ -96,8 +132,13 @@ class Config:
     context_window: int = 128000
     max_output_tokens: int = 12000
     local_agent_timeout_sec: int = 1800
+    local_agent_progress_interval_sec: int = 30
     local_agent_safety_mode: str = "off"
     local_agent_deny_patterns: list[str] = field(default_factory=list)
+    local_agent_multi_default_agents: list[str] = field(
+        default_factory=lambda: ["claude", "codex"]
+    )
+    local_agent_multi_auto_continue: bool = False
 
     # Skills
     skills_hub_base_url: str = "https://clawhub.ai"
@@ -122,15 +163,20 @@ def load_config() -> Config:
     allowed = _parse_allowed_users(allowed_raw)
 
     cfg = Config(
-        llm_provider=os.getenv("LLM_PROVIDER", ""),
-        llm_model=os.getenv("LLM_MODEL", ""),
-        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-        xai_api_key=os.getenv("XAI_API_KEY", ""),
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-        deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-        zai_api_key=os.getenv("ZAI_API_KEY", ""),
-        telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+        llm_provider=_strip_inline_comment(os.getenv("LLM_PROVIDER", "")),
+        llm_model=_strip_inline_comment(os.getenv("LLM_MODEL", "")),
+        openai_api_key=_strip_inline_comment(os.getenv("OPENAI_API_KEY", "")),
+        xai_api_key=_strip_inline_comment(os.getenv("XAI_API_KEY", "")),
+        anthropic_api_key=_strip_inline_comment(os.getenv("ANTHROPIC_API_KEY", "")),
+        anthropic_auth_token=_strip_inline_comment(os.getenv("ANTHROPIC_AUTH_TOKEN", "")),
+        anthropic_base_url=_strip_inline_comment(
+            os.getenv("ANTHROPIC_BASE_URL", DEFAULT_ANTHROPIC_BASE_URL)
+        )
+        or DEFAULT_ANTHROPIC_BASE_URL,
+        gemini_api_key=_strip_inline_comment(os.getenv("GEMINI_API_KEY", "")),
+        deepseek_api_key=_strip_inline_comment(os.getenv("DEEPSEEK_API_KEY", "")),
+        zai_api_key=_strip_inline_comment(os.getenv("ZAI_API_KEY", "")),
+        telegram_bot_token=_strip_inline_comment(os.getenv("TELEGRAM_BOT_TOKEN", "")),
         telegram_allowed_users=allowed,
         memory_db_path=os.getenv("MEMORY_DB_PATH", ".lightclaw/lightclaw.db"),
         memory_top_k=int(os.getenv("MEMORY_TOP_K", "5")),
@@ -138,22 +184,32 @@ def load_config() -> Config:
         context_window=int(os.getenv("CONTEXT_WINDOW", "128000")),
         max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "12000")),
         local_agent_timeout_sec=int(os.getenv("LOCAL_AGENT_TIMEOUT_SEC", "1800")),
+        local_agent_progress_interval_sec=int(
+            os.getenv("LOCAL_AGENT_PROGRESS_INTERVAL_SEC", "30")
+        ),
         local_agent_safety_mode=os.getenv("LOCAL_AGENT_SAFETY_MODE", "off"),
         local_agent_deny_patterns=_parse_deny_patterns(
             os.getenv("LOCAL_AGENT_DENY_PATTERNS", "")
         ),
+        local_agent_multi_default_agents=_parse_multi_default_agents(
+            os.getenv("LOCAL_AGENT_MULTI_DEFAULT_AGENTS", "claude,codex")
+        ),
+        local_agent_multi_auto_continue=_parse_bool(
+            os.getenv("LOCAL_AGENT_MULTI_AUTO_CONTINUE", "no"),
+            default=False,
+        ),
         skills_hub_base_url=os.getenv("SKILLS_HUB_BASE_URL", "https://clawhub.ai") or "https://clawhub.ai",
         skills_state_path=os.getenv("SKILLS_STATE_PATH", ".lightclaw/skills_state.json") or ".lightclaw/skills_state.json",
-        groq_api_key=os.getenv("GROQ_API_KEY", ""),
+        groq_api_key=_strip_inline_comment(os.getenv("GROQ_API_KEY", "")),
     )
 
-    # Auto-detect provider from API keys if not explicitly set
+    # Auto-detect provider from configured credentials if not explicitly set
     if not cfg.llm_provider:
         if cfg.openai_api_key:
             cfg.llm_provider = "openai"
         elif cfg.xai_api_key:
             cfg.llm_provider = "xai"
-        elif cfg.anthropic_api_key:
+        elif cfg.anthropic_api_key or cfg.anthropic_auth_token:
             cfg.llm_provider = "claude"
         elif cfg.gemini_api_key:
             cfg.llm_provider = "gemini"
@@ -166,10 +222,15 @@ def load_config() -> Config:
     cfg.llm_model = _resolve_model(cfg.llm_provider, cfg.llm_model)
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
     cfg.local_agent_timeout_sec = max(60, int(cfg.local_agent_timeout_sec))
+    cfg.local_agent_progress_interval_sec = max(
+        10, int(cfg.local_agent_progress_interval_sec)
+    )
     cfg.local_agent_safety_mode = _strip_inline_comment(
         cfg.local_agent_safety_mode or "off"
     ).lower()
     if cfg.local_agent_safety_mode not in {"off", "strict"}:
         cfg.local_agent_safety_mode = "off"
+    if not cfg.local_agent_multi_default_agents:
+        cfg.local_agent_multi_default_agents = ["claude", "codex"]
 
     return cfg

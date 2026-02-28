@@ -133,6 +133,7 @@ PROVIDER=""
 PROVIDER_NAME=""
 API_KEY_ENV=""
 DEFAULT_MODEL=""
+ANTHROPIC_BASE_URL=""
 
 while [ -z "$PROVIDER" ]; do
     ask "Enter number [1-6]:"
@@ -149,21 +150,45 @@ while [ -z "$PROVIDER" ]; do
 done
 success "Selected: $PROVIDER_NAME ($DEFAULT_MODEL)"
 
-# ── Step 2: API Key ──────────────────────────────────────────
+# ── Step 2: Provider Credentials ─────────────────────────────
 
-step "Enter your $PROVIDER_NAME API key"
-echo -e "  ${DIM}Get one from your provider's dashboard${NC}"
+step "Enter your $PROVIDER_NAME credentials"
+echo -e "  ${DIM}Get them from your provider's dashboard${NC}"
 
 API_KEY=""
+if [ "$PROVIDER" = "claude" ]; then
+    echo ""
+    echo -e "  ${BOLD}Choose Claude auth mode:${NC}"
+    echo -e "  ${BOLD}1)${NC} API key (${DIM}ANTHROPIC_API_KEY${NC})"
+    echo -e "  ${BOLD}2)${NC} Auth token / subscription (${DIM}ANTHROPIC_AUTH_TOKEN${NC})"
+    echo ""
+
+    CLAUDE_AUTH_MODE=""
+    while [ -z "$CLAUDE_AUTH_MODE" ]; do
+        ask "Enter number [1-2]:"
+        read -r auth_choice
+        case $auth_choice in
+            1) CLAUDE_AUTH_MODE="api_key"; API_KEY_ENV="ANTHROPIC_API_KEY" ;;
+            2) CLAUDE_AUTH_MODE="auth_token"; API_KEY_ENV="ANTHROPIC_AUTH_TOKEN" ;;
+            *) echo -e "  ${RED}Invalid choice. Enter 1-2.${NC}" ;;
+        esac
+    done
+fi
+
 while [ -z "$API_KEY" ]; do
     ask "$API_KEY_ENV:"
     read -rs API_KEY  # -s hides input (it's a secret)
     echo ""
     if [ -z "$API_KEY" ]; then
-        echo -e "  ${RED}API key cannot be empty.${NC}"
+        echo -e "  ${RED}Credential cannot be empty.${NC}"
     fi
 done
-success "API key saved (hidden)"
+success "Credentials saved (hidden)"
+
+if [ "$PROVIDER" = "claude" ]; then
+    ask "Anthropic base URL override (optional, Enter = default https://api.anthropic.com):"
+    read -r ANTHROPIC_BASE_URL
+fi
 
 # ── Step 3: Custom model (optional) ──────────────────────────
 
@@ -243,6 +268,7 @@ cat > .env << EOF
 LLM_PROVIDER=$PROVIDER
 LLM_MODEL=$MODEL
 $API_KEY_ENV=$API_KEY
+ANTHROPIC_BASE_URL=$ANTHROPIC_BASE_URL
 
 # Telegram
 TELEGRAM_BOT_TOKEN=$BOT_TOKEN

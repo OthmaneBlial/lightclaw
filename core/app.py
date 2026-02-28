@@ -53,8 +53,20 @@ def main():
     log.info(f"   Max output: {config.max_output_tokens:,} tokens")
     log.info(f"   Local agent timeout: {config.local_agent_timeout_sec}s")
     log.info(
+        "   Local agent progress summary interval: "
+        f"{config.local_agent_progress_interval_sec}s"
+    )
+    log.info(
         f"   Delegation safety: {config.local_agent_safety_mode} "
         f"({len(config.local_agent_deny_patterns)} custom pattern(s))"
+    )
+    log.info(
+        "   Multi-agent defaults: "
+        + ", ".join(config.local_agent_multi_default_agents)
+    )
+    log.info(
+        "   Multi-agent auto-continue: "
+        + ("yes" if config.local_agent_multi_auto_continue else "no")
     )
     if config.groq_api_key:
         log.info("   Voice: ✅ Groq Whisper enabled")
@@ -105,6 +117,7 @@ def main():
     app.add_handler(CommandHandler("recall", bot.cmd_recall))
     app.add_handler(CommandHandler("skills", bot.cmd_skills))
     app.add_handler(CommandHandler("agent", bot.cmd_agent))
+    app.add_handler(CommandHandler("mode", bot.cmd_mode))
     app.add_handler(CommandHandler("heartbeat", bot.cmd_heartbeat))
     app.add_handler(CommandHandler("cron", bot.cmd_cron))
     app.add_handler(CommandHandler("show", bot.cmd_show))

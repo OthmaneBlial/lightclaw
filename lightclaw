@@ -29,13 +29,13 @@ RUNTIME_DIRNAME = ".lightclaw"
 RUNTIME_WORKSPACE = f"{RUNTIME_DIRNAME}/workspace"
 RUNTIME_DB = f"{RUNTIME_DIRNAME}/lightclaw.db"
 TEMPLATE_FILES = ("IDENTITY.md", "SOUL.md", "USER.md", "HEARTBEAT.md")
-RUN_PROVIDER_KEY_ENV = {
-    "openai": "OPENAI_API_KEY",
-    "xai": "XAI_API_KEY",
-    "claude": "ANTHROPIC_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-    "zai": "ZAI_API_KEY",
+RUN_PROVIDER_AUTH_ENVS = {
+    "openai": ("OPENAI_API_KEY",),
+    "xai": ("XAI_API_KEY",),
+    "claude": ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"),
+    "gemini": ("GEMINI_API_KEY",),
+    "deepseek": ("DEEPSEEK_API_KEY",),
+    "zai": ("ZAI_API_KEY",),
 }
 RUN_PROVIDER_MODELS = {
     "openai": ["gpt-5.2", "gpt-5.2-mini"],
@@ -86,8 +86,8 @@ def _confirm_danger_ack() -> bool:
 
 def _configured_run_providers() -> list[str]:
     configured: list[str] = []
-    for provider, env_key in RUN_PROVIDER_KEY_ENV.items():
-        if os.getenv(env_key, "").strip():
+    for provider, env_keys in RUN_PROVIDER_AUTH_ENVS.items():
+        if any(os.getenv(key, "").strip() for key in env_keys):
             configured.append(provider)
     return configured
 
@@ -178,6 +178,9 @@ def _patched_env_example() -> str:
             "LLM_PROVIDER=openai\n"
             "LLM_MODEL=latest\n"
             "OPENAI_API_KEY=\n"
+            "ANTHROPIC_API_KEY=\n"
+            "ANTHROPIC_AUTH_TOKEN=\n"
+            "ANTHROPIC_BASE_URL=\n"
             "DEEPSEEK_API_KEY=\n"
             "TELEGRAM_BOT_TOKEN=\n"
             f"MEMORY_DB_PATH={RUNTIME_DB}\n"
@@ -369,18 +372,20 @@ def _get_env_value(content: str, key: str) -> str:
     return re.sub(r"\s+#.*$", "", value).strip()
 
 
-def _clear_other_provider_keys(content: str, keep_key: str) -> str:
+def _clear_other_provider_keys(content: str, keep_keys: set[str] | None = None) -> str:
+    keep_keys = keep_keys or set()
     provider_keys = (
         "OPENAI_API_KEY",
         "XAI_API_KEY",
         "ANTHROPIC_API_KEY",
+        "ANTHROPIC_AUTH_TOKEN",
         "GEMINI_API_KEY",
         "DEEPSEEK_API_KEY",
         "ZAI_API_KEY",
     )
     updated = content
     for key in provider_keys:
-        if key == keep_key:
+        if key in keep_keys:
             continue
         updated = _set_env_value(updated, key, "")
     return updated
@@ -412,17 +417,17 @@ def _configure_env_interactive(
             return False
 
     providers = [
-        ("openai", "OpenAI", "OPENAI_API_KEY", "gpt-5.2"),
-        ("xai", "xAI", "XAI_API_KEY", "grok-4-latest"),
-        ("claude", "Anthropic", "ANTHROPIC_API_KEY", "claude-opus-4-5"),
-        ("gemini", "Google", "GEMINI_API_KEY", "gemini-3-flash-preview"),
-        ("deepseek", "DeepSeek", "DEEPSEEK_API_KEY", "deepseek-chat"),
-        ("zai", "Z-AI", "ZAI_API_KEY", "glm-5"),
+        ("openai", "OpenAI", "gpt-5.2"),
+        ("xai", "xAI", "grok-4-latest"),
+        ("claude", "Anthropic", "claude-opus-4-5"),
+        ("gemini", "Google", "gemini-3-flash-preview"),
+        ("deepseek", "DeepSeek", "deepseek-chat"),
+        ("zai", "Z-AI", "glm-5"),
     ]
 
     print("")
     print("Choose provider:")
-    for idx, (_, name, _, model) in enumerate(providers, start=1):
+    for idx, (_, name, model) in enumerate(providers, start=1):
         print(f"  {idx}) {name} ({model})")
 
     content = env_path.read_text(encoding="utf-8")
@@ -435,7 +440,7 @@ def _configure_env_interactive(
 
     existing_provider = existing_value("LLM_PROVIDER")
     default_provider_idx = None
-    for idx, (provider_id, _, _, _) in enumerate(providers, start=1):
+    for idx, (provider_id, _, _) in enumerate(providers, start=1):
         if provider_id == existing_provider:
             default_provider_idx = idx
             break
@@ -460,7 +465,7 @@ def _configure_env_interactive(
         else:
             print(f"Invalid choice. Enter 1-{len(providers)}.")
 
-    provider_id, provider_name, key_env, default_model = selected
+    provider_id, provider_name, default_model = selected
     existing_model = existing_value("LLM_MODEL")
     model_default = (
         existing_model
@@ -469,10 +474,45 @@ def _configure_env_interactive(
     )
     model = input(f"Model [{model_default}]: ").strip() or model_default
 
-    existing_key = existing_value(key_env)
-    api_key = _read_secret(f"{key_env} (leave blank to keep current): ")
-    if not api_key:
-        api_key = existing_key
+    api_key = ""
+    anthropic_auth_token = ""
+    anthropic_base_url = existing_value("ANTHROPIC_BASE_URL")
+    if provider_id == "claude":
+        existing_api_key = existing_value("ANTHROPIC_API_KEY")
+        existing_auth_token = existing_value("ANTHROPIC_AUTH_TOKEN")
+        print("")
+        print("Claude auth mode:")
+        print("  1) API key (ANTHROPIC_API_KEY)")
+        print("  2) Auth token / subscription (ANTHROPIC_AUTH_TOKEN)")
+        default_auth_idx = 2 if existing_auth_token else 1
+        auth_idx = _pick_number(
+            f"Auth mode [{default_auth_idx}]: ",
+            max_value=2,
+            default_value=default_auth_idx,
+        )
+        if auth_idx == 2:
+            anthropic_auth_token = _read_secret(
+                "ANTHROPIC_AUTH_TOKEN (leave blank to keep current): "
+            )
+            if not anthropic_auth_token:
+                anthropic_auth_token = existing_auth_token
+            api_key = ""
+        else:
+            api_key = _read_secret("ANTHROPIC_API_KEY (leave blank to keep current): ")
+            if not api_key:
+                api_key = existing_api_key
+            anthropic_auth_token = ""
+
+        existing_base_url = existing_value("ANTHROPIC_BASE_URL")
+        default_base_url = existing_base_url or "https://api.anthropic.com"
+        base_url_raw = input(f"ANTHROPIC_BASE_URL [{default_base_url}]: ").strip()
+        anthropic_base_url = base_url_raw or existing_base_url
+    else:
+        key_env = RUN_PROVIDER_AUTH_ENVS[provider_id][0]
+        existing_key = existing_value(key_env)
+        api_key = _read_secret(f"{key_env} (leave blank to keep current): ")
+        if not api_key:
+            api_key = existing_key
 
     existing_telegram_token = existing_value("TELEGRAM_BOT_TOKEN")
     telegram_token = input("TELEGRAM_BOT_TOKEN (leave blank to keep current): ").strip()
@@ -488,8 +528,18 @@ def _configure_env_interactive(
 
     content = _set_env_value(content, "LLM_PROVIDER", provider_id)
     content = _set_env_value(content, "LLM_MODEL", model)
-    content = _set_env_value(content, key_env, api_key)
-    content = _clear_other_provider_keys(content, keep_key=key_env)
+    if provider_id == "claude":
+        content = _set_env_value(content, "ANTHROPIC_API_KEY", api_key)
+        content = _set_env_value(content, "ANTHROPIC_AUTH_TOKEN", anthropic_auth_token)
+        content = _set_env_value(content, "ANTHROPIC_BASE_URL", anthropic_base_url)
+        content = _clear_other_provider_keys(
+            content,
+            keep_keys={"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"},
+        )
+    else:
+        key_env = RUN_PROVIDER_AUTH_ENVS[provider_id][0]
+        content = _set_env_value(content, key_env, api_key)
+        content = _clear_other_provider_keys(content, keep_keys={key_env})
     content = _set_env_value(content, "TELEGRAM_BOT_TOKEN", telegram_token)
     content = _set_env_value(content, "TELEGRAM_ALLOWED_USERS", allowed_users)
 
@@ -585,7 +635,7 @@ def cmd_onboard(args: argparse.Namespace) -> int:
     if configured:
         print("1. Review .env if needed.")
     else:
-        print("1. Edit .env and set TELEGRAM_BOT_TOKEN + provider API key.")
+        print("1. Edit .env and set TELEGRAM_BOT_TOKEN + provider credentials.")
     print("2. Run: lightclaw run")
     return 0
 
@@ -615,16 +665,17 @@ def _prepare_runtime_environment(
     provider_override = (provider_override_raw or "").strip().lower()
     model_override = (model_override_raw or "").strip()
 
-    if provider_override and provider_override not in RUN_PROVIDER_KEY_ENV:
-        supported = ", ".join(RUN_PROVIDER_KEY_ENV.keys())
+    if provider_override and provider_override not in RUN_PROVIDER_AUTH_ENVS:
+        supported = ", ".join(RUN_PROVIDER_AUTH_ENVS.keys())
         print(f"Unsupported provider '{provider_override}'. Supported: {supported}")
         return 2
 
     if provider_override:
-        required_env_key = RUN_PROVIDER_KEY_ENV[provider_override]
-        if not os.getenv(required_env_key, "").strip():
+        required_env_keys = RUN_PROVIDER_AUTH_ENVS[provider_override]
+        if not any(os.getenv(key, "").strip() for key in required_env_keys):
+            required_hint = " or ".join(required_env_keys)
             print(
-                f"Provider '{provider_override}' requires {required_env_key} in .env. "
+                f"Provider '{provider_override}' requires {required_hint} in .env. "
                 "Set it first, then retry."
             )
             return 2
@@ -709,7 +760,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
     workspace.mkdir(parents=True, exist_ok=True)
 
     if not config.llm_provider:
-        print("No provider configured. Set LLM_PROVIDER + API key in .env.")
+        print("No provider configured. Set LLM_PROVIDER + provider credentials in .env.")
         return 2
 
     bot = LightClawBot(config)
@@ -717,11 +768,13 @@ def cmd_chat(args: argparse.Namespace) -> int:
     cli_user_id = (
         (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
     )
+    bot._set_file_mode(session_id, "chat")
 
     print("")
     print(f"🦞 LightClaw terminal chat")
     print(f"Provider: {config.llm_provider} ({config.llm_model})")
     print(f"Session: {session_id}")
+    print(f"File mode: {bot._get_file_mode(session_id)} (use /mode edit to enable writes)")
     print("Type /help for commands, /exit to quit.")
     print("")
 
@@ -746,10 +799,17 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
         summary = bot._get_session_summary(session_id)
         skills_text = await asyncio.to_thread(bot.skills.prompt_context, session_id)
+        file_mode = bot._get_file_mode(session_id)
 
         system_prompt = build_system_prompt(
             config, bot.personality, memories_text, summary, skills_text
         )
+        if file_mode != "edit":
+            system_prompt += (
+                "\n\n## Chat Mode Constraint\n"
+                "You are in chat mode (read-only). Do not output file-writing instructions or fenced code blocks "
+                "intended for saving to files. Give a direct conversational answer."
+            )
         messages = list(recent)
         messages.append({"role": "user", "content": user_text})
 
@@ -782,8 +842,26 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
         bot.memory.ingest("user", user_text, session_id)
 
-        file_ops, cleaned_response = await bot._process_file_blocks(response)
-        repair_ops = await bot._repair_incomplete_html(session_id, user_text, file_ops)
+        requested_file_intent = bot._is_file_intent(user_text)
+        allow_file_writes = file_mode == "edit" and requested_file_intent
+        mode_hint = ""
+        if requested_file_intent and file_mode != "edit":
+            mode_hint = (
+                "ℹ️ File writes are currently disabled (`/mode chat`). "
+                "Use `/mode edit` to enable workspace changes."
+            )
+
+        file_ops, cleaned_response = await bot._process_file_blocks(
+            response,
+            allow_file_writes=allow_file_writes,
+        )
+        if file_mode != "edit":
+            cleaned_response = bot._strip_fenced_code_for_chat(cleaned_response)
+        repair_ops = (
+            await bot._repair_incomplete_html(session_id, user_text, file_ops)
+            if allow_file_writes
+            else []
+        )
         if repair_ops:
             repaired_paths = {op.path for op in repair_ops if op.action != "error"}
             if repaired_paths:
@@ -812,6 +890,8 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     workspace_label=workspace_label,
                 )
             )
+        if mode_hint and not file_ops:
+            response_parts.append(mode_hint)
         final_text = "\n\n".join(part for part in response_parts if part).strip() or "Done."
 
         memory_text = visible_response if file_ops else cleaned_response
@@ -890,6 +970,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             "recall": bot.cmd_recall,
             "skills": bot.cmd_skills,
             "agent": bot.cmd_agent,
+            "mode": bot.cmd_mode,
             "heartbeat": bot.cmd_heartbeat,
             "cron": bot.cmd_cron,
             "show": bot.cmd_show,
@@ -918,6 +999,31 @@ def cmd_chat(args: argparse.Namespace) -> int:
             return 0
 
         if not user_text:
+            continue
+
+        pending_multi = bot._get_pending_multi_plan(session_id)
+        if pending_multi and not user_text.startswith("/"):
+            decision = bot._classify_pending_multi_reply(user_text)
+            if decision == "confirm":
+                try:
+                    should_exit = asyncio.run(_run_terminal_command("/agent multi confirm"))
+                except Exception as e:
+                    print(f"bot> ⚠️ Command failed: {e}\n")
+                    should_exit = False
+                if should_exit:
+                    return 0
+                continue
+            if decision == "cancel":
+                try:
+                    should_exit = asyncio.run(_run_terminal_command("/agent multi cancel"))
+                except Exception as e:
+                    print(f"bot> ⚠️ Command failed: {e}\n")
+                    should_exit = False
+                if should_exit:
+                    return 0
+                continue
+            reminder = bot._render_pending_multi_reminder(session_id)
+            print(f"bot> {bot._strip_html_for_log(reminder)}\n")
             continue
 
         if user_text.startswith("/"):
@@ -966,7 +1072,7 @@ def build_parser() -> argparse.ArgumentParser:
         description=(
             "Run LightClaw.\n"
             "If --provider/--model are omitted and a TTY is attached, "
-            "you can choose provider/model interactively from configured API keys."
+            "you can choose provider/model interactively from configured credentials."
         ),
     )
     run.add_argument("--home", help="Runtime home directory (default: current directory)")
