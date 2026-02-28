@@ -60,6 +60,14 @@ def main():
         f"   Delegation safety: {config.local_agent_safety_mode} "
         f"({len(config.local_agent_deny_patterns)} custom pattern(s))"
     )
+    log.info(
+        "   Multi-agent defaults: "
+        + ", ".join(config.local_agent_multi_default_agents)
+    )
+    log.info(
+        "   Multi-agent auto-continue: "
+        + ("yes" if config.local_agent_multi_auto_continue else "no")
+    )
     if config.groq_api_key:
         log.info("   Voice: ✅ Groq Whisper enabled")
     else:

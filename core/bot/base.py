@@ -68,6 +68,9 @@ class BotBaseMixin:
         self._cron_last_run_at: float = 0.0
         self._cron_task = None
         self._cron_lock = asyncio.Lock()
+        # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
+        self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
+        self._pending_multi_plan_ttl_sec: int = 15 * 60
         # Compiled strict-mode deny patterns for delegated local-agent tasks.
         self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
 
@@ -278,6 +281,39 @@ class BotBaseMixin:
         self._file_mode_by_session[session_id] = target
         return target
 
+    def _set_pending_multi_plan(
+        self,
+        session_id: str,
+        payload: dict[str, object],
+        ttl_sec: int | None = None,
+    ) -> dict[str, object]:
+        ttl = max(30, int(ttl_sec or self._pending_multi_plan_ttl_sec))
+        now = time.time()
+        item = dict(payload or {})
+        item["created_at"] = now
+        item["expires_at"] = now + ttl
+        self._pending_multi_plan_by_session[session_id] = item
+        return item
+
+    def _get_pending_multi_plan(self, session_id: str) -> dict[str, object] | None:
+        entry = self._pending_multi_plan_by_session.get(session_id)
+        if not entry:
+            return None
+        expires_at = float(entry.get("expires_at", 0.0) or 0.0)
+        if expires_at <= 0 or time.time() > expires_at:
+            self._pending_multi_plan_by_session.pop(session_id, None)
+            return None
+        return entry
+
+    def _pending_multi_plan_remaining_sec(self, session_id: str) -> int:
+        entry = self._get_pending_multi_plan(session_id)
+        if not entry:
+            return 0
+        expires_at = float(entry.get("expires_at", 0.0) or 0.0)
+        return max(0, int(expires_at - time.time()))
+
+    def _clear_pending_multi_plan(self, session_id: str) -> dict[str, object] | None:
+        return self._pending_multi_plan_by_session.pop(session_id, None)
 
     async def _reply_logged(
         self,

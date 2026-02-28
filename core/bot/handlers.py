@@ -35,6 +35,8 @@ class BotHandlersMixin:
         installed_skills = self.skills.list_skills()
         active_agent = self._agent_mode_by_session.get(session_id, "none")
         file_mode = self._get_file_mode(session_id)
+        pending_multi = self._get_pending_multi_plan(session_id)
+        multi_defaults = ", ".join(self.config.local_agent_multi_default_agents)
 
         voice_status = "✅ Groq Whisper" if self.config.groq_api_key else "❌ No GROQ_API_KEY"
 
@@ -53,6 +55,9 @@ class BotHandlersMixin:
             f"<b>File mode:</b> {_escape_html(file_mode)}\n"
             f"<b>Delegation progress interval:</b> {self.config.local_agent_progress_interval_sec}s\n"
             f"<b>Delegation safety:</b> {_escape_html(self.config.local_agent_safety_mode)}\n"
+            f"<b>Multi defaults:</b> {_escape_html(multi_defaults)}\n"
+            f"<b>Multi auto-continue:</b> {'yes' if self.config.local_agent_multi_auto_continue else 'no'}\n"
+            f"<b>Pending multi plan:</b> {'yes' if pending_multi else 'no'}\n"
             f"<b>Voice:</b> {voice_status}",
             parse_mode=ParseMode.HTML,
         )
@@ -163,6 +168,23 @@ class BotHandlersMixin:
         self._heartbeat_last_chat_id = session_id
 
         self._log_user_message(session_id, user_text)
+
+        pending_multi = self._get_pending_multi_plan(session_id)
+        if pending_multi:
+            decision = self._classify_pending_multi_reply(user_text)
+            if decision == "confirm":
+                await self._execute_pending_multi_plan(update, session_id)
+                return
+            if decision == "cancel":
+                self._clear_pending_multi_plan(session_id)
+                await self._reply_logged(update, "Cancelled pending multi-agent plan.")
+                return
+            await self._reply_logged(
+                update,
+                self._render_pending_multi_reminder(session_id),
+                parse_mode=ParseMode.HTML,
+            )
+            return
 
         # 1. Send typing + placeholder
         placeholder = None

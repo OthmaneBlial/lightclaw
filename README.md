@@ -214,6 +214,8 @@ MAX_OUTPUT_TOKENS=12000
 LIGHTCLAW_DANGER_ACK=            # optional: set to yes to bypass onboarding safety confirmation
 LOCAL_AGENT_TIMEOUT_SEC=1800
 LOCAL_AGENT_PROGRESS_INTERVAL_SEC=30  # live summarized delegation updates cadence (seconds, min 10)
+LOCAL_AGENT_MULTI_DEFAULT_AGENTS=claude,codex  # default priority for /agent multi auto mode
+LOCAL_AGENT_MULTI_AUTO_CONTINUE=no  # yes|no (skip confirmation when yes)
 
 # Optional delegated local-agent safety policy
 LOCAL_AGENT_SAFETY_MODE=off
@@ -318,7 +320,12 @@ Use local coding agents for bigger project work while keeping LightClaw as the s
 /agent codex Build a complete SaaS landing page with pricing + FAQ
 /agent run Build a full React dashboard in this workspace
 /agent run claude Add auth + routing to the current project
+/agent multi Build a full-stack Todo app
+/agent multi @claude @codex Build a full-stack Todo app
 /agent multi --agent backend=codex --agent frontend=claude --agent docs=codex Build a full-stack Todo app with docs
+/agent multi confirm
+/agent multi edit Make docs depend on backend/frontend completion
+/agent multi cancel
 /agent off
 ```
 
@@ -328,7 +335,11 @@ You should authenticate these CLIs once on the host machine before using delegat
 How it behaves:
 - `use` enables per-chat delegation mode (normal text messages are routed to that local agent).
 - `run` executes one explicit delegated task.
-- `multi` runs multiple explicitly-defined workers in parallel (`--agent label=agent` repeated).
+- `multi` auto-plans a worker roster from the goal when no explicit roster is provided.
+- `multi` accepts `@agent` tags to prefer specific agents in no-flag mode.
+- `multi` still supports explicit worker rosters via repeated `--agent label=agent`.
+- Multi plans are previewed first and require confirmation (`confirm` / `edit` / `cancel`) unless auto-continue is enabled.
+- While a plan is pending, free-text `yes/no` can confirm/cancel.
 - Every delegated run creates a new goal-named folder under `.lightclaw/workspace/` and runs inside it.
 - In `multi`, all workers share the same new goal folder (isolated from previous runs).
 - In `multi`, LightClaw auto-generates `AGENTS.md` in that goal folder with worker contracts, dependencies, and handoff expectations.
@@ -343,6 +354,8 @@ How it behaves:
 Optional delegation safety policy:
 - `LOCAL_AGENT_SAFETY_MODE=off|strict`
 - `LOCAL_AGENT_DENY_PATTERNS=<regex1,regex2,...>`
+- `LOCAL_AGENT_MULTI_DEFAULT_AGENTS=<agent1,agent2,...>`
+- `LOCAL_AGENT_MULTI_AUTO_CONTINUE=yes|no`
 - In `strict` mode, delegated tasks are checked before CLI dispatch and blocked on match.
 - Scope today: this guard is delegation-only; normal non-delegated chat flow is unchanged.
 
@@ -408,7 +421,10 @@ new text
 | `/skills` | List/search/install/activate/create/remove skills |
 | `/agent` | Delegate tasks to local coding agents (`codex`, `claude`, `opencode`) |
 | `/agent doctor` | Run local delegated-agent install/version/auth diagnostics |
-| `/agent multi --agent <label=agent> ... <goal>` | Run multiple delegated workers in parallel with live tagged progress |
+| `/agent multi <goal>` | Auto-plan a multi-agent run and wait for confirmation |
+| `/agent multi @<agent> ... <goal>` | Auto-plan with preferred agent tags |
+| `/agent multi --agent <label=agent> ... <goal>` | Run with explicit worker roster |
+| `/agent multi confirm\|edit\|cancel` | Confirm, regenerate, or cancel a pending multi plan |
 | `/heartbeat` | HEARTBEAT scheduler control (`show/on/off`) |
 | `/cron` | Minimal scheduler control (`add/list/remove`) |
 | `/clear` | Reset conversation history for the current chat |
