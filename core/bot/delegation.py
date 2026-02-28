@@ -2186,16 +2186,52 @@ class BotDelegationMixin:
                 # Progress updates are best-effort and must not fail delegation.
                 pass
 
+        async def _iter_stream_lines(stream):
+            # Avoid StreamReader.readline() hard-limit failures on very long JSON lines
+            # (e.g. Claude stream-json events with large content blocks).
+            pending = b""
+            while True:
+                chunk = await stream.read(65536)
+                if not chunk:
+                    break
+                pending += chunk
+
+                while True:
+                    newline_idx = pending.find(b"\n")
+                    if newline_idx < 0:
+                        break
+                    raw_line = pending[:newline_idx]
+                    pending = pending[newline_idx + 1 :]
+                    if raw_line.endswith(b"\r"):
+                        raw_line = raw_line[:-1]
+                    yield raw_line.decode("utf-8", errors="replace")
+
+            if pending:
+                if pending.endswith(b"\r"):
+                    pending = pending[:-1]
+                yield pending.decode("utf-8", errors="replace")
+
+        parse_warning_emitted: set[str] = set()
+
         async def read_stream(stream, collector: list[str], stream_name: str):
             if stream is None:
                 return
-            while True:
-                chunk = await stream.readline()
-                if not chunk:
-                    break
-                line = chunk.decode("utf-8", errors="replace").rstrip("\r\n")
+            async for line in _iter_stream_lines(stream):
                 collector.append(line)
-                self._ingest_progress_event(agent, line, state, stream_name)
+                try:
+                    self._ingest_progress_event(agent, line, state, stream_name)
+                except Exception as e:
+                    # Progress parsing is best-effort; never crash the worker on it.
+                    state["errors"] = int(state.get("errors", 0)) + 1
+                    state["last_activity"] = self._short_progress_text(
+                        f"progress parser warning: {e}",
+                        max_chars=220,
+                    )
+                    if stream_name not in parse_warning_emitted:
+                        parse_warning_emitted.add(stream_name)
+                        log.warning(
+                            f"Delegation progress parse warning for {agent} {stream_name}: {e}"
+                        )
 
         async def heartbeat_loop():
             while not heartbeat_stop.is_set():
