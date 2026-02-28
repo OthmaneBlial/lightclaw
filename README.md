@@ -164,7 +164,7 @@ git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash 
 
 The interactive setup wizard will walk you through:
 1. Choosing your AI provider (OpenAI, xAI, Claude, Gemini, DeepSeek, Z-AI)
-2. Entering your API key
+2. Entering your provider credentials
 3. Creating a Telegram bot via @BotFather (step-by-step guide)
 4. Optional voice transcription setup
 5. Auto-start your bot 🚀
@@ -191,13 +191,16 @@ This creates:
 - `.lightclaw/skills/` (installed skills root)
 - `.lightclaw/lightclaw.db` (runtime DB path)
 
-Then edit `.env` with your API key and Telegram bot token:
+Then edit `.env` with your provider credentials and Telegram bot token:
 
 ```env
 # Choose your provider: openai | xai | claude | gemini | deepseek | zai
 LLM_PROVIDER=openai
 LLM_MODEL=latest
 OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=
+ANTHROPIC_AUTH_TOKEN=      # optional alternative for Claude subscription-style auth
+ANTHROPIC_BASE_URL=        # optional override; default: https://api.anthropic.com
 DEEPSEEK_API_KEY=
 
 # Get a token from @BotFather on Telegram
@@ -276,6 +279,7 @@ If `lightclaw` is not on your `PATH`, run `./lightclaw onboard` and `./lightclaw
 | **Z-AI** | `openai` (base_url override) | `LLM_PROVIDER=zai` | `glm-5`, `glm-4.7` |
 
 > **Pro tip:** If `LLM_MODEL` is empty, `latest`, `auto`, or `default`, LightClaw picks the latest per-provider default automatically.
+> For Claude, set either `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN`. `ANTHROPIC_BASE_URL` is optional.
 
 Quick provider sanity test:
 
@@ -283,7 +287,7 @@ Quick provider sanity test:
 python scripts/provider_smoke_test.py
 ```
 
-It sends a tiny prompt to each provider with a configured API key and reports `OK`/`FAIL`/`SKIP`.
+It sends a tiny prompt to each provider with configured credentials and reports `OK`/`FAIL`/`SKIP`.
 
 ## Skills (ClawHub + Local)
 
@@ -531,7 +535,7 @@ The point is: **you shouldn't need permission from a framework to add a feature*
 
 - Python 3.10+
 - A Telegram bot token ([get one from @BotFather](https://t.me/BotFather))
-- An API key from any supported LLM provider
+- Credentials from any supported LLM provider
 - (Optional) Groq API key for voice transcription
 
 ## License

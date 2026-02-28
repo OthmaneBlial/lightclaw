@@ -9,6 +9,7 @@ import logging
 from config import Config
 
 log = logging.getLogger("lightclaw.providers")
+OFFICIAL_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 
 
 class LLMClient:
@@ -33,6 +34,10 @@ class LLMClient:
             # DeepSeek's chat endpoint commonly rejects larger max_tokens values.
             self.max_output_tokens = 4096
         self._client = None
+        self._claude_api_key = ""
+        self._claude_auth_token = ""
+        self._claude_base_url = OFFICIAL_ANTHROPIC_BASE_URL
+        self._claude_custom_base = False
 
         self._init_client()
         log.info(f"LLM output budget: {self.max_output_tokens} tokens")
@@ -78,12 +83,36 @@ class LLMClient:
         elif self.provider_name == "claude":
             import anthropic
 
-            if not self.config.anthropic_api_key:
-                raise ValueError("ANTHROPIC_API_KEY is required when LLM_PROVIDER=claude")
-            self._client = anthropic.Anthropic(
-                api_key=self.config.anthropic_api_key,
-            )
+            api_key = (self.config.anthropic_api_key or "").strip()
+            auth_token = (self.config.anthropic_auth_token or "").strip()
+            base_url = (self.config.anthropic_base_url or "").strip()
+            normalized_base = base_url.rstrip("/")
+
+            if not api_key and not auth_token:
+                raise ValueError(
+                    "ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN is required when LLM_PROVIDER=claude"
+                )
+
+            auth_mode = "api_key"
+            kwargs: dict[str, object] = {"base_url": base_url}
+            if auth_token:
+                if api_key:
+                    log.warning(
+                        "Both ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN are set; "
+                        "preferring ANTHROPIC_AUTH_TOKEN."
+                    )
+                kwargs["auth_token"] = auth_token
+                auth_mode = "auth_token"
+            else:
+                kwargs["api_key"] = api_key
+
+            self._claude_api_key = api_key
+            self._claude_auth_token = auth_token
+            self._claude_base_url = normalized_base
+            self._claude_custom_base = normalized_base != OFFICIAL_ANTHROPIC_BASE_URL
+            self._client = anthropic.Anthropic(**kwargs)
             log.info(f"Initialized Claude provider (model: {self.model})")
+            log.info(f"Claude auth mode: {auth_mode}")
 
         elif self.provider_name == "gemini":
             import google.generativeai as genai
@@ -225,16 +254,44 @@ class LLMClient:
         if system_prompt:
             kwargs["system"] = system_prompt
 
-        try:
-            response = await asyncio.to_thread(self._client.messages.create, **kwargs)
-        except Exception as e:
-            err_text = str(e).lower()
-            if output_tokens > 4096 and "max_tokens" in err_text:
-                log.warning(f"claude rejected max_tokens={output_tokens}; retrying with 4096")
-                kwargs["max_tokens"] = 4096
+        if self._claude_custom_base:
+            return await self._chat_claude_http_compat(
+                messages=api_messages,
+                system_prompt=system_prompt,
+                max_tokens=output_tokens,
+            )
+
+        connection_markers = (
+            "connection error",
+            "timed out",
+            "timeout",
+            "network",
+            "temporary failure",
+            "name or service not known",
+        )
+
+        last_error: Exception | None = None
+        response = None
+        for attempt in range(3):
+            try:
                 response = await asyncio.to_thread(self._client.messages.create, **kwargs)
-            else:
-                raise
+                break
+            except Exception as e:
+                last_error = e
+                err_text = str(e).lower()
+                if output_tokens > 4096 and "max_tokens" in err_text:
+                    log.warning(f"claude rejected max_tokens={output_tokens}; retrying with 4096")
+                    kwargs["max_tokens"] = 4096
+                    output_tokens = 4096
+                    continue
+
+                if any(marker in err_text for marker in connection_markers) and attempt < 2:
+                    await asyncio.sleep(0.35 * (attempt + 1))
+                    continue
+                break
+
+        if response is None:
+            raise last_error if last_error is not None else RuntimeError("Claude request failed")
 
         # Extract text from content blocks
         text_parts = []
@@ -242,6 +299,77 @@ class LLMClient:
             if hasattr(block, "text"):
                 text_parts.append(block.text)
         return "\n".join(text_parts)
+
+    async def _chat_claude_http_compat(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        max_tokens: int,
+    ) -> str:
+        """Fallback for Anthropic-compatible proxies that intermittently fail with SDK transport."""
+        import httpx
+
+        url = f"{self._claude_base_url}/v1/messages"
+        headers = {
+            "content-type": "application/json",
+            "anthropic-version": "2023-06-01",
+        }
+        if self._claude_auth_token:
+            headers["authorization"] = f"Bearer {self._claude_auth_token}"
+        elif self._claude_api_key:
+            headers["x-api-key"] = self._claude_api_key
+        else:
+            raise RuntimeError("Missing Claude credentials for HTTP compatibility fallback.")
+
+        payload: dict[str, object] = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if system_prompt:
+            payload["system"] = system_prompt
+
+        def _post() -> tuple[int, str]:
+            with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+                resp = client.post(url, headers=headers, json=payload)
+            return resp.status_code, resp.text
+
+        status_code = 0
+        body_text = ""
+        for attempt in range(3):
+            try:
+                status_code, body_text = await asyncio.to_thread(_post)
+                break
+            except Exception as e:
+                if attempt < 2:
+                    await asyncio.sleep(0.35 * (attempt + 1))
+                    continue
+                raise RuntimeError(f"Claude compatibility HTTP connection error: {e}") from e
+        if status_code >= 400:
+            detail = (body_text or "").strip().replace("\n", " ")[:240]
+            raise RuntimeError(
+                f"Claude compatibility HTTP error {status_code}: {detail or 'empty response'}"
+            )
+
+        try:
+            import json
+
+            data = json.loads(body_text)
+        except Exception as e:
+            raise RuntimeError(f"Claude compatibility HTTP parse error: {e}") from e
+
+        content = data.get("content")
+        if not isinstance(content, list):
+            raise RuntimeError("Claude compatibility HTTP response missing content blocks.")
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+        if parts:
+            return "\n".join(parts)
+        return ""
 
     # ── Gemini ────────────────────────────────────────────────
 

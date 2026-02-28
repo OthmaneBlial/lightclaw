@@ -21,6 +21,7 @@ LATEST_MODEL_DEFAULTS = {
 }
 
 _MODEL_DEFAULT_SENTINELS = {"", "latest", "auto", "default"}
+DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 
 
 def _strip_inline_comment(value: str) -> str:
@@ -75,10 +76,12 @@ class Config:
     llm_provider: str = ""
     llm_model: str = ""
 
-    # API Keys
+    # Provider credentials
     openai_api_key: str = ""
     xai_api_key: str = ""
     anthropic_api_key: str = ""
+    anthropic_auth_token: str = ""
+    anthropic_base_url: str = DEFAULT_ANTHROPIC_BASE_URL
     gemini_api_key: str = ""
     deepseek_api_key: str = ""
     zai_api_key: str = ""
@@ -128,6 +131,11 @@ def load_config() -> Config:
         openai_api_key=os.getenv("OPENAI_API_KEY", ""),
         xai_api_key=os.getenv("XAI_API_KEY", ""),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+        anthropic_auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN", ""),
+        anthropic_base_url=_strip_inline_comment(
+            os.getenv("ANTHROPIC_BASE_URL", DEFAULT_ANTHROPIC_BASE_URL)
+        )
+        or DEFAULT_ANTHROPIC_BASE_URL,
         gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         zai_api_key=os.getenv("ZAI_API_KEY", ""),
@@ -151,13 +159,13 @@ def load_config() -> Config:
         groq_api_key=os.getenv("GROQ_API_KEY", ""),
     )
 
-    # Auto-detect provider from API keys if not explicitly set
+    # Auto-detect provider from configured credentials if not explicitly set
     if not cfg.llm_provider:
         if cfg.openai_api_key:
             cfg.llm_provider = "openai"
         elif cfg.xai_api_key:
             cfg.llm_provider = "xai"
-        elif cfg.anthropic_api_key:
+        elif cfg.anthropic_api_key or cfg.anthropic_auth_token:
             cfg.llm_provider = "claude"
         elif cfg.gemini_api_key:
             cfg.llm_provider = "gemini"

@@ -152,8 +152,28 @@ class BotBaseMixin:
         if not lower:
             return False
         if lower.startswith("⚠️ error communicating with"):
+            transient_markers = (
+                "connection error",
+                "timed out",
+                "timeout",
+                "temporary failure",
+                "temporarily unavailable",
+                "name or service not known",
+            )
+            if any(marker in lower for marker in transient_markers):
+                return False
             return True
         if lower.startswith("error communicating with"):
+            transient_markers = (
+                "connection error",
+                "timed out",
+                "timeout",
+                "temporary failure",
+                "temporarily unavailable",
+                "name or service not known",
+            )
+            if any(marker in lower for marker in transient_markers):
+                return False
             return True
         return False
 
