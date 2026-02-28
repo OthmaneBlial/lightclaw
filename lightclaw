@@ -1001,6 +1001,31 @@ def cmd_chat(args: argparse.Namespace) -> int:
         if not user_text:
             continue
 
+        pending_multi = bot._get_pending_multi_plan(session_id)
+        if pending_multi and not user_text.startswith("/"):
+            decision = bot._classify_pending_multi_reply(user_text)
+            if decision == "confirm":
+                try:
+                    should_exit = asyncio.run(_run_terminal_command("/agent multi confirm"))
+                except Exception as e:
+                    print(f"bot> ⚠️ Command failed: {e}\n")
+                    should_exit = False
+                if should_exit:
+                    return 0
+                continue
+            if decision == "cancel":
+                try:
+                    should_exit = asyncio.run(_run_terminal_command("/agent multi cancel"))
+                except Exception as e:
+                    print(f"bot> ⚠️ Command failed: {e}\n")
+                    should_exit = False
+                if should_exit:
+                    return 0
+                continue
+            reminder = bot._render_pending_multi_reminder(session_id)
+            print(f"bot> {bot._strip_html_for_log(reminder)}\n")
+            continue
+
         if user_text.startswith("/"):
             try:
                 should_exit = asyncio.run(_run_terminal_command(user_text))
