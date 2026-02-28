@@ -403,7 +403,10 @@ class BotDelegationMixin:
             f"- each worker.agent must be one of: {allowed_agents}\n"
             "- labels: lowercase, start with letter, only [a-z0-9_-], max 32 chars.\n"
             "- depends_on must reference existing labels only.\n"
-            "- avoid dependency cycles.\n\n"
+            "- avoid dependency cycles.\n"
+            "- maximize safe parallelism by default.\n"
+            "- implementation lanes (backend/frontend/etc) should run in parallel after planning.\n"
+            "- only add implementation->implementation dependencies when strictly contract-critical.\n\n"
             f"Goal:\n{goal}\n\n"
             f"Preferred agents order:\n{preferred}\n\n"
             f"Regeneration feedback:\n{feedback_text}\n\n"
@@ -423,6 +426,117 @@ class BotDelegationMixin:
             "  ]\n"
             "}\n"
         )
+
+    @staticmethod
+    def _multi_lane_kind(item: dict[str, object]) -> str:
+        label = str(item.get("label") or "").strip().lower()
+        role = str(item.get("role") or "").strip().lower()
+        text = f"{label} {role}"
+
+        if re.search(r"\b(architect|planner|planning|design|spec|research|discovery)\b", text):
+            return "planning"
+        if re.search(r"\b(doc|docs|documentation|readme)\b", text):
+            return "docs"
+        if re.search(r"\b(integration|integrator|merge|compose|orchestr)\b", text):
+            return "integration"
+        if re.search(r"\b(review|reviewer|qa|test|testing|validate|validation|verif|e2e)\b", text):
+            return "validation"
+        return "implementation"
+
+    @staticmethod
+    def _is_contract_critical_lane(item: dict[str, object]) -> bool:
+        label = str(item.get("label") or "").strip().lower()
+        role = str(item.get("role") or "").strip().lower()
+        text = f"{label} {role}"
+        return bool(
+            re.search(r"\b(contract|schema|interface|types?|spec|api_contract|api-contract)\b", text)
+        )
+
+    def _rebalance_multi_dependencies(
+        self,
+        workers: list[dict[str, object]],
+        warnings: list[str],
+    ) -> None:
+        by_label = {
+            str(item.get("label") or "").strip(): item
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        labels = list(by_label.keys())
+        if not labels:
+            return
+
+        kinds = {label: self._multi_lane_kind(item) for label, item in by_label.items()}
+        planning_labels = [label for label in labels if kinds.get(label) == "planning"]
+        implementation_labels = [
+            label for label in labels if kinds.get(label) == "implementation"
+        ]
+
+        def dedupe_keep_order(items: list[str]) -> list[str]:
+            seen: set[str] = set()
+            out: list[str] = []
+            for value in items:
+                if value in seen:
+                    continue
+                seen.add(value)
+                out.append(value)
+            return out
+
+        for label in labels:
+            item = by_label[label]
+            kind = kinds.get(label, "implementation")
+            deps_obj = item.get("depends_on")
+            deps = [str(dep).strip() for dep in deps_obj] if isinstance(deps_obj, list) else []
+            deps = [dep for dep in deps if dep in by_label and dep != label]
+            deps = dedupe_keep_order(deps)
+
+            if kind == "planning":
+                if deps:
+                    warnings.append(
+                        f"Removed dependencies from planning lane `{label}` to unlock early parallel start."
+                    )
+                item["depends_on"] = []
+                continue
+
+            if kind == "implementation":
+                dropped_impl_deps: list[str] = []
+                kept: list[str] = []
+                for dep in deps:
+                    dep_kind = kinds.get(dep, "implementation")
+                    dep_item = by_label.get(dep, {})
+                    if dep_kind == "planning":
+                        kept.append(dep)
+                        continue
+                    if dep_kind == "implementation":
+                        if self._is_contract_critical_lane(dep_item):
+                            kept.append(dep)
+                        else:
+                            dropped_impl_deps.append(dep)
+                deps = dedupe_keep_order(kept)
+                if dropped_impl_deps:
+                    warnings.append(
+                        f"Pruned non-critical implementation dependency for `{label}`: "
+                        + ", ".join(dropped_impl_deps)
+                    )
+
+            if planning_labels and kind != "planning":
+                for planner in planning_labels:
+                    if planner != label and planner not in deps:
+                        deps.append(planner)
+                deps = dedupe_keep_order(deps)
+
+            if kind in {"integration", "validation", "docs"}:
+                if implementation_labels:
+                    has_impl_dep = any(dep in implementation_labels for dep in deps)
+                    if not has_impl_dep:
+                        for dep in implementation_labels:
+                            if dep != label and dep not in deps:
+                                deps.append(dep)
+                        deps = dedupe_keep_order(deps)
+                elif not deps and planning_labels:
+                    deps = [dep for dep in planning_labels if dep != label]
+
+            item["depends_on"] = deps
 
     @staticmethod
     def _extract_json_object(text: str) -> dict[str, object]:
@@ -572,6 +686,8 @@ class BotDelegationMixin:
                 seen_deps.add(dep_label)
                 cleaned_deps.append(dep_label)
             item["depends_on"] = cleaned_deps
+
+        self._rebalance_multi_dependencies(normalized, warnings)
 
         pending_map: dict[str, set[str]] = {
             str(item.get("label") or ""): set(item.get("depends_on") or [])
