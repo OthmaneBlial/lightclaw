@@ -666,7 +666,7 @@ class BotCommandsMixin:
             if len(args) < 2:
                 await self._reply_logged(
                     update,
-                    "Usage: <code>/agent use &lt;codex|claude|opencode&gt;</code>",
+                    "Usage: <code>/agent use &lt;codex|claude&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -676,7 +676,7 @@ class BotCommandsMixin:
                 await self._reply_logged(
                     update,
                     "Unknown agent. Use one of: <code>codex</code>, "
-                    "<code>claude</code>, <code>opencode</code>.",
+                    "<code>claude</code>.",
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -956,7 +956,7 @@ class BotCommandsMixin:
                     update,
                     "No active local agent for this chat.\n"
                     "Set one first: <code>/agent use codex</code> "
-                    "(or claude/opencode).",
+                    "(or claude).",
                     parse_mode=ParseMode.HTML,
                 )
                 return

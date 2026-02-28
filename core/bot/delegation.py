@@ -24,9 +24,6 @@ class BotDelegationMixin:
             "codex-cli": "codex",
             "claude": "claude",
             "claude-code": "claude",
-            "opencode": "opencode",
-            "open-code": "opencode",
-            "open_code": "opencode",
         }
 
     def _available_local_agents(self) -> dict[str, str]:
@@ -34,7 +31,6 @@ class BotDelegationMixin:
         binaries = {
             "codex": "codex",
             "claude": "claude",
-            "opencode": "opencode",
         }
         available: dict[str, str] = {}
         for name, binary in binaries.items():
@@ -55,7 +51,7 @@ class BotDelegationMixin:
             "<b>Usage</b>\n"
             "<code>/agent</code> - show status + available local agents\n"
             "<code>/agent doctor</code> - run install/version/auth preflight checks\n"
-            "<code>/agent use &lt;codex|claude|opencode&gt;</code> - route chat messages to that local agent\n"
+            "<code>/agent use &lt;codex|claude&gt;</code> - route chat messages to that local agent\n"
             "<code>/agent off</code> - disable delegation mode for this chat\n"
             "<code>/agent run &lt;task&gt;</code> - run one task with current active agent\n"
             "<code>/agent run &lt;agent&gt; &lt;task&gt;</code> - one-shot with a specific agent\n"
@@ -168,8 +164,7 @@ class BotDelegationMixin:
                         {},
                         (
                             f"Unknown agent tag <code>{_escape_html(value)}</code>.\n"
-                            "Use one of: <code>@codex</code>, <code>@claude</code>, "
-                            "<code>@opencode</code>."
+                            "Use one of: <code>@codex</code>, <code>@claude</code>."
                         ),
                     )
                 if canonical not in preferred_agents:
@@ -774,7 +769,7 @@ class BotDelegationMixin:
                         {},
                         (
                             f"Unknown agent in <code>{_escape_html(label)}={_escape_html(raw_agent)}</code>.\n"
-                            "Use one of: <code>codex</code>, <code>claude</code>, <code>opencode</code>."
+                            "Use one of: <code>codex</code>, <code>claude</code>."
                         ),
                     )
                 if resolved not in available_agents:
@@ -1345,7 +1340,7 @@ class BotDelegationMixin:
             }
 
     def _probe_agent_version(self, agent: str) -> str:
-        binary = {"codex": "codex", "claude": "claude", "opencode": "opencode"}[agent]
+        binary = {"codex": "codex", "claude": "claude"}[agent]
         probe = self._run_probe_command([binary, "--version"], timeout_sec=6)
         merged = self._strip_ansi(
             "\n".join(part for part in [probe.get("stdout", ""), probe.get("stderr", "")] if part)
@@ -1372,19 +1367,6 @@ class BotDelegationMixin:
             Path.home() / ".claude" / "settings.json",
             Path.home() / ".config" / "claude" / "settings.json",
         ]
-
-    @staticmethod
-    def _resolve_opencode_auth_path() -> Path:
-        custom_home = os.getenv("OPENCODE_HOME", "").strip()
-        if custom_home:
-            return Path(custom_home).expanduser() / "auth.json"
-        xdg_data_home = os.getenv("XDG_DATA_HOME", "").strip()
-        data_root = (
-            Path(xdg_data_home).expanduser()
-            if xdg_data_home
-            else (Path.home() / ".local" / "share")
-        )
-        return data_root / "opencode" / "auth.json"
 
     def _codex_doctor_auth_status(self) -> tuple[str, str, str]:
         auth_path = self._resolve_codex_auth_path()
@@ -1503,68 +1485,12 @@ class BotDelegationMixin:
             "claude setup-token",
         )
 
-    def _opencode_doctor_auth_status(self) -> tuple[str, str, str]:
-        list_probe = self._run_probe_command(["opencode", "auth", "list"], timeout_sec=10)
-        combined = self._strip_ansi(
-            "\n".join(
-                part for part in [list_probe.get("stdout", ""), list_probe.get("stderr", "")]
-                if part
-            )
-        ).strip()
-        match = re.search(r"\b(\d+)\s+credentials?\b", combined.lower())
-        if match:
-            count = int(match.group(1))
-            if count > 0:
-                return ("ok", f"{count} credential(s) configured.", "")
-            return ("error", "No OpenCode credentials configured.", "opencode auth login")
-
-        auth_path = self._resolve_opencode_auth_path()
-        if auth_path.exists():
-            try:
-                data = json.loads(auth_path.read_text(encoding="utf-8"))
-                count = 0
-                if isinstance(data, dict):
-                    for item in data.values():
-                        if not isinstance(item, dict):
-                            continue
-                        for key_name in ("key", "token", "access_token"):
-                            value = item.get(key_name)
-                            if isinstance(value, str) and value.strip():
-                                count += 1
-                                break
-                if count > 0:
-                    return ("ok", f"{count} credential(s) found in {auth_path.as_posix()}.", "")
-                return (
-                    "error",
-                    f"{auth_path.as_posix()} exists but has no usable credentials.",
-                    "opencode auth login",
-                )
-            except Exception:
-                return (
-                    "warn",
-                    f"Could not parse {auth_path.as_posix()}.",
-                    "opencode auth login",
-                )
-
-        if list_probe.get("timed_out"):
-            return ("warn", "Auth list probe timed out.", "opencode auth login")
-
-        hint = self._first_nonempty_line(combined)
-        if hint:
-            hint = f" ({hint[:120]})"
-        return (
-            "error",
-            f"No OpenCode credentials detected{hint}.",
-            "opencode auth login",
-        )
-
     def _render_agent_doctor_report(self) -> str:
         """Run local delegation preflight checks for supported external agent CLIs."""
         available = self._available_local_agents()
         auth_checks = {
             "codex": self._codex_doctor_auth_status,
             "claude": self._claude_doctor_auth_status,
-            "opencode": self._opencode_doctor_auth_status,
         }
 
         lines = [
@@ -1574,7 +1500,7 @@ class BotDelegationMixin:
             "",
         ]
 
-        for agent in ("codex", "claude", "opencode"):
+        for agent in ("codex", "claude"):
             path = available.get(agent)
             if not path:
                 lines.append(f"❌ <b>{_escape_html(agent)}</b>")
@@ -1893,70 +1819,6 @@ class BotDelegationMixin:
 
         return cleaned[-2000:]
 
-    def _parse_opencode_run_output(self, stdout: str) -> str:
-        cleaned = self._strip_ansi(stdout).strip()
-        if not cleaned:
-            return ""
-
-        pieces: list[str] = []
-        last_error = ""
-
-        def add_piece(value: str):
-            text = (value or "").strip()
-            if text and text not in pieces:
-                pieces.append(text)
-
-        for line in cleaned.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except Exception:
-                add_piece(line)
-                continue
-
-            event_type = str(obj.get("type") or "")
-            if event_type == "error":
-                err = obj.get("error") or {}
-                if isinstance(err, dict):
-                    data = err.get("data") or {}
-                    if isinstance(data, dict):
-                        last_error = str(data.get("message") or last_error)
-                    if not last_error:
-                        last_error = str(err.get("message") or last_error)
-                if not last_error:
-                    last_error = str(obj.get("message") or "unknown error")
-                continue
-
-            for key in ("result", "message", "content", "text"):
-                val = obj.get(key)
-                if isinstance(val, str):
-                    add_piece(val)
-
-            msg = obj.get("message")
-            if isinstance(msg, dict):
-                for key in ("text", "content", "result"):
-                    val = msg.get(key)
-                    if isinstance(val, str):
-                        add_piece(val)
-                content = msg.get("content")
-                if isinstance(content, list):
-                    for part in content:
-                        if isinstance(part, str):
-                            add_piece(part)
-                        elif isinstance(part, dict):
-                            for key in ("text", "content", "value"):
-                                val = part.get(key)
-                                if isinstance(val, str):
-                                    add_piece(val)
-
-        if pieces:
-            return "\n".join(pieces).strip()
-        if last_error:
-            return f"Error: {last_error}"
-        return cleaned[-2000:]
-
     def _build_local_agent_command(
         self,
         agent: str,
@@ -2003,16 +1865,6 @@ class BotDelegationMixin:
             else:
                 cmd.extend(["--output-format", "json"])
             run_input = prompt
-            return cmd, run_input
-
-        if agent == "opencode":
-            cmd = [
-                "opencode",
-                "run",
-                "--format",
-                "json",
-                prompt,
-            ]
             return cmd, run_input
 
         return [], run_input
@@ -2169,39 +2021,6 @@ class BotDelegationMixin:
                 str(obj.get("message") or "claude runtime error")
             )
 
-    def _ingest_opencode_progress_obj(self, obj: dict, state: dict[str, object]):
-        event_type = str(obj.get("type") or "")
-        lower_event_type = event_type.lower()
-
-        if lower_event_type == "error":
-            state["errors"] = int(state.get("errors", 0)) + 1
-            err = obj.get("error") or {}
-            msg = ""
-            if isinstance(err, dict):
-                data = err.get("data") or {}
-                if isinstance(data, dict):
-                    msg = str(data.get("message") or "")
-                if not msg:
-                    msg = str(err.get("message") or "")
-            if not msg:
-                msg = str(obj.get("message") or "opencode runtime error")
-            state["last_activity"] = self._short_progress_text(msg)
-            return
-
-        if "tool" in lower_event_type:
-            state["tool_calls"] = int(state.get("tool_calls", 0)) + 1
-            state["last_activity"] = self._short_progress_text(
-                f"tool activity: {event_type}", max_chars=220
-            )
-
-        for key in ("result", "message", "content", "text"):
-            value = obj.get(key)
-            if isinstance(value, str) and value.strip():
-                state["last_output"] = self._short_progress_text(value, max_chars=220)
-                if "tool" not in lower_event_type:
-                    state["last_activity"] = "response update"
-                break
-
     def _ingest_progress_event(
         self,
         agent: str,
@@ -2233,8 +2052,6 @@ class BotDelegationMixin:
         if agent == "claude":
             self._ingest_claude_progress_obj(obj, state)
             return
-        if agent == "opencode":
-            self._ingest_opencode_progress_obj(obj, state)
 
     def _render_progress_summary(
         self,
@@ -2435,10 +2252,8 @@ class BotDelegationMixin:
 
         if agent == "codex":
             summary = self._parse_codex_exec_output(stdout)
-        elif agent == "claude":
-            summary = self._parse_claude_cli_output(stdout)
         else:
-            summary = self._parse_opencode_run_output(stdout)
+            summary = self._parse_claude_cli_output(stdout)
 
         ok = exit_code == 0
         if summary.strip().lower().startswith("error:"):
@@ -2524,10 +2339,8 @@ class BotDelegationMixin:
 
         if agent == "codex":
             summary = self._parse_codex_exec_output(stdout)
-        elif agent == "claude":
-            summary = self._parse_claude_cli_output(stdout)
         else:
-            summary = self._parse_opencode_run_output(stdout)
+            summary = self._parse_claude_cli_output(stdout)
 
         ok = completed.returncode == 0
         if summary.strip().lower().startswith("error:"):

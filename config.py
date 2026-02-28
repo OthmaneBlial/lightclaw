@@ -83,9 +83,6 @@ def _parse_multi_default_agents(raw: str) -> list[str]:
         "codex-cli": "codex",
         "claude": "claude",
         "claude-code": "claude",
-        "opencode": "opencode",
-        "open-code": "opencode",
-        "open_code": "opencode",
     }
 
     cleaned = _strip_inline_comment(raw or "")

@@ -42,7 +42,7 @@ class BotBaseMixin:
         self._pending_wipe_confirm: dict[str, float] = {}
         # Track last successful file operation target per session.
         self._last_file_by_session: dict[str, str] = {}
-        # Per-chat local delegation mode (codex/claude/opencode).
+        # Per-chat local delegation mode (codex/claude).
         self._agent_mode_by_session: dict[str, str] = {}
         # Per-chat file write mode (`chat`=read-only answers, `edit`=allow workspace writes).
         self._file_mode_by_session: dict[str, str] = {}

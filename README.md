@@ -112,7 +112,7 @@ Think of LightClaw as **the starter engine** — the part of a rocket that ignit
 
 🧩 **Skill System (ClawHub + Local)** — Install skills from `clawhub.ai`, activate them per chat with `/skills`, and create your own custom skills locally.
 
-🤖 **Local Agent Delegation + Multi-Agent Runs** — Use `/agent run` for one-shot delegation or `/agent multi` for parallel workers (`codex`, `claude`, `opencode`), with live summarized progress and per-run isolated task folders.
+🤖 **Local Agent Delegation + Multi-Agent Runs** — Use `/agent run` for one-shot delegation or `/agent multi` for parallel workers (`codex`, `claude`), with live summarized progress and per-run isolated task folders.
 
 🛠️ **Workspace File Operations + Diff Summaries** — Large code is written directly to `.lightclaw/workspace` (not dumped in chat). LightClaw applies create/edit operations, then returns concise operation + diff line summaries.
 
@@ -141,7 +141,7 @@ lightclaw CLI
                       ├── `commands.py`   (/start /help /skills /agent /heartbeat /cron ...)
                       ├── `handlers.py`   (text/voice/photo/document + main loop)
                       ├── `file_ops.py`   (create/edit/retry/repair pipelines)
-                      ├── `delegation.py` (local Codex/Claude/OpenCode delegation)
+                      ├── `delegation.py` (local Codex/Claude delegation)
                       ├── `context.py`    (summarization + context filtering)
                       └── `messaging.py`  (chunking, send fallback, Telegram errors)
 
@@ -329,7 +329,7 @@ Use local coding agents for bigger project work while keeping LightClaw as the s
 /agent off
 ```
 
-Supported local agents (auto-detected from `PATH`): `codex`, `claude`, `opencode`.
+Supported local agents (auto-detected from `PATH`): `codex`, `claude`.
 You should authenticate these CLIs once on the host machine before using delegation mode.
 
 How it behaves:
@@ -419,7 +419,7 @@ new text
 | `/memory` | Show memory statistics (total interactions, sessions, vocabulary) |
 | `/recall <query>` | Search past conversations by semantic similarity |
 | `/skills` | List/search/install/activate/create/remove skills |
-| `/agent` | Delegate tasks to local coding agents (`codex`, `claude`, `opencode`) |
+| `/agent` | Delegate tasks to local coding agents (`codex`, `claude`) |
 | `/agent doctor` | Run local delegated-agent install/version/auth diagnostics |
 | `/agent multi <goal>` | Auto-plan a multi-agent run and wait for confirmation |
 | `/agent multi @<agent> ... <goal>` | Auto-plan with preferred agent tags |
