@@ -126,20 +126,20 @@ def load_config() -> Config:
     allowed = _parse_allowed_users(allowed_raw)
 
     cfg = Config(
-        llm_provider=os.getenv("LLM_PROVIDER", ""),
-        llm_model=os.getenv("LLM_MODEL", ""),
-        openai_api_key=os.getenv("OPENAI_API_KEY", ""),
-        xai_api_key=os.getenv("XAI_API_KEY", ""),
-        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        anthropic_auth_token=os.getenv("ANTHROPIC_AUTH_TOKEN", ""),
+        llm_provider=_strip_inline_comment(os.getenv("LLM_PROVIDER", "")),
+        llm_model=_strip_inline_comment(os.getenv("LLM_MODEL", "")),
+        openai_api_key=_strip_inline_comment(os.getenv("OPENAI_API_KEY", "")),
+        xai_api_key=_strip_inline_comment(os.getenv("XAI_API_KEY", "")),
+        anthropic_api_key=_strip_inline_comment(os.getenv("ANTHROPIC_API_KEY", "")),
+        anthropic_auth_token=_strip_inline_comment(os.getenv("ANTHROPIC_AUTH_TOKEN", "")),
         anthropic_base_url=_strip_inline_comment(
             os.getenv("ANTHROPIC_BASE_URL", DEFAULT_ANTHROPIC_BASE_URL)
         )
         or DEFAULT_ANTHROPIC_BASE_URL,
-        gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-        deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-        zai_api_key=os.getenv("ZAI_API_KEY", ""),
-        telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
+        gemini_api_key=_strip_inline_comment(os.getenv("GEMINI_API_KEY", "")),
+        deepseek_api_key=_strip_inline_comment(os.getenv("DEEPSEEK_API_KEY", "")),
+        zai_api_key=_strip_inline_comment(os.getenv("ZAI_API_KEY", "")),
+        telegram_bot_token=_strip_inline_comment(os.getenv("TELEGRAM_BOT_TOKEN", "")),
         telegram_allowed_users=allowed,
         memory_db_path=os.getenv("MEMORY_DB_PATH", ".lightclaw/lightclaw.db"),
         memory_top_k=int(os.getenv("MEMORY_TOP_K", "5")),
@@ -156,7 +156,7 @@ def load_config() -> Config:
         ),
         skills_hub_base_url=os.getenv("SKILLS_HUB_BASE_URL", "https://clawhub.ai") or "https://clawhub.ai",
         skills_state_path=os.getenv("SKILLS_STATE_PATH", ".lightclaw/skills_state.json") or ".lightclaw/skills_state.json",
-        groq_api_key=os.getenv("GROQ_API_KEY", ""),
+        groq_api_key=_strip_inline_comment(os.getenv("GROQ_API_KEY", "")),
     )
 
     # Auto-detect provider from configured credentials if not explicitly set
