@@ -39,6 +39,24 @@ Use least-privilege credentials, review installed skills, and restrict bot acces
 git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash setup.sh
 ```
 
+`setup.sh` does everything automatically:
+
+- Installs the `lightclaw` command at `~/.local/bin/lightclaw`
+- Writes your config to `~/.env`
+- Creates runtime files in `~/.lightclaw`
+
+Then run:
+
+```bash
+lightclaw run
+```
+
+If your shell has not reloaded `PATH` yet, use:
+
+```bash
+~/.local/bin/lightclaw run
+```
+
 ### 2) Manual setup
 
 ```bash
@@ -48,7 +66,7 @@ pip install -r requirements.txt
 ./lightclaw onboard
 ```
 
-Then configure `.env` and start:
+Then edit `~/.env` and start:
 
 ```bash
 ./lightclaw run
@@ -180,8 +198,8 @@ Examples:
 
 Paths:
 
-- Hub skills: `.lightclaw/skills/hub/<slug>/SKILL.md`
-- Local skills: `.lightclaw/skills/local/<name>/SKILL.md`
+- Hub skills: `~/.lightclaw/skills/hub/<slug>/SKILL.md`
+- Local skills: `~/.lightclaw/skills/local/<name>/SKILL.md`
 
 ## Architecture (Short)
 
@@ -189,7 +207,7 @@ Paths:
 Telegram or terminal chat
   -> memory recall (SQLite + semantic search)
   -> provider routing (OpenAI/xAI/Claude/Gemini/DeepSeek/Z-AI)
-  -> response + optional file operations in .lightclaw/workspace
+  -> response + optional file operations in ~/.lightclaw/workspace
   -> optional delegated local agents (single or multi-worker)
 ```
 

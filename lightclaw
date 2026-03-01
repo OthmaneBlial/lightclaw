@@ -3,8 +3,8 @@
 LightClaw CLI
 
 Commands:
-- lightclaw onboard : Initialize runtime files in current directory.
-- lightclaw run     : Run the bot using current directory as runtime home.
+- lightclaw onboard : Initialize runtime files in user home directory.
+- lightclaw run     : Run the bot using user home as runtime home.
 - lightclaw chat    : Chat in terminal using the same brain as Telegram.
 """
 
@@ -51,7 +51,7 @@ DANGER_ACK_ENV = "LIGHTCLAW_DANGER_ACK"
 def _resolve_home(path_arg: str | None) -> Path:
     if path_arg:
         return Path(path_arg).expanduser().resolve()
-    return Path.cwd().resolve()
+    return Path.home().resolve()
 
 
 def _danger_ack_enabled() -> bool:
@@ -1047,8 +1047,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lightclaw", description="LightClaw CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    onboard = sub.add_parser("onboard", help="Initialize .env and runtime workspace in current directory")
-    onboard.add_argument("--home", help="Target runtime home directory (default: current directory)")
+    onboard = sub.add_parser("onboard", help="Initialize .env and runtime workspace in user home")
+    onboard.add_argument("--home", help="Target runtime home directory (default: user home)")
     onboard.add_argument(
         "--force",
         action="store_true",
@@ -1068,14 +1068,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser(
         "run",
-        help="Run LightClaw using current directory as runtime home",
+        help="Run LightClaw using user home as runtime home",
         description=(
             "Run LightClaw.\n"
             "If --provider/--model are omitted and a TTY is attached, "
             "you can choose provider/model interactively from configured credentials."
         ),
     )
-    run.add_argument("--home", help="Runtime home directory (default: current directory)")
+    run.add_argument("--home", help="Runtime home directory (default: user home)")
     run.add_argument(
         "--provider",
         help="Override provider for this run (openai|xai|claude|gemini|deepseek|zai)",
@@ -1094,7 +1094,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Uses the same memory DB/workspace/provider stack as Telegram."
         ),
     )
-    chat.add_argument("--home", help="Runtime home directory (default: current directory)")
+    chat.add_argument("--home", help="Runtime home directory (default: user home)")
     chat.add_argument(
         "--provider",
         help="Override provider for this session (openai|xai|claude|gemini|deepseek|zai)",
