@@ -174,6 +174,11 @@ class CommandsAgentMixin:
                     if isinstance(pending.get("explicit_specs"), list)
                     else []
                 )
+                explicit_dependency_specs = (
+                    pending.get("explicit_dependency_specs")
+                    if isinstance(pending.get("explicit_dependency_specs"), dict)
+                    else {}
+                )
                 preferred_agents = (
                     pending.get("preferred_agents")
                     if isinstance(pending.get("preferred_agents"), list)
@@ -192,6 +197,11 @@ class CommandsAgentMixin:
                     goal=goal,
                     available_agents=available,
                     explicit_specs=explicit_pairs,
+                    explicit_dependency_specs={
+                        str(k): [str(v) for v in values if isinstance(v, str)]
+                        for k, values in explicit_dependency_specs.items()
+                        if isinstance(k, str) and isinstance(values, list)
+                    },
                     preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
                     feedback=feedback,
                 )
@@ -230,6 +240,12 @@ class CommandsAgentMixin:
             goal = str(parsed.get("goal") or "").strip()
             explicit_specs_obj = parsed.get("explicit_specs")
             explicit_specs = explicit_specs_obj if isinstance(explicit_specs_obj, list) else []
+            explicit_dependency_specs_obj = parsed.get("explicit_dependency_specs")
+            explicit_dependency_specs = (
+                explicit_dependency_specs_obj
+                if isinstance(explicit_dependency_specs_obj, dict)
+                else {}
+            )
             preferred_agents_obj = parsed.get("preferred_agents")
             preferred_agents = preferred_agents_obj if isinstance(preferred_agents_obj, list) else []
             explicit_pairs: list[tuple[str, str]] = []
@@ -246,6 +262,11 @@ class CommandsAgentMixin:
                 goal=goal,
                 available_agents=available,
                 explicit_specs=explicit_pairs,
+                explicit_dependency_specs={
+                    str(k): [str(v) for v in values if isinstance(v, str)]
+                    for k, values in explicit_dependency_specs.items()
+                    if isinstance(k, str) and isinstance(values, list)
+                },
                 preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
             )
             if plan_error:

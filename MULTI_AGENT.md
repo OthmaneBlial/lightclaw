@@ -34,6 +34,20 @@ Force explicit lane assignment:
 /agent multi --agent backend=claude --agent frontend=codex --agent docs=claude <goal>
 ```
 
+Add explicit DAG dependencies when you need guaranteed ordering:
+
+```text
+/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude --depends-on integration=backend,frontend build the app
+```
+
+`--depends-on` also works as `--depends-on=integration=backend,frontend`.
+
+Explicit rosters still accept dependency hints in the goal text when you do not pass `--depends-on`, for example:
+
+```text
+/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude build the app, keep backend and frontend parallel, and make integration wait for backend and frontend
+```
+
 Run the proposed plan:
 
 ```text
@@ -144,6 +158,10 @@ Each lane gets:
 
 ```text
 /agent multi --agent backend=codex --agent integration=claude --agent docs=claude create a webhook processing service with deployment notes
+```
+
+```text
+/agent multi --agent market_research=claude --agent aso_audit=claude --agent competitor_analysis=claude --agent keyword_research=claude --agent ux_review=claude --agent product_positioning=claude --agent growth_strategy=claude --agent monetization_review=claude --agent technical_audit=claude --agent acquisition_strategy=claude --agent master_strategy=claude --depends-on master_strategy=market_research,aso_audit,competitor_analysis,keyword_research,ux_review,product_positioning,growth_strategy,monetization_review,technical_audit,acquisition_strategy investigate why the Android app is getting almost no installs
 ```
 
 ### Coding: Bug Fixing

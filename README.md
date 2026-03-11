@@ -162,6 +162,18 @@ Full guide with many usage examples: [MULTI_AGENT.md](MULTI_AGENT.md)
 /agent multi --agent backend=codex --agent frontend=claude --agent docs=codex build a full stack todo app
 ```
 
+You can also declare explicit dependencies in the DAG:
+
+```text
+/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude --depends-on integration=backend,frontend build the app
+```
+
+With explicit rosters, dependency hints in the goal are still respected when you do not pass `--depends-on`. Example:
+
+```text
+/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude build the app, keep backend and frontend parallel, and make integration wait for backend and frontend
+```
+
 How it runs:
 
 - Plan is generated and shown first.

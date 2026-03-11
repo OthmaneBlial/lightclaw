@@ -481,6 +481,192 @@ class DelegationMultiPlanMixin:
             return "reported changed_files stay inside owned_paths"
         return kind or "unknown acceptance check"
 
+    @staticmethod
+    def _multi_goal_label_pattern(label: str) -> str:
+        escaped = re.escape(str(label or "").strip().lower())
+        return rf"(?<![a-z0-9_-]){escaped}(?![a-z0-9_-])"
+
+    def _extract_goal_dependency_overrides(
+        self,
+        goal: str,
+        labels: list[str],
+    ) -> dict[str, list[str]]:
+        text = re.sub(r"\s+", " ", (goal or "").strip().lower())
+        if not text or not labels:
+            return {}
+
+        all_other_patterns = [
+            r"\ball of them\b",
+            r"\ball others\b",
+            r"\ball other agents\b",
+            r"\bthe other agents\b",
+            r"\bthe other workers\b",
+            r"\bevery other worker\b",
+            r"\bevery other lane\b",
+            r"\beveryone else\b",
+            r"\bthe rest\b",
+            r"\bcombined insights of the other agents\b",
+            r"\bcombined insights of the other workers\b",
+        ]
+
+        def _deps_from_clause(target_label: str, clause: str) -> list[str]:
+            trimmed = re.split(
+                r"\b(?:then|and then|after that|afterwards|before synthesizing|before producing)\b",
+                clause,
+                maxsplit=1,
+            )[0]
+            deps: list[str] = []
+            for candidate in labels:
+                if candidate == target_label:
+                    continue
+                if re.search(self._multi_goal_label_pattern(candidate), trimmed):
+                    deps.append(candidate)
+            if deps:
+                return deps
+            if any(re.search(pattern, trimmed) for pattern in all_other_patterns):
+                return [candidate for candidate in labels if candidate != target_label]
+            return []
+
+        overrides: dict[str, list[str]] = {}
+        for label in labels:
+            label_pattern = self._multi_goal_label_pattern(label)
+
+            final_patterns = [
+                rf"(?:make|keep|set)\s+{label_pattern}\s+(?:as\s+)?(?:the\s+)?final\s+(?:lane|worker|step|phase)\b",
+                rf"{label_pattern}\s+(?:must|should)?\s*(?:be\s+)?(?:the\s+)?final\s+(?:lane|worker|step|phase)\b",
+            ]
+            if any(re.search(pattern, text) for pattern in final_patterns):
+                overrides[label] = [candidate for candidate in labels if candidate != label]
+                continue
+
+            clause_patterns = [
+                rf"{label_pattern}\s+(?:must|should)\s+wait\s+for\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"{label_pattern}\s+waits\s+for\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"{label_pattern}\s+(?:must|should)\s+depend(?:s)?\s+on\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"{label_pattern}\s+depend(?:s)?\s+on\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"(?:make|keep|set)\s+{label_pattern}\s+wait\s+for\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"(?:make|keep|set)\s+{label_pattern}\s+depend(?:s)?\s+on\b(?P<deps>.*?)(?:[.;]|\n|$)",
+            ]
+            for pattern in clause_patterns:
+                match = re.search(pattern, text)
+                if not match:
+                    continue
+                deps = _deps_from_clause(label, match.group("deps") or "")
+                if deps:
+                    overrides[label] = deps
+                    break
+
+        return overrides
+
+    def _apply_goal_dependency_overrides(
+        self,
+        goal: str,
+        workers: list[dict[str, object]],
+        warnings: list[str] | None = None,
+    ) -> None:
+        labels = [str(item.get("label") or "").strip() for item in workers]
+        labels = [label for label in labels if label]
+        if not labels:
+            return
+
+        label_set = set(labels)
+        overrides = self._extract_goal_dependency_overrides(goal, labels)
+        if not overrides:
+            return
+
+        by_label = {
+            str(item.get("label") or "").strip(): item
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        for label, deps in overrides.items():
+            item = by_label.get(label)
+            if not item:
+                continue
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for dep in deps:
+                dep_label = str(dep or "").strip()
+                if not dep_label or dep_label == label or dep_label not in label_set or dep_label in seen:
+                    continue
+                seen.add(dep_label)
+                cleaned.append(dep_label)
+            if not cleaned:
+                continue
+            item["depends_on"] = cleaned
+            if warnings is not None:
+                warnings.append(
+                    f"Applied goal dependency hint: `{label}` waits for {', '.join(cleaned)}."
+                )
+
+    def _apply_explicit_dependency_overrides(
+        self,
+        explicit_dependency_specs: dict[str, list[str]] | None,
+        workers: list[dict[str, object]],
+        warnings: list[str] | None = None,
+    ) -> None:
+        if not isinstance(explicit_dependency_specs, dict) or not explicit_dependency_specs:
+            return
+
+        labels = [str(item.get("label") or "").strip() for item in workers]
+        label_set = {label for label in labels if label}
+        if not label_set:
+            return
+
+        by_label = {
+            str(item.get("label") or "").strip(): item
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        for label, deps_obj in explicit_dependency_specs.items():
+            owner = str(label or "").strip()
+            if owner not in by_label:
+                continue
+            dep_values = deps_obj if isinstance(deps_obj, list) else []
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for dep in dep_values:
+                dep_label = str(dep or "").strip()
+                if not dep_label or dep_label == owner or dep_label not in label_set or dep_label in seen:
+                    continue
+                seen.add(dep_label)
+                cleaned.append(dep_label)
+            by_label[owner]["depends_on"] = cleaned
+            if warnings is not None:
+                dep_text = ", ".join(cleaned) if cleaned else "(none)"
+                warnings.append(
+                    f"Applied explicit dependency: `{owner}` waits for {dep_text}."
+                )
+
+    def _remove_multi_dependency_cycles(
+        self,
+        workers: list[dict[str, object]],
+        warnings: list[str] | None = None,
+    ) -> None:
+        pending_map: dict[str, set[str]] = {
+            str(item.get("label") or "").strip(): set(item.get("depends_on") or [])
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        resolved_labels: set[str] = set()
+        while pending_map:
+            ready = [label for label, deps in pending_map.items() if deps <= resolved_labels]
+            if not ready:
+                cycle_labels = sorted(pending_map.keys())
+                for item in workers:
+                    label = str(item.get("label") or "").strip()
+                    if label in pending_map:
+                        item["depends_on"] = []
+                if warnings is not None:
+                    warnings.append(
+                        "Explicit dependency cycle detected and removed for: "
+                        + ", ".join(cycle_labels)
+                    )
+                return
+            for label in ready:
+                resolved_labels.add(label)
+                pending_map.pop(label, None)
+
     def _build_multi_planner_prompt(
         self,
         goal: str,
@@ -890,6 +1076,7 @@ class DelegationMultiPlanMixin:
         goal: str,
         available_agents: dict[str, str],
         explicit_specs: list[tuple[str, str]],
+        explicit_dependency_specs: dict[str, list[str]] | None,
         preferred_agents: list[str],
         feedback: str = "",
     ) -> tuple[dict[str, object], str]:
@@ -930,7 +1117,12 @@ class DelegationMultiPlanMixin:
                     "Explicit roster had one worker; auto-added a reviewer lane to keep multi mode."
                 )
 
-            payload = self._build_agents_plan_payload(goal=goal, workers=workers)
+            payload = self._build_agents_plan_payload(
+                goal=goal,
+                workers=workers,
+                explicit_dependency_specs=explicit_dependency_specs,
+                warnings=warnings,
+            )
             return {
                 "goal": goal,
                 "workers": workers,
@@ -939,6 +1131,7 @@ class DelegationMultiPlanMixin:
                 "selection_mode": "explicit",
                 "planner_mode": "explicit",
                 "explicit_specs": explicit_specs,
+                "explicit_dependency_specs": explicit_dependency_specs or {},
                 "preferred_agents": preferred_agents,
             }, ""
 
@@ -1001,6 +1194,7 @@ class DelegationMultiPlanMixin:
             "selection_mode": "auto",
             "planner_mode": planner_mode,
             "explicit_specs": [],
+            "explicit_dependency_specs": {},
             "preferred_agents": preferred_agents,
         }, ""
 
@@ -1348,6 +1542,8 @@ class DelegationMultiPlanMixin:
         self,
         goal: str,
         workers: list[tuple[str, str]],
+        explicit_dependency_specs: dict[str, list[str]] | None = None,
+        warnings: list[str] | None = None,
     ) -> dict[str, object]:
         labels = [label for label, _ in workers]
         docs_labels = [label for label in labels if "doc" in label.lower()]
@@ -1491,6 +1687,14 @@ class DelegationMultiPlanMixin:
                     "acceptance_checks": acceptance_checks,
                 }
             )
+
+        self._apply_goal_dependency_overrides(goal, plan_workers, warnings)
+        self._apply_explicit_dependency_overrides(
+            explicit_dependency_specs,
+            plan_workers,
+            warnings,
+        )
+        self._remove_multi_dependency_cycles(plan_workers, warnings)
 
         return {
             "version": 1,
