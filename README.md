@@ -140,6 +140,8 @@ lightclaw chat
 
 ## Smart Multi-Agent Mode
 
+Full guide with many usage examples: [MULTI_AGENT.md](MULTI_AGENT.md)
+
 `/agent multi` supports three ways to define worker assignment:
 
 1. Auto mode:
