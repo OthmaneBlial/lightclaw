@@ -622,6 +622,17 @@ class CommandsAgentMixin:
             f"command failed{location} (exit {completed.returncode}): `{command}`{detail}"
         )
 
+    def _multi_value_is_nonempty(self, value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        if isinstance(value, (list, tuple, set)):
+            return any(self._multi_value_is_nonempty(item) for item in value)
+        if isinstance(value, dict):
+            return bool(value)
+        return True
+
     def _load_multi_worker_handoff(
         self,
         workspace: Path,
@@ -746,6 +757,20 @@ class CommandsAgentMixin:
                 command_failure = self._run_multi_acceptance_command(workspace, check)
                 if command_failure:
                     failures.append(command_failure)
+                continue
+
+            if kind == "json_field_nonempty":
+                _, error = load_handoff()
+                if error:
+                    failures.append(error)
+                    continue
+                field = str(check.get("field") or "").strip()
+                if not field:
+                    failures.append("json_field_nonempty check is missing `field`")
+                    continue
+                value = self._multi_handoff_lookup(handoff_data, field)
+                if not self._multi_value_is_nonempty(value):
+                    failures.append(f"handoff JSON field `{field}` must be non-empty")
                 continue
 
             if kind == "reported_files_exist":

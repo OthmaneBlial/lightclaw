@@ -158,6 +158,7 @@ class DelegationMultiPlanMixin:
                 item.get("acceptance_checks"),
                 label=label,
                 owned_paths=owned_paths,
+                role=role,
             )
 
         return {
@@ -269,12 +270,17 @@ class DelegationMultiPlanMixin:
         self,
         label: str,
         owned_paths: list[str],
+        role: str,
     ) -> list[dict[str, object]]:
         checks: list[dict[str, object]] = [
             {"type": "file_exists", "path": self._multi_handoff_md_path(label)},
             {"type": "handoff_json", "path": self._multi_handoff_json_path(label)},
             {"type": "reported_files_exist"},
         ]
+        if self._multi_is_backend_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.endpoints"})
+        if self._multi_is_frontend_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.api_calls"})
         if owned_paths:
             checks.append({"type": "owned_path_touched"})
             checks.append({"type": "owned_paths_only"})
@@ -285,6 +291,7 @@ class DelegationMultiPlanMixin:
         checks_obj: object,
         label: str,
         owned_paths: list[str],
+        role: str,
     ) -> list[dict[str, object]]:
         raw_checks = checks_obj if isinstance(checks_obj, list) else []
         normalized: list[dict[str, object]] = []
@@ -327,8 +334,15 @@ class DelegationMultiPlanMixin:
                     timeout_sec = 20
                 normalized_check["timeout_sec"] = max(1, min(45, timeout_sec))
                 normalized.append(normalized_check)
+                continue
 
-        baseline = self._default_multi_acceptance_checks(label, owned_paths)
+            if kind == "json_field_nonempty":
+                field = str(item.get("field") or "").strip()
+                if field:
+                    normalized.append({"type": kind, "field": field[:120]})
+                continue
+
+        baseline = self._default_multi_acceptance_checks(label, owned_paths, role)
         for check in baseline:
             if check not in normalized:
                 normalized.append(check)
@@ -364,6 +378,8 @@ class DelegationMultiPlanMixin:
             if cwd:
                 return f"command succeeds in {cwd}: {command}"
             return f"command succeeds: {command}"
+        if kind == "json_field_nonempty":
+            return f"handoff json field is non-empty: {check.get('field')}"
         if kind == "reported_files_exist":
             return "handoff json lists existing changed_files"
         if kind == "owned_path_touched":
@@ -399,7 +415,7 @@ class DelegationMultiPlanMixin:
             "- frontend/client lanes should write outputs.api_calls as HTTP method/path strings like GET /api/items.\n"
             "- use command_succeeds only for cheap repo-local verification commands; never use installs, servers, or long-running commands.\n"
             "- use owned_paths when a worker clearly owns specific files or folders.\n"
-            "- allowed acceptance_checks.type values: file_exists, glob_nonempty, command_succeeds, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
+            "- allowed acceptance_checks.type values: file_exists, glob_nonempty, command_succeeds, json_field_nonempty, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
             f"Goal:\n{goal}\n\n"
             f"Preferred agents order:\n{preferred}\n\n"
             f"Regeneration feedback:\n{feedback_text}\n\n"
@@ -419,6 +435,7 @@ class DelegationMultiPlanMixin:
             '      "acceptance_checks": [\n'
             '        {"type": "file_exists", "path": "handoff/builder.md"},\n'
             '        {"type": "command_succeeds", "command": "python -m py_compile src/main.py", "timeout_sec": 15},\n'
+            '        {"type": "json_field_nonempty", "field": "outputs.endpoints"},\n'
             '        {"type": "handoff_json", "path": "handoff/builder.json"}\n'
             "      ]\n"
             "    }\n"
@@ -751,6 +768,7 @@ class DelegationMultiPlanMixin:
                 item.get("acceptance_checks"),
                 label=label,
                 owned_paths=owned_paths,
+                role=role,
             )
 
         final_workers = [
@@ -1119,6 +1137,7 @@ class DelegationMultiPlanMixin:
             "- In changed_files, list only files that currently exist in the workspace and that you directly changed for this lane.\n"
             "- If owned_paths are provided, stay inside them unless the worker contract explicitly requires a broader change.\n"
             "- If your acceptance checks mention a command, assume the orchestrator will run it exactly as written.\n"
+            "- If your acceptance checks mention a handoff JSON field, keep that field populated with real machine-readable data.\n"
             "- Do not output planning narrative in final answer.\n"
             f"- {handoff_contract_hint}\n"
             "- Final answer format must be:\n"
@@ -1189,6 +1208,7 @@ class DelegationMultiPlanMixin:
             f"- Update `{handoff_md_path}` and `{handoff_json_path}` before finishing.\n"
             "- Make the acceptance failures pass with the smallest practical change.\n"
             "- If a command-based acceptance check failed, fix the workspace so that exact command passes.\n"
+            "- If a handoff JSON field check failed, fix that JSON field instead of only changing prose output.\n"
             f"- {repair_handoff_hint}\n"
             "- Final answer format must stay:\n"
             "  1) `Summary:` one short paragraph\n"
@@ -1281,6 +1301,7 @@ class DelegationMultiPlanMixin:
                 None,
                 label=label,
                 owned_paths=owned_paths,
+                role=role,
             )
             expected_outputs = self._augment_multi_expected_outputs(
                 expected_outputs,
