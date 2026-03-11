@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import tempfile
 import time
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -396,6 +398,169 @@ class CommandsAgentMixin:
             "Unknown /agent subcommand.\n\n" + self._agent_usage_text(),
             parse_mode=ParseMode.HTML,
         )
+
+    @staticmethod
+    def _multi_handoff_lookup(data: dict[str, Any], dotted_path: str) -> Any:
+        current: Any = data
+        for part in dotted_path.split("."):
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+        return current
+
+    @staticmethod
+    def _normalize_multi_api_method(raw: object) -> str:
+        return re.sub(r"[^A-Z]", "", str(raw or "").strip().upper())
+
+    @staticmethod
+    def _normalize_multi_api_path(raw: object) -> str:
+        value = str(raw or "").strip()
+        if not value:
+            return ""
+        if "://" in value:
+            try:
+                parsed = urlsplit(value)
+                value = parsed.path or "/"
+            except Exception:
+                pass
+        value = value.split("?", 1)[0].split("#", 1)[0].strip()
+        if not value:
+            return ""
+        if not value.startswith("/"):
+            value = "/" + value.lstrip("/")
+        value = re.sub(r"/{2,}", "/", value)
+        value = re.sub(r"\{[^}/]+\}", "{}", value)
+        value = re.sub(r":[A-Za-z0-9_]+", "{}", value)
+        if len(value) > 1:
+            value = value.rstrip("/")
+        return value or "/"
+
+    def _parse_multi_api_entries(self, items_obj: object) -> list[tuple[str, str]]:
+        items = items_obj if isinstance(items_obj, list) else []
+        parsed: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+
+        for item in items[:64]:
+            method = ""
+            path = ""
+            if isinstance(item, dict):
+                method = self._normalize_multi_api_method(
+                    item.get("method") or item.get("verb")
+                )
+                path = self._normalize_multi_api_path(
+                    item.get("path") or item.get("route") or item.get("endpoint") or item.get("url")
+                )
+            elif isinstance(item, str):
+                match = re.match(r"^\s*([A-Za-z]+)\s+(\S+)", item)
+                if not match:
+                    continue
+                method = self._normalize_multi_api_method(match.group(1))
+                path = self._normalize_multi_api_path(match.group(2))
+
+            if not method or not path:
+                continue
+            key = (method, path)
+            if key in seen:
+                continue
+            seen.add(key)
+            parsed.append(key)
+
+        return parsed
+
+    def _extract_multi_api_entries(
+        self,
+        handoff_data: dict[str, Any],
+        dotted_paths: tuple[str, ...],
+    ) -> list[tuple[str, str]]:
+        for dotted_path in dotted_paths:
+            value = self._multi_handoff_lookup(handoff_data, dotted_path)
+            parsed = self._parse_multi_api_entries(value)
+            if parsed:
+                return parsed
+        return []
+
+    @staticmethod
+    def _format_multi_api_entry(method: str, path: str) -> str:
+        return f"{method} {path}"
+
+    def _audit_multi_lane_api_contracts(
+        self,
+        workspace: Path,
+        worker_contract_by_label: dict[str, dict[str, object]],
+    ) -> tuple[bool, list[str]]:
+        providers: list[str] = []
+        consumers: list[str] = []
+        for label, contract in worker_contract_by_label.items():
+            role = str(contract.get("role") or "")
+            if self._multi_is_backend_lane(label, role):
+                providers.append(label)
+            if self._multi_is_frontend_lane(label, role):
+                consumers.append(label)
+
+        if not providers or not consumers:
+            return False, []
+
+        findings: list[str] = []
+        provider_endpoints: dict[str, list[tuple[str, str]]] = {}
+        available_endpoints: set[tuple[str, str]] = set()
+
+        for label in providers:
+            handoff_data, error = self._load_multi_worker_handoff(workspace, label)
+            if error:
+                findings.append(f"`{label}` handoff unavailable for API audit: {error}")
+                continue
+            endpoints = self._extract_multi_api_entries(
+                handoff_data,
+                (
+                    "outputs.endpoints",
+                    "outputs.api_endpoints",
+                    "handoff.endpoints",
+                    "endpoints",
+                ),
+            )
+            if not endpoints:
+                findings.append(f"`{label}` handoff is missing `outputs.endpoints` for API audit")
+                continue
+            provider_endpoints[label] = endpoints
+            available_endpoints.update(endpoints)
+
+        for label in consumers:
+            handoff_data, error = self._load_multi_worker_handoff(workspace, label)
+            if error:
+                findings.append(f"`{label}` handoff unavailable for API audit: {error}")
+                continue
+            api_calls = self._extract_multi_api_entries(
+                handoff_data,
+                (
+                    "outputs.api_calls",
+                    "outputs.http_calls",
+                    "handoff.api_calls",
+                    "api_calls",
+                ),
+            )
+            if not api_calls:
+                findings.append(f"`{label}` handoff is missing `outputs.api_calls` for API audit")
+                continue
+            if not available_endpoints:
+                continue
+            missing = [item for item in api_calls if item not in available_endpoints]
+            if missing:
+                preview = ", ".join(
+                    f"`{self._format_multi_api_entry(method, path)}`"
+                    for method, path in missing[:4]
+                )
+                findings.append(
+                    f"`{label}` calls methods/routes not provided by backend lanes: {preview}"
+                )
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in findings:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return True, deduped
 
     def _load_multi_worker_handoff(
         self,
@@ -938,6 +1103,11 @@ class CommandsAgentMixin:
             self._snapshot_workspace_state, multi_workspace
         )
         multi_delta = self._summarize_workspace_delta(before_multi, after_multi)
+        api_audit_applicable, api_audit_findings = await asyncio.to_thread(
+            self._audit_multi_lane_api_contracts,
+            multi_workspace,
+            worker_contract_by_label,
+        )
 
         final_lines = [
             "🤖 Multi-agent run finished.",
@@ -951,6 +1121,16 @@ class CommandsAgentMixin:
             worker_result = str(results_by_label.get(label, "⚠️ Worker did not produce output."))
             final_lines.append(f"{tag}")
             final_lines.append(worker_result)
+            final_lines.append("")
+
+        if api_audit_applicable:
+            final_lines.append(
+                "Cross-lane API audit: passed"
+                if not api_audit_findings
+                else "Cross-lane API audit: failed"
+            )
+            for finding in api_audit_findings[:6]:
+                final_lines.append(f"- {finding}")
             final_lines.append("")
 
         final_lines.append(multi_delta)

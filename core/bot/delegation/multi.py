@@ -12,6 +12,18 @@ from ...markdown import _escape_html
 
 class DelegationMultiPlanMixin:
     @staticmethod
+    def _multi_lane_role_text(label: str, role: str) -> str:
+        return f"{label} {role}".strip().lower()
+
+    def _multi_is_backend_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(backend|api|server|db|database|persistence|migration)\b", text))
+
+    def _multi_is_frontend_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(frontend|web|ui|client|react|next|vue)\b", text))
+
+    @staticmethod
     def _multi_goal_profile(goal: str) -> str:
         text = (goal or "").lower()
         if re.search(
@@ -131,6 +143,11 @@ class DelegationMultiPlanMixin:
         for item in workers:
             label = str(item.get("label") or "").strip().lower()
             role = str(item.get("role") or "implementation").strip() or "implementation"
+            item["expected_outputs"] = self._augment_multi_expected_outputs(
+                item.get("expected_outputs"),
+                label=label,
+                role=role,
+            )
             owned_paths = self._normalize_multi_owned_paths(
                 item.get("owned_paths"),
                 label=label,
@@ -177,10 +194,10 @@ class DelegationMultiPlanMixin:
         return f"handoff/{safe}.json"
 
     def _default_multi_owned_paths(self, label: str, role: str) -> list[str]:
-        text = f"{label} {role}".strip().lower()
-        if re.search(r"\b(backend|api|server|db|database|persistence|migration)\b", text):
+        text = self._multi_lane_role_text(label, role)
+        if self._multi_is_backend_lane(label, role):
             return ["backend/**", "api/**", "server/**", "db/**", "migrations/**"]
-        if re.search(r"\b(frontend|web|ui|client|react|next|vue)\b", text):
+        if self._multi_is_frontend_lane(label, role):
             return ["frontend/**", "web/**", "ui/**", "components/**", "pages/**", "public/**"]
         if re.search(r"\b(doc|docs|documentation|readme)\b", text):
             return ["README.md", "docs/**"]
@@ -215,6 +232,37 @@ class DelegationMultiPlanMixin:
                 continue
             seen.add(value)
             out.append(value)
+        return out
+
+    def _augment_multi_expected_outputs(
+        self,
+        expected_outputs_obj: object,
+        label: str,
+        role: str,
+    ) -> list[str]:
+        base = expected_outputs_obj if isinstance(expected_outputs_obj, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+
+        for item in base[:8]:
+            value = str(item or "").strip()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+
+        if self._multi_is_backend_lane(label, role):
+            backend_hint = "Machine-readable endpoint list in handoff JSON outputs.endpoints."
+            if backend_hint not in seen:
+                seen.add(backend_hint)
+                out.append(backend_hint)
+
+        if self._multi_is_frontend_lane(label, role):
+            frontend_hint = "Machine-readable API usage list in handoff JSON outputs.api_calls."
+            if frontend_hint not in seen:
+                seen.add(frontend_hint)
+                out.append(frontend_hint)
+
         return out
 
     def _default_multi_acceptance_checks(
@@ -321,6 +369,8 @@ class DelegationMultiPlanMixin:
             "- implementation lanes (backend/frontend/etc) should run in parallel after planning.\n"
             "- only add implementation->implementation dependencies when strictly contract-critical.\n\n"
             "- every worker must write handoff/<label>.md and handoff/<label>.json.\n"
+            "- backend/API lanes should write outputs.endpoints as HTTP method/path strings like GET /api/items.\n"
+            "- frontend/client lanes should write outputs.api_calls as HTTP method/path strings like GET /api/items.\n"
             "- use owned_paths when a worker clearly owns specific files or folders.\n"
             "- allowed acceptance_checks.type values: file_exists, glob_nonempty, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
             f"Goal:\n{goal}\n\n"
@@ -658,6 +708,11 @@ class DelegationMultiPlanMixin:
             item["handoff_to"] = cleaned_handoff
 
             role = str(item.get("role") or "implementation").strip() or "implementation"
+            item["expected_outputs"] = self._augment_multi_expected_outputs(
+                item.get("expected_outputs"),
+                label=label,
+                role=role,
+            )
             owned_paths = self._normalize_multi_owned_paths(
                 item.get("owned_paths"),
                 label=label,
@@ -913,13 +968,22 @@ class DelegationMultiPlanMixin:
         roster = ", ".join(f"{name}={agent}" for name, agent in workers)
         lane = label.lower()
         lane_hint = "Focus only on your lane and avoid unrelated files."
+        handoff_contract_hint = (
+            "Keep handoff JSON accurate and machine-readable for downstream verification."
+        )
         if "backend" in lane:
             lane_hint = (
                 "Focus on backend APIs, data models, persistence, and backend tests."
             )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.endpoints, list each served HTTP method/path as strings like `GET /api/items`."
+            )
         elif "frontend" in lane:
             lane_hint = (
                 "Focus on frontend UI, routing/state, and integration with backend API contracts."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.api_calls, list each backend HTTP method/path the frontend calls as strings like `GET /api/items`."
             )
         elif "doc" in lane:
             lane_hint = (
@@ -1027,6 +1091,7 @@ class DelegationMultiPlanMixin:
             "- In changed_files, list only files that currently exist in the workspace and that you directly changed for this lane.\n"
             "- If owned_paths are provided, stay inside them unless the worker contract explicitly requires a broader change.\n"
             "- Do not output planning narrative in final answer.\n"
+            f"- {handoff_contract_hint}\n"
             "- Final answer format must be:\n"
             "  1) `Summary:` one short paragraph\n"
             "  2) `Outputs:` bullet list of key files\n"
@@ -1063,6 +1128,16 @@ class DelegationMultiPlanMixin:
         previous_excerpt = self._short_progress_text(previous_result, max_chars=1200)
         handoff_md_path = self._multi_handoff_md_path(label)
         handoff_json_path = self._multi_handoff_json_path(label)
+        lane = label.lower()
+        repair_handoff_hint = "Keep handoff JSON aligned with the final workspace state."
+        if "backend" in lane:
+            repair_handoff_hint = (
+                "Keep outputs.endpoints in handoff JSON aligned with the backend routes you actually serve."
+            )
+        elif "frontend" in lane:
+            repair_handoff_hint = (
+                "Keep outputs.api_calls in handoff JSON aligned with the backend methods and paths the frontend actually calls."
+            )
         return (
             "You are repairing your own lane in an existing LightClaw multi-agent run.\n\n"
             "GLOBAL GOAL:\n"
@@ -1084,6 +1159,7 @@ class DelegationMultiPlanMixin:
             "- Do not restart or re-plan the whole project.\n"
             f"- Update `{handoff_md_path}` and `{handoff_json_path}` before finishing.\n"
             "- Make the acceptance failures pass with the smallest practical change.\n"
+            f"- {repair_handoff_hint}\n"
             "- Final answer format must stay:\n"
             "  1) `Summary:` one short paragraph\n"
             "  2) `Outputs:` bullet list of key files\n"
@@ -1175,6 +1251,11 @@ class DelegationMultiPlanMixin:
                 None,
                 label=label,
                 owned_paths=owned_paths,
+            )
+            expected_outputs = self._augment_multi_expected_outputs(
+                expected_outputs,
+                label=label,
+                role=role,
             )
 
             plan_workers.append(
