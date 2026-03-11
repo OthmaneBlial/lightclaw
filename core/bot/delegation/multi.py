@@ -307,6 +307,26 @@ class DelegationMultiPlanMixin:
                 pattern = self._normalize_multi_contract_path(str(item.get("pattern") or ""))
                 if pattern:
                     normalized.append({"type": kind, "pattern": pattern})
+                continue
+
+            if kind == "command_succeeds":
+                command = str(item.get("command") or "").strip()
+                if not command:
+                    continue
+                normalized_check: dict[str, object] = {
+                    "type": kind,
+                    "command": command[:300],
+                }
+                cwd = self._normalize_multi_contract_path(str(item.get("cwd") or ""))
+                if cwd:
+                    normalized_check["cwd"] = cwd
+                timeout_raw = item.get("timeout_sec")
+                try:
+                    timeout_sec = int(timeout_raw)
+                except Exception:
+                    timeout_sec = 20
+                normalized_check["timeout_sec"] = max(1, min(45, timeout_sec))
+                normalized.append(normalized_check)
 
         baseline = self._default_multi_acceptance_checks(label, owned_paths)
         for check in baseline:
@@ -338,6 +358,12 @@ class DelegationMultiPlanMixin:
             return f"valid handoff json: {check.get('path')}"
         if kind == "glob_nonempty":
             return f"glob has files: {check.get('pattern')}"
+        if kind == "command_succeeds":
+            cwd = str(check.get("cwd") or "").strip()
+            command = str(check.get("command") or "").strip()
+            if cwd:
+                return f"command succeeds in {cwd}: {command}"
+            return f"command succeeds: {command}"
         if kind == "reported_files_exist":
             return "handoff json lists existing changed_files"
         if kind == "owned_path_touched":
@@ -371,8 +397,9 @@ class DelegationMultiPlanMixin:
             "- every worker must write handoff/<label>.md and handoff/<label>.json.\n"
             "- backend/API lanes should write outputs.endpoints as HTTP method/path strings like GET /api/items.\n"
             "- frontend/client lanes should write outputs.api_calls as HTTP method/path strings like GET /api/items.\n"
+            "- use command_succeeds only for cheap repo-local verification commands; never use installs, servers, or long-running commands.\n"
             "- use owned_paths when a worker clearly owns specific files or folders.\n"
-            "- allowed acceptance_checks.type values: file_exists, glob_nonempty, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
+            "- allowed acceptance_checks.type values: file_exists, glob_nonempty, command_succeeds, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
             f"Goal:\n{goal}\n\n"
             f"Preferred agents order:\n{preferred}\n\n"
             f"Regeneration feedback:\n{feedback_text}\n\n"
@@ -391,6 +418,7 @@ class DelegationMultiPlanMixin:
             '      "owned_paths": ["src/**"],\n'
             '      "acceptance_checks": [\n'
             '        {"type": "file_exists", "path": "handoff/builder.md"},\n'
+            '        {"type": "command_succeeds", "command": "python -m py_compile src/main.py", "timeout_sec": 15},\n'
             '        {"type": "handoff_json", "path": "handoff/builder.json"}\n'
             "      ]\n"
             "    }\n"
@@ -1090,6 +1118,7 @@ class DelegationMultiPlanMixin:
             "- The handoff JSON must be raw JSON with keys: lane, status, summary, changed_files, outputs, handoff.\n"
             "- In changed_files, list only files that currently exist in the workspace and that you directly changed for this lane.\n"
             "- If owned_paths are provided, stay inside them unless the worker contract explicitly requires a broader change.\n"
+            "- If your acceptance checks mention a command, assume the orchestrator will run it exactly as written.\n"
             "- Do not output planning narrative in final answer.\n"
             f"- {handoff_contract_hint}\n"
             "- Final answer format must be:\n"
@@ -1159,6 +1188,7 @@ class DelegationMultiPlanMixin:
             "- Do not restart or re-plan the whole project.\n"
             f"- Update `{handoff_md_path}` and `{handoff_json_path}` before finishing.\n"
             "- Make the acceptance failures pass with the smallest practical change.\n"
+            "- If a command-based acceptance check failed, fix the workspace so that exact command passes.\n"
             f"- {repair_handoff_hint}\n"
             "- Final answer format must stay:\n"
             "  1) `Summary:` one short paragraph\n"

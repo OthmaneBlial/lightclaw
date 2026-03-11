@@ -168,6 +168,8 @@ How it runs:
 - `cancel` or `no` clears the pending plan.
 - Execution now follows true DAG scheduling, so downstream lanes can start as soon as their own dependencies finish.
 - Each worker gets owned paths, must write `handoff/<lane>.md` plus `handoff/<lane>.json`, and is checked against lightweight acceptance rules.
+- Acceptance can now run small bounded repo-local commands when a lane declares `command_succeeds`.
+- Backend/frontend runs also get a lightweight cross-lane API audit from handoff JSON, so method/path mismatches are surfaced in the final report.
 - Failed lanes can get a small self-repair pass controlled by `LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS` (clamped to `0..2`).
 
 ## Supported Providers

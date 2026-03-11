@@ -6,6 +6,8 @@ import asyncio
 import json
 import os
 import re
+import shlex
+import subprocess
 import tempfile
 import time
 import uuid
@@ -562,6 +564,64 @@ class CommandsAgentMixin:
             deduped.append(item)
         return True, deduped
 
+    def _run_multi_acceptance_command(
+        self,
+        workspace: Path,
+        check: dict[str, Any],
+    ) -> str:
+        command = str(check.get("command") or "").strip()
+        if not command:
+            return "command_succeeds check is missing `command`"
+
+        cwd_rel = self._normalize_multi_contract_path(str(check.get("cwd") or ""))
+        cwd = workspace / cwd_rel if cwd_rel else workspace
+        if not cwd.exists():
+            return f"command_succeeds cwd does not exist: `{cwd_rel}`"
+        if not cwd.is_dir():
+            return f"command_succeeds cwd is not a directory: `{cwd_rel}`"
+
+        try:
+            argv = shlex.split(command)
+        except Exception as e:
+            return f"invalid command_succeeds command `{command}`: {e}"
+        if not argv:
+            return f"invalid command_succeeds command `{command}`"
+
+        try:
+            timeout_sec = int(check.get("timeout_sec") or 20)
+        except Exception:
+            timeout_sec = 20
+        timeout_sec = max(1, min(45, timeout_sec))
+
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+                timeout=timeout_sec,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            return f"command timed out after {timeout_sec}s: `{command}`"
+        except Exception as e:
+            return f"command failed to start `{command}`: {e}"
+
+        if completed.returncode == 0:
+            return ""
+
+        output = "\n".join(
+            part.strip()
+            for part in [completed.stdout or "", completed.stderr or ""]
+            if part and part.strip()
+        )
+        output_preview = self._short_progress_text(output, max_chars=220) if output else ""
+        location = f" in `{cwd_rel}`" if cwd_rel else ""
+        detail = f": {output_preview}" if output_preview else ""
+        return (
+            f"command failed{location} (exit {completed.returncode}): `{command}`{detail}"
+        )
+
     def _load_multi_worker_handoff(
         self,
         workspace: Path,
@@ -680,6 +740,12 @@ class CommandsAgentMixin:
                     continue
                 if not matches:
                     failures.append(f"no files matched `{pattern}`")
+                continue
+
+            if kind == "command_succeeds":
+                command_failure = self._run_multi_acceptance_command(workspace, check)
+                if command_failure:
+                    failures.append(command_failure)
                 continue
 
             if kind == "reported_files_exist":
