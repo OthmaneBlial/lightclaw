@@ -397,6 +397,211 @@ class CommandsAgentMixin:
             parse_mode=ParseMode.HTML,
         )
 
+    def _load_multi_worker_handoff(
+        self,
+        workspace: Path,
+        label: str,
+    ) -> tuple[dict[str, Any], str]:
+        path = workspace / self._multi_handoff_json_path(label)
+        if not path.exists():
+            return {}, f"missing `{self._multi_handoff_json_path(label)}`"
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {}, f"invalid JSON in `{self._multi_handoff_json_path(label)}`: {e}"
+        if not isinstance(raw, dict):
+            return {}, f"`{self._multi_handoff_json_path(label)}` must contain a JSON object"
+        return raw, ""
+
+    def _reported_multi_handoff_files(self, handoff_data: dict[str, Any]) -> list[str]:
+        changed_files_obj = handoff_data.get("changed_files")
+        changed_files = changed_files_obj if isinstance(changed_files_obj, list) else []
+        reported: list[str] = []
+        seen: set[str] = set()
+        for item in changed_files[:64]:
+            value = self._normalize_multi_contract_path(str(item or ""))
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            reported.append(value)
+        return reported
+
+    def _evaluate_multi_worker_acceptance(
+        self,
+        workspace: Path,
+        label: str,
+        worker_contract: dict[str, object],
+    ) -> tuple[bool, list[str], dict[str, Any]]:
+        checks_obj = worker_contract.get("acceptance_checks")
+        checks = (
+            [item for item in checks_obj if isinstance(item, dict)]
+            if isinstance(checks_obj, list)
+            else []
+        )
+        if not checks:
+            return True, [], {}
+
+        owned_paths = self._normalize_multi_owned_paths(
+            worker_contract.get("owned_paths"),
+            label=label,
+            role=str(worker_contract.get("role") or "implementation"),
+        )
+        failures: list[str] = []
+        handoff_data: dict[str, Any] = {}
+        handoff_error = ""
+        handoff_loaded = False
+        reported_files_cache: list[str] | None = None
+
+        def load_handoff() -> tuple[dict[str, Any], str]:
+            nonlocal handoff_data, handoff_error, handoff_loaded
+            if handoff_loaded:
+                return handoff_data, handoff_error
+            handoff_loaded = True
+            handoff_data, handoff_error = self._load_multi_worker_handoff(workspace, label)
+            return handoff_data, handoff_error
+
+        def reported_files() -> list[str]:
+            nonlocal reported_files_cache
+            if reported_files_cache is not None:
+                return reported_files_cache
+            data, _ = load_handoff()
+            reported_files_cache = self._reported_multi_handoff_files(data)
+            return reported_files_cache
+
+        for check in checks:
+            kind = str(check.get("type") or "").strip().lower()
+
+            if kind == "file_exists":
+                rel_path = self._normalize_multi_contract_path(str(check.get("path") or ""))
+                if not rel_path or not (workspace / rel_path).is_file():
+                    failures.append(f"missing required file `{rel_path or '(invalid path)'}`")
+                continue
+
+            if kind == "handoff_json":
+                rel_path = (
+                    self._normalize_multi_contract_path(str(check.get("path") or ""))
+                    or self._multi_handoff_json_path(label)
+                )
+                target = workspace / rel_path
+                if not target.is_file():
+                    failures.append(f"missing handoff JSON `{rel_path}`")
+                    continue
+                try:
+                    raw = json.loads(target.read_text(encoding="utf-8"))
+                except Exception as e:
+                    failures.append(f"invalid handoff JSON `{rel_path}`: {e}")
+                    continue
+                if not isinstance(raw, dict):
+                    failures.append(f"`{rel_path}` must contain a JSON object")
+                    continue
+                lane_value = str(raw.get("lane") or "").strip().lower()
+                if lane_value != label.lower():
+                    failures.append(f"`{rel_path}` lane must be `{label}`")
+                if not str(raw.get("summary") or "").strip():
+                    failures.append(f"`{rel_path}` must include a non-empty summary")
+                if not isinstance(raw.get("changed_files"), list):
+                    failures.append(f"`{rel_path}` must include a changed_files list")
+                continue
+
+            if kind == "glob_nonempty":
+                pattern = self._normalize_multi_contract_path(str(check.get("pattern") or ""))
+                if not pattern:
+                    failures.append("invalid glob_nonempty pattern")
+                    continue
+                try:
+                    matches = [item for item in workspace.glob(pattern) if item.is_file()]
+                except Exception as e:
+                    failures.append(f"invalid glob pattern `{pattern}`: {e}")
+                    continue
+                if not matches:
+                    failures.append(f"no files matched `{pattern}`")
+                continue
+
+            if kind == "reported_files_exist":
+                _, error = load_handoff()
+                if error:
+                    failures.append(error)
+                    continue
+                reported = reported_files()
+                if not reported:
+                    failures.append("handoff JSON must list at least one changed file")
+                    continue
+                missing = [path for path in reported if not (workspace / path).exists()]
+                if missing:
+                    failures.append(
+                        "reported changed_files do not exist: "
+                        + ", ".join(f"`{path}`" for path in missing[:4])
+                    )
+                continue
+
+            if kind == "owned_path_touched":
+                if not owned_paths:
+                    failures.append("owned_path_touched requested but worker has no owned_paths")
+                    continue
+                reported = reported_files()
+                if not reported:
+                    failures.append("cannot verify owned_paths because handoff JSON has no changed_files")
+                    continue
+                if not any(self._multi_path_matches_any(path, owned_paths) for path in reported):
+                    failures.append("no reported changed_files are inside owned_paths")
+                continue
+
+            if kind == "owned_paths_only":
+                if not owned_paths:
+                    failures.append("owned_paths_only requested but worker has no owned_paths")
+                    continue
+                reported = reported_files()
+                if not reported:
+                    failures.append("cannot verify owned_paths because handoff JSON has no changed_files")
+                    continue
+                out_of_bounds = [
+                    path
+                    for path in reported
+                    if not path.startswith("handoff/")
+                    and not self._multi_path_matches_any(path, owned_paths)
+                ]
+                if out_of_bounds:
+                    failures.append(
+                        "reported changed_files outside owned_paths: "
+                        + ", ".join(f"`{path}`" for path in out_of_bounds[:4])
+                    )
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in failures:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return not deduped, deduped, handoff_data
+
+    def _append_multi_acceptance_report(
+        self,
+        result_text: str,
+        failures: list[str],
+        handoff_data: dict[str, Any] | None = None,
+    ) -> str:
+        lines = [(result_text or "").strip()]
+        lines.append("")
+        lines.append("Acceptance: passed" if not failures else "Acceptance: failed")
+        for failure in failures[:6]:
+            lines.append(f"- {failure}")
+
+        handoff = handoff_data if isinstance(handoff_data, dict) else {}
+        handoff_summary = self._short_progress_text(
+            str(handoff.get("summary") or ""),
+            max_chars=220,
+        )
+        if handoff_summary:
+            lines.append(f"Handoff summary: {handoff_summary}")
+        reported_files = self._reported_multi_handoff_files(handoff) if handoff else []
+        if reported_files:
+            preview = ", ".join(f"`{path}`" for path in reported_files[:6])
+            if len(reported_files) > 6:
+                preview += ", ..."
+            lines.append(f"Reported files: {preview}")
+        return "\n".join(line for line in lines if line).strip()
+
 
     async def _execute_pending_multi_plan(self, update: Update, session_id: str):
         pending = self._get_pending_multi_plan(session_id)
@@ -488,7 +693,7 @@ class CommandsAgentMixin:
             worker_msgs.append(worker_msg)
 
         def _is_success_result(worker_result: str) -> bool:
-            return "✅ Finished in " in (worker_result or "")
+            return self._delegation_result_state(worker_result) == "success"
 
         worker_contracts = plan_payload.get("workers")
         contract_list = worker_contracts if isinstance(worker_contracts, list) else []
@@ -529,6 +734,11 @@ class CommandsAgentMixin:
             unknown_dependency_map[label] = unknown_deps
             contract["depends_on"] = valid_deps
 
+        repair_attempts = max(
+            0,
+            min(2, int(getattr(self.config, "local_agent_multi_repair_attempts", 1))),
+        )
+
         async def _run_worker(index: int, label: str, agent: str, progress_msg):
             tag = self._multi_agent_tag(label, agent, index)
             worker_contract = worker_contract_by_label.get(label, {})
@@ -546,36 +756,85 @@ class CommandsAgentMixin:
                 except Exception:
                     pass
 
-            try:
-                result = await self._run_local_agent_task(
-                    session_id=session_id,
-                    agent=agent,
-                    task=worker_task,
-                    progress_cb=_worker_progress_update,
-                    include_workspace_delta=False,
-                    workspace_dir=multi_workspace,
-                )
-                ok = _is_success_result(result)
-                status_text = "✅ Worker completed." if ok else "⚠️ Worker finished with issues."
-                try:
-                    await progress_msg.edit_text(f"{tag}\n{status_text}")
-                except Exception:
-                    pass
-                return (label, agent, result, ok)
-            except Exception as e:
-                fail_result = f"⚠️ Worker failed: {e}"
-                try:
-                    await progress_msg.edit_text(f"{tag}\n{fail_result}")
-                except Exception:
-                    pass
-                return (label, agent, fail_result, False)
+            last_result = ""
+            last_failures: list[str] = []
 
-        pending = set(workers_by_label.keys())
+            for attempt in range(repair_attempts + 1):
+                task_prompt = worker_task
+                if attempt > 0:
+                    task_prompt = self._build_multi_agent_repair_task(
+                        label=label,
+                        goal=goal,
+                        workers=workers,
+                        worker_plan=worker_contract,
+                        acceptance_failures=last_failures,
+                        previous_result=last_result,
+                        task_workspace_label=multi_workspace_label,
+                    )
+
+                try:
+                    result = await self._run_local_agent_task(
+                        session_id=session_id,
+                        agent=agent,
+                        task=task_prompt,
+                        progress_cb=_worker_progress_update,
+                        include_workspace_delta=False,
+                        workspace_dir=multi_workspace,
+                    )
+                except Exception as e:
+                    result = f"⚠️ Worker failed: {e}"
+
+                runtime_ok = _is_success_result(result)
+                handoff_data: dict[str, Any] = {}
+                if runtime_ok:
+                    acceptance_ok, acceptance_failures, handoff_data = await asyncio.to_thread(
+                        self._evaluate_multi_worker_acceptance,
+                        multi_workspace,
+                        label,
+                        worker_contract,
+                    )
+                else:
+                    acceptance_ok = False
+                    acceptance_failures = ["execution did not finish cleanly"]
+
+                enriched_result = self._append_multi_acceptance_report(
+                    result,
+                    acceptance_failures,
+                    handoff_data,
+                )
+                if runtime_ok and acceptance_ok:
+                    try:
+                        await progress_msg.edit_text(f"{tag}\n✅ Worker completed.")
+                    except Exception:
+                        pass
+                    return (label, agent, enriched_result, True)
+
+                last_result = enriched_result
+                last_failures = acceptance_failures or ["worker execution failed"]
+                if attempt >= repair_attempts:
+                    try:
+                        await progress_msg.edit_text(f"{tag}\n⚠️ Worker finished with issues.")
+                    except Exception:
+                        pass
+                    return (label, agent, last_result, False)
+
+                reason = self._short_progress_text("; ".join(last_failures), max_chars=180)
+                try:
+                    await progress_msg.edit_text(
+                        f"{tag}\n🔧 Repair attempt {attempt + 1}/{repair_attempts}: {reason}"
+                    )
+                except Exception:
+                    pass
+
+            return (label, agent, last_result or "⚠️ Worker failed.", False)
+
+        remaining = set(workers_by_label.keys())
         completed_ok: set[str] = set()
         failed: set[str] = set()
         results_by_label: dict[str, object] = {}
         index_by_label = {label: idx for idx, (label, _) in enumerate(workers)}
         wait_status_by_label: dict[str, str] = {}
+        running: dict[asyncio.Task[Any], str] = {}
 
         async def _set_worker_status(label: str, status_text: str):
             if wait_status_by_label.get(label) == status_text:
@@ -592,26 +851,29 @@ class CommandsAgentMixin:
             except Exception:
                 pass
 
-        for label in list(pending):
+        for label in list(remaining):
             unknown_deps = unknown_dependency_map.get(label) or []
             if not unknown_deps:
                 continue
-            pending.discard(label)
+            remaining.discard(label)
             failed.add(label)
             reason = ", ".join(unknown_deps)
             skip_text = f"⚠️ Skipped because AGENTS.md references unknown dependency: {reason}"
             results_by_label[label] = skip_text
             await _set_worker_status(label, skip_text)
 
-        while pending:
+        while remaining or running:
+            running_labels = set(running.values())
             blocked_now: list[str] = []
-            for label in list(pending):
+            for label in list(remaining):
+                if label in running_labels:
+                    continue
                 dep_list = dependency_map.get(label) or []
                 if any(dep in failed for dep in dep_list):
                     blocked_now.append(label)
 
             for label in blocked_now:
-                pending.discard(label)
+                remaining.discard(label)
                 failed.add(label)
                 dep_list = dependency_map.get(label) or []
                 reason = ", ".join(d for d in dep_list if d in failed) or "failed dependency"
@@ -620,7 +882,9 @@ class CommandsAgentMixin:
                 await _set_worker_status(label, skip_text)
 
             ready: list[str] = []
-            for label in list(pending):
+            for label in list(remaining):
+                if label in running_labels:
+                    continue
                 dep_list = dependency_map.get(label) or []
                 unresolved = [dep for dep in dep_list if dep not in completed_ok]
                 if not unresolved:
@@ -633,30 +897,36 @@ class CommandsAgentMixin:
                 )
                 await _set_worker_status(label, wait_text)
 
-            if not ready:
-                for label in list(pending):
-                    pending.discard(label)
+            for label in ready:
+                task = asyncio.create_task(
+                    _run_worker(
+                        index_by_label[label],
+                        label,
+                        workers_by_label[label],
+                        worker_msgs[index_by_label[label]],
+                    )
+                )
+                running[task] = label
+
+            if not running:
+                for label in list(remaining):
+                    remaining.discard(label)
                     failed.add(label)
                     skip_text = "⚠️ Skipped due to unresolved dependency cycle in AGENTS.md."
                     results_by_label[label] = skip_text
                     await _set_worker_status(label, skip_text)
                 break
 
-            run_tasks = [
-                _run_worker(
-                    index_by_label[label],
-                    label,
-                    workers_by_label[label],
-                    worker_msgs[index_by_label[label]],
-                )
-                for label in ready
-            ]
-            phase_results = await asyncio.gather(*run_tasks)
+            done, _ = await asyncio.wait(
+                set(running.keys()),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
 
-            for label in ready:
-                pending.discard(label)
-
-            for result in phase_results:
+            for task in done:
+                label = running.pop(task, "")
+                if label:
+                    remaining.discard(label)
+                result = task.result()
                 label, _agent, worker_result, ok = result
                 results_by_label[label] = worker_result
                 if ok:
@@ -703,4 +973,3 @@ class CommandsAgentMixin:
             asyncio.create_task(self.maybe_summarize(session_id))
 
         await self._send_response(None, update, "\n".join(final_lines).strip())
-

@@ -98,6 +98,7 @@ LOCAL_AGENT_TIMEOUT_SEC=1800
 LOCAL_AGENT_PROGRESS_INTERVAL_SEC=30
 LOCAL_AGENT_MULTI_DEFAULT_AGENTS=claude,codex
 LOCAL_AGENT_MULTI_AUTO_CONTINUE=no
+LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS=1
 LOCAL_AGENT_SAFETY_MODE=off
 LOCAL_AGENT_DENY_PATTERNS=
 
@@ -165,7 +166,9 @@ How it runs:
 - Confirmation is required by default (`confirm`, `yes`) unless `LOCAL_AGENT_MULTI_AUTO_CONTINUE=yes`.
 - `edit` lets you iterate the plan before execution.
 - `cancel` or `no` clears the pending plan.
-- Execution follows dependency phases so independent workers run in parallel.
+- Execution now follows true DAG scheduling, so downstream lanes can start as soon as their own dependencies finish.
+- Each worker gets owned paths, must write `handoff/<lane>.md` plus `handoff/<lane>.json`, and is checked against lightweight acceptance rules.
+- Failed lanes can get a small self-repair pass controlled by `LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS` (clamped to `0..2`).
 
 ## Supported Providers
 

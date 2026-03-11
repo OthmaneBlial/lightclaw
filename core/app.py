@@ -68,6 +68,9 @@ def main():
         "   Multi-agent auto-continue: "
         + ("yes" if config.local_agent_multi_auto_continue else "no")
     )
+    log.info(
+        f"   Multi-agent repair attempts: {config.local_agent_multi_repair_attempts}"
+    )
     if config.groq_api_key:
         log.info("   Voice: ✅ Groq Whisper enabled")
     else:

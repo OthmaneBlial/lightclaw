@@ -279,6 +279,10 @@ class DelegationAgentsMixin:
             "<b>Multi auto-continue:</b> "
             + ("yes" if self.config.local_agent_multi_auto_continue else "no")
         )
+        lines.append(
+            "<b>Multi repair attempts:</b> "
+            + _escape_html(str(self.config.local_agent_multi_repair_attempts))
+        )
         lines.append("")
         lines.append(self._agent_usage_text())
         return "\n".join(lines)
