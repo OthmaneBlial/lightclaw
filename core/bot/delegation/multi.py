@@ -53,6 +53,9 @@ class DelegationMultiPlanMixin:
             )
         )
 
+    def _multi_is_deliverable_lane(self, label: str, role: str = "") -> bool:
+        return self._multi_is_docs_lane(label, role) or self._multi_is_authoring_lane(label, role)
+
     @staticmethod
     def _multi_goal_profile(goal: str) -> str:
         text = (goal or "").lower()
@@ -344,6 +347,12 @@ class DelegationMultiPlanMixin:
                 seen.add(findings_hint)
                 out.append(findings_hint)
 
+        if self._multi_is_deliverable_lane(label, role):
+            deliverables_hint = "Machine-readable deliverables list in handoff JSON outputs.deliverables."
+            if deliverables_hint not in seen:
+                seen.add(deliverables_hint)
+                out.append(deliverables_hint)
+
         return out
 
     def _default_multi_acceptance_checks(
@@ -363,6 +372,8 @@ class DelegationMultiPlanMixin:
             checks.append({"type": "json_field_nonempty", "field": "outputs.api_calls"})
         if self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
             checks.append({"type": "json_field_nonempty", "field": "outputs.findings"})
+        if self._multi_is_deliverable_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.deliverables"})
         if owned_paths:
             checks.append({"type": "owned_path_touched"})
             checks.append({"type": "owned_paths_only"})
@@ -496,6 +507,7 @@ class DelegationMultiPlanMixin:
             "- backend/API lanes should write outputs.endpoints as HTTP method/path strings like GET /api/items.\n"
             "- frontend/client lanes should write outputs.api_calls as HTTP method/path strings like GET /api/items.\n"
             "- research/analysis/review lanes should write outputs.findings as a machine-readable list of findings, caveats, or recommendations.\n"
+            "- docs/authoring/content lanes should write outputs.deliverables as a machine-readable list of produced artifacts.\n"
             "- use command_succeeds only for cheap repo-local verification commands; never use installs, servers, or long-running commands.\n"
             "- use owned_paths when a worker clearly owns specific files or folders.\n"
             "- allowed acceptance_checks.type values: file_exists, glob_nonempty, command_succeeds, json_field_nonempty, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
@@ -518,7 +530,7 @@ class DelegationMultiPlanMixin:
             '      "acceptance_checks": [\n'
             '        {"type": "file_exists", "path": "handoff/builder.md"},\n'
             '        {"type": "command_succeeds", "command": "python -m py_compile src/main.py", "timeout_sec": 15},\n'
-            '        {"type": "json_field_nonempty", "field": "outputs.findings"},\n'
+            '        {"type": "json_field_nonempty", "field": "outputs.deliverables"},\n'
             '        {"type": "handoff_json", "path": "handoff/builder.json"}\n'
             "      ]\n"
             "    }\n"
@@ -1129,9 +1141,19 @@ class DelegationMultiPlanMixin:
             handoff_contract_hint = (
                 "In handoff JSON outputs.findings, list the validated findings, risks, caveats, or unresolved issues as a machine-readable list."
             )
+        elif self._multi_is_authoring_lane(label, role):
+            lane_hint = (
+                "Focus on producing the requested artifact clearly and keeping the deliverable set explicit."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.deliverables, list the produced artifacts as a machine-readable list of paths or artifact names."
+            )
         elif self._multi_is_docs_lane(label, role):
             lane_hint = (
                 "Focus on documentation: setup, architecture, usage, and developer workflow."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.deliverables, list the documentation artifacts you produced as a machine-readable list of paths."
             )
 
         worker_plan = worker_plan or {}
@@ -1287,6 +1309,10 @@ class DelegationMultiPlanMixin:
         elif self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
             repair_handoff_hint = (
                 "Keep outputs.findings in handoff JSON aligned with the actual findings, caveats, and recommendations produced by this lane."
+            )
+        elif self._multi_is_deliverable_lane(label, role):
+            repair_handoff_hint = (
+                "Keep outputs.deliverables in handoff JSON aligned with the actual artifacts produced by this lane."
             )
         return (
             "You are repairing your own lane in an existing LightClaw multi-agent run.\n\n"
