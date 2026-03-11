@@ -168,6 +168,7 @@ How it runs:
 - `cancel` or `no` clears the pending plan.
 - Execution now follows true DAG scheduling, so downstream lanes can start as soon as their own dependencies finish.
 - Each worker gets owned paths, must write `handoff/<lane>.md` plus `handoff/<lane>.json`, and is checked against lightweight acceptance rules.
+- The same contract system now handles non-coding lanes too, including research, analysis, authoring, and review/validation roles.
 - Acceptance can now run small bounded repo-local commands when a lane declares `command_succeeds`.
 - Backend/frontend lanes also get automatic handoff JSON field checks, so `outputs.endpoints` and `outputs.api_calls` must actually be populated.
 - Backend/frontend runs also get a lightweight cross-lane API audit from handoff JSON, so method/path mismatches are surfaced in the final report.

@@ -23,6 +23,36 @@ class DelegationMultiPlanMixin:
         text = self._multi_lane_role_text(label, role)
         return bool(re.search(r"\b(frontend|web|ui|client|react|next|vue)\b", text))
 
+    def _multi_is_docs_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(doc|docs|documentation|readme)\b", text))
+
+    def _multi_is_test_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(qa|test|testing|e2e)\b", text))
+
+    def _multi_is_research_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(
+            re.search(
+                r"\b(architect|planner|planning|design|spec|research|discovery|analysis|analyst|synthesis|brief)\b",
+                text,
+            )
+        )
+
+    def _multi_is_review_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(review|reviewer|validate|validation|verif|audit)\b", text))
+
+    def _multi_is_authoring_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(
+            re.search(
+                r"\b(author|authoring|writer|writing|content|copy|marketing|blog|article|newsletter|report)\b",
+                text,
+            )
+        )
+
     @staticmethod
     def _multi_goal_profile(goal: str) -> str:
         text = (goal or "").lower()
@@ -31,6 +61,11 @@ class DelegationMultiPlanMixin:
             text,
         ):
             return "coding"
+        if re.search(
+            r"\b(research|analy[sz]e|analysis|investigate|compare|benchmark|audit|review|study|brief|report|findings|landscape|competitor|market)\b",
+            text,
+        ):
+            return "analysis"
         if re.search(
             r"\b(blog|article|post|content|seo|copy|marketing|newsletter|landing page)\b",
             text,
@@ -77,6 +112,41 @@ class DelegationMultiPlanMixin:
                     "expected_inputs": ["Builder outputs and handoff notes."],
                     "expected_outputs": [
                         "Validation fixes and quality checks summary.",
+                    ],
+                    "handoff_to": [],
+                },
+            ]
+        elif profile == "analysis":
+            workers = [
+                {
+                    "label": "research",
+                    "agent": primary,
+                    "role": "research",
+                    "depends_on": [],
+                    "responsibilities": [
+                        "Research the topic, gather evidence, and capture key findings.",
+                        "Produce a machine-readable findings handoff for downstream synthesis.",
+                    ],
+                    "expected_inputs": ["Global goal, scope, and evaluation criteria."],
+                    "expected_outputs": [
+                        "Research notes with key findings and evidence.",
+                        "Machine-readable findings list in handoff JSON outputs.findings.",
+                    ],
+                    "handoff_to": ["reviewer"],
+                },
+                {
+                    "label": "reviewer",
+                    "agent": secondary,
+                    "role": "validation",
+                    "depends_on": ["research"],
+                    "responsibilities": [
+                        "Review findings for gaps, contradictions, and unsupported claims.",
+                        "Refine the final handoff with risks, caveats, and recommendations.",
+                    ],
+                    "expected_inputs": ["Research handoff and source artifacts in the workspace."],
+                    "expected_outputs": [
+                        "Validated findings, caveats, and recommendations.",
+                        "Machine-readable findings list in handoff JSON outputs.findings.",
                     ],
                     "handoff_to": [],
                 },
@@ -200,12 +270,16 @@ class DelegationMultiPlanMixin:
             return ["backend/**", "api/**", "server/**", "db/**", "migrations/**"]
         if self._multi_is_frontend_lane(label, role):
             return ["frontend/**", "web/**", "ui/**", "components/**", "pages/**", "public/**"]
-        if re.search(r"\b(doc|docs|documentation|readme)\b", text):
+        if self._multi_is_docs_lane(label, role):
             return ["README.md", "docs/**"]
-        if re.search(r"\b(review|reviewer|qa|test|testing|validate|validation|verif|e2e)\b", text):
+        if self._multi_is_test_lane(label, role):
             return ["tests/**", "e2e/**", "qa/**"]
-        if re.search(r"\b(architect|planner|planning|design|spec|research|discovery)\b", text):
-            return ["specs/**"]
+        if self._multi_is_research_lane(label, role):
+            return ["specs/**", "research/**", "analysis/**", "reports/**", "notes/**", "outlines/**"]
+        if self._multi_is_authoring_lane(label, role):
+            return ["content/**", "articles/**", "posts/**", "drafts/**", "reports/**", "docs/**"]
+        if self._multi_is_review_lane(label, role):
+            return []
         return []
 
     def _normalize_multi_owned_paths(
@@ -264,6 +338,12 @@ class DelegationMultiPlanMixin:
                 seen.add(frontend_hint)
                 out.append(frontend_hint)
 
+        if self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
+            findings_hint = "Machine-readable findings list in handoff JSON outputs.findings."
+            if findings_hint not in seen:
+                seen.add(findings_hint)
+                out.append(findings_hint)
+
         return out
 
     def _default_multi_acceptance_checks(
@@ -281,6 +361,8 @@ class DelegationMultiPlanMixin:
             checks.append({"type": "json_field_nonempty", "field": "outputs.endpoints"})
         if self._multi_is_frontend_lane(label, role):
             checks.append({"type": "json_field_nonempty", "field": "outputs.api_calls"})
+        if self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.findings"})
         if owned_paths:
             checks.append({"type": "owned_path_touched"})
             checks.append({"type": "owned_paths_only"})
@@ -413,6 +495,7 @@ class DelegationMultiPlanMixin:
             "- every worker must write handoff/<label>.md and handoff/<label>.json.\n"
             "- backend/API lanes should write outputs.endpoints as HTTP method/path strings like GET /api/items.\n"
             "- frontend/client lanes should write outputs.api_calls as HTTP method/path strings like GET /api/items.\n"
+            "- research/analysis/review lanes should write outputs.findings as a machine-readable list of findings, caveats, or recommendations.\n"
             "- use command_succeeds only for cheap repo-local verification commands; never use installs, servers, or long-running commands.\n"
             "- use owned_paths when a worker clearly owns specific files or folders.\n"
             "- allowed acceptance_checks.type values: file_exists, glob_nonempty, command_succeeds, json_field_nonempty, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
@@ -435,7 +518,7 @@ class DelegationMultiPlanMixin:
             '      "acceptance_checks": [\n'
             '        {"type": "file_exists", "path": "handoff/builder.md"},\n'
             '        {"type": "command_succeeds", "command": "python -m py_compile src/main.py", "timeout_sec": 15},\n'
-            '        {"type": "json_field_nonempty", "field": "outputs.endpoints"},\n'
+            '        {"type": "json_field_nonempty", "field": "outputs.findings"},\n'
             '        {"type": "handoff_json", "path": "handoff/builder.json"}\n'
             "      ]\n"
             "    }\n"
@@ -449,7 +532,7 @@ class DelegationMultiPlanMixin:
         role = str(item.get("role") or "").strip().lower()
         text = f"{label} {role}"
 
-        if re.search(r"\b(architect|planner|planning|design|spec|research|discovery)\b", text):
+        if re.search(r"\b(architect|planner|planning|design|spec|research|discovery|analysis|analyst|synthesis|brief)\b", text):
             return "planning"
         if re.search(r"\b(doc|docs|documentation|readme)\b", text):
             return "docs"
@@ -1013,25 +1096,40 @@ class DelegationMultiPlanMixin:
     ) -> str:
         roster = ", ".join(f"{name}={agent}" for name, agent in workers)
         lane = label.lower()
+        role = str((worker_plan or {}).get("role") or "implementation").strip() or "implementation"
         lane_hint = "Focus only on your lane and avoid unrelated files."
         handoff_contract_hint = (
             "Keep handoff JSON accurate and machine-readable for downstream verification."
         )
-        if "backend" in lane:
+        if self._multi_is_backend_lane(label, role):
             lane_hint = (
                 "Focus on backend APIs, data models, persistence, and backend tests."
             )
             handoff_contract_hint = (
                 "In handoff JSON outputs.endpoints, list each served HTTP method/path as strings like `GET /api/items`."
             )
-        elif "frontend" in lane:
+        elif self._multi_is_frontend_lane(label, role):
             lane_hint = (
                 "Focus on frontend UI, routing/state, and integration with backend API contracts."
             )
             handoff_contract_hint = (
                 "In handoff JSON outputs.api_calls, list each backend HTTP method/path the frontend calls as strings like `GET /api/items`."
             )
-        elif "doc" in lane:
+        elif self._multi_is_research_lane(label, role):
+            lane_hint = (
+                "Focus on research, analysis, synthesis, and crisp evidence-backed findings."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.findings, list the key findings, caveats, or recommendations as a machine-readable list."
+            )
+        elif self._multi_is_review_lane(label, role):
+            lane_hint = (
+                "Focus on validation, critique, gap detection, and practical recommendations."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.findings, list the validated findings, risks, caveats, or unresolved issues as a machine-readable list."
+            )
+        elif self._multi_is_docs_lane(label, role):
             lane_hint = (
                 "Focus on documentation: setup, architecture, usage, and developer workflow."
             )
@@ -1159,6 +1257,7 @@ class DelegationMultiPlanMixin:
     ) -> str:
         roster = ", ".join(f"{name}={agent}" for name, agent in workers)
         worker_plan = worker_plan or {}
+        role = str(worker_plan.get("role") or "implementation").strip() or "implementation"
         owned_paths = worker_plan.get("owned_paths")
         owned_paths_list = (
             [str(item).strip() for item in owned_paths]
@@ -1176,15 +1275,18 @@ class DelegationMultiPlanMixin:
         previous_excerpt = self._short_progress_text(previous_result, max_chars=1200)
         handoff_md_path = self._multi_handoff_md_path(label)
         handoff_json_path = self._multi_handoff_json_path(label)
-        lane = label.lower()
         repair_handoff_hint = "Keep handoff JSON aligned with the final workspace state."
-        if "backend" in lane:
+        if self._multi_is_backend_lane(label, role):
             repair_handoff_hint = (
                 "Keep outputs.endpoints in handoff JSON aligned with the backend routes you actually serve."
             )
-        elif "frontend" in lane:
+        elif self._multi_is_frontend_lane(label, role):
             repair_handoff_hint = (
                 "Keep outputs.api_calls in handoff JSON aligned with the backend methods and paths the frontend actually calls."
+            )
+        elif self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
+            repair_handoff_hint = (
+                "Keep outputs.findings in handoff JSON aligned with the actual findings, caveats, and recommendations produced by this lane."
             )
         return (
             "You are repairing your own lane in an existing LightClaw multi-agent run.\n\n"
@@ -1264,6 +1366,46 @@ class DelegationMultiPlanMixin:
                     "UI behavior notes and integration assumptions.",
                 ]
                 handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif self._multi_is_research_lane(label, lowered):
+                role = "research"
+                responsibilities = [
+                    "Research the topic, gather evidence, and capture key findings.",
+                    "Produce a machine-readable findings handoff for downstream workers.",
+                ]
+                expected_inputs = [
+                    "Global goal, scope, and constraints from AGENTS.md.",
+                ]
+                expected_outputs = [
+                    "Research notes, evidence, and synthesized findings.",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif self._multi_is_authoring_lane(label, lowered):
+                role = "authoring"
+                responsibilities = [
+                    "Create the requested written or synthesized artifact for this lane.",
+                    "Use upstream findings and constraints to produce a clear final deliverable.",
+                ]
+                expected_inputs = [
+                    "Global goal, upstream handoffs, and workspace artifacts relevant to this deliverable.",
+                ]
+                expected_outputs = [
+                    "Final drafted artifact and succinct handoff notes.",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif self._multi_is_review_lane(label, lowered):
+                role = "validation"
+                depends_on = [lane_label for lane_label in labels if lane_label != label]
+                responsibilities = [
+                    "Review upstream outputs for gaps, contradictions, and unsupported claims.",
+                    "Refine the final findings, caveats, and recommendations.",
+                ]
+                expected_inputs = [
+                    "Upstream handoff files and generated artifacts from the workspace.",
+                ]
+                expected_outputs = [
+                    "Validated findings, caveats, and recommendations.",
+                ]
+                handoff_to = []
             elif "doc" in lowered:
                 role = "documentation"
                 depends_on = [lane_label for lane_label in nondocs_labels if lane_label != label]
