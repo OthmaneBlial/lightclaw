@@ -172,6 +172,7 @@ How it runs:
 - Acceptance can now run small bounded repo-local commands when a lane declares `command_succeeds`.
 - Backend/frontend lanes also get automatic handoff JSON field checks, so `outputs.endpoints` and `outputs.api_calls` must actually be populated.
 - Docs/authoring lanes now get the same treatment via `outputs.deliverables`, so non-code artifacts are tracked in a machine-readable way too.
+- Research/review and docs/authoring runs now also get lightweight cross-lane findings/deliverables audits in the final report.
 - Backend/frontend runs also get a lightweight cross-lane API audit from handoff JSON, so method/path mismatches are surfaced in the final report.
 - Failed lanes can get a small self-repair pass controlled by `LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS` (clamped to `0..2`).
 

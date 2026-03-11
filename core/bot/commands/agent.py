@@ -481,6 +481,36 @@ class CommandsAgentMixin:
                 return parsed
         return []
 
+    def _extract_multi_string_list(
+        self,
+        handoff_data: dict[str, Any],
+        dotted_paths: tuple[str, ...],
+    ) -> list[str]:
+        for dotted_path in dotted_paths:
+            value = self._multi_handoff_lookup(handoff_data, dotted_path)
+            items = value if isinstance(value, list) else []
+            out: list[str] = []
+            seen: set[str] = set()
+            for item in items[:64]:
+                text = ""
+                if isinstance(item, dict):
+                    text = str(
+                        item.get("path")
+                        or item.get("file")
+                        or item.get("name")
+                        or item.get("value")
+                        or ""
+                    ).strip()
+                else:
+                    text = str(item or "").strip()
+                if not text or text in seen:
+                    continue
+                seen.add(text)
+                out.append(text)
+            if out:
+                return out
+        return []
+
     @staticmethod
     def _format_multi_api_entry(method: str, path: str) -> str:
         return f"{method} {path}"
@@ -554,6 +584,106 @@ class CommandsAgentMixin:
                 findings.append(
                     f"`{label}` calls methods/routes not provided by backend lanes: {preview}"
                 )
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in findings:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return True, deduped
+
+    def _audit_multi_lane_findings_flow(
+        self,
+        workspace: Path,
+        worker_contract_by_label: dict[str, dict[str, object]],
+    ) -> tuple[bool, list[str]]:
+        research_labels: list[str] = []
+        review_labels: list[str] = []
+        for label, contract in worker_contract_by_label.items():
+            role = str(contract.get("role") or "")
+            if self._multi_is_research_lane(label, role):
+                research_labels.append(label)
+            if self._multi_is_review_lane(label, role):
+                review_labels.append(label)
+
+        if not research_labels or not review_labels:
+            return False, []
+
+        findings: list[str] = []
+        for label in research_labels:
+            handoff_data, error = self._load_multi_worker_handoff(workspace, label)
+            if error:
+                findings.append(f"`{label}` handoff unavailable for findings audit: {error}")
+                continue
+            lane_findings = self._extract_multi_string_list(
+                handoff_data,
+                ("outputs.findings", "handoff.findings", "findings"),
+            )
+            if not lane_findings:
+                findings.append(f"`{label}` handoff is missing `outputs.findings` for findings audit")
+
+        research_set = set(research_labels)
+        for label in review_labels:
+            contract = worker_contract_by_label.get(label, {})
+            deps_obj = contract.get("depends_on")
+            deps = [str(item).strip() for item in deps_obj] if isinstance(deps_obj, list) else []
+            if not any(dep in research_set for dep in deps):
+                findings.append(
+                    f"`{label}` should depend on at least one research/analysis lane for findings audit"
+                )
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in findings:
+            if item in seen:
+                continue
+            seen.add(item)
+            deduped.append(item)
+        return True, deduped
+
+    def _audit_multi_lane_deliverables(
+        self,
+        workspace: Path,
+        worker_contract_by_label: dict[str, dict[str, object]],
+    ) -> tuple[bool, list[str]]:
+        deliverable_labels: list[str] = []
+        for label, contract in worker_contract_by_label.items():
+            role = str(contract.get("role") or "")
+            if self._multi_is_deliverable_lane(label, role):
+                deliverable_labels.append(label)
+
+        if not deliverable_labels:
+            return False, []
+
+        findings: list[str] = []
+        for label in deliverable_labels:
+            handoff_data, error = self._load_multi_worker_handoff(workspace, label)
+            if error:
+                findings.append(f"`{label}` handoff unavailable for deliverables audit: {error}")
+                continue
+            deliverables = self._extract_multi_string_list(
+                handoff_data,
+                ("outputs.deliverables", "handoff.deliverables", "deliverables"),
+            )
+            if not deliverables:
+                findings.append(f"`{label}` handoff is missing `outputs.deliverables` for deliverables audit")
+                continue
+
+            reported_files = set(self._reported_multi_handoff_files(handoff_data))
+            for item in deliverables[:12]:
+                normalized = self._normalize_multi_contract_path(item)
+                if not normalized:
+                    continue
+                looks_like_path = (
+                    normalized in reported_files
+                    or "/" in item
+                    or "." in Path(normalized).name
+                    or normalized.lower().startswith("readme")
+                )
+                if looks_like_path and not (workspace / normalized).exists():
+                    findings.append(f"`{label}` deliverable does not exist in workspace: `{normalized}`")
 
         deduped: list[str] = []
         seen: set[str] = set()
@@ -1199,6 +1329,16 @@ class CommandsAgentMixin:
             multi_workspace,
             worker_contract_by_label,
         )
+        findings_audit_applicable, findings_audit_findings = await asyncio.to_thread(
+            self._audit_multi_lane_findings_flow,
+            multi_workspace,
+            worker_contract_by_label,
+        )
+        deliverables_audit_applicable, deliverables_audit_findings = await asyncio.to_thread(
+            self._audit_multi_lane_deliverables,
+            multi_workspace,
+            worker_contract_by_label,
+        )
 
         final_lines = [
             "🤖 Multi-agent run finished.",
@@ -1221,6 +1361,26 @@ class CommandsAgentMixin:
                 else "Cross-lane API audit: failed"
             )
             for finding in api_audit_findings[:6]:
+                final_lines.append(f"- {finding}")
+            final_lines.append("")
+
+        if findings_audit_applicable:
+            final_lines.append(
+                "Cross-lane findings audit: passed"
+                if not findings_audit_findings
+                else "Cross-lane findings audit: failed"
+            )
+            for finding in findings_audit_findings[:6]:
+                final_lines.append(f"- {finding}")
+            final_lines.append("")
+
+        if deliverables_audit_applicable:
+            final_lines.append(
+                "Deliverables audit: passed"
+                if not deliverables_audit_findings
+                else "Deliverables audit: failed"
+            )
+            for finding in deliverables_audit_findings[:6]:
                 final_lines.append(f"- {finding}")
             final_lines.append("")
 
