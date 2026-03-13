@@ -98,6 +98,7 @@ LOCAL_AGENT_TIMEOUT_SEC=1800
 LOCAL_AGENT_PROGRESS_INTERVAL_SEC=30
 LOCAL_AGENT_MULTI_DEFAULT_AGENTS=claude,codex
 LOCAL_AGENT_MULTI_AUTO_CONTINUE=no
+LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS=1
 LOCAL_AGENT_SAFETY_MODE=off
 LOCAL_AGENT_DENY_PATTERNS=
 
@@ -139,6 +140,8 @@ lightclaw chat
 
 ## Smart Multi-Agent Mode
 
+Full guide with many usage examples: [MULTI_AGENT.md](MULTI_AGENT.md)
+
 `/agent multi` supports three ways to define worker assignment:
 
 1. Auto mode:
@@ -159,13 +162,33 @@ lightclaw chat
 /agent multi --agent backend=codex --agent frontend=claude --agent docs=codex build a full stack todo app
 ```
 
+You can also declare explicit dependencies in the DAG:
+
+```text
+/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude --depends-on integration=backend,frontend build the app
+```
+
+With explicit rosters, dependency hints in the goal are still respected when you do not pass `--depends-on`. Example:
+
+```text
+/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude build the app, keep backend and frontend parallel, and make integration wait for backend and frontend
+```
+
 How it runs:
 
 - Plan is generated and shown first.
 - Confirmation is required by default (`confirm`, `yes`) unless `LOCAL_AGENT_MULTI_AUTO_CONTINUE=yes`.
 - `edit` lets you iterate the plan before execution.
 - `cancel` or `no` clears the pending plan.
-- Execution follows dependency phases so independent workers run in parallel.
+- Execution now follows true DAG scheduling, so downstream lanes can start as soon as their own dependencies finish.
+- Each worker gets owned paths, must write `handoff/<lane>.md` plus `handoff/<lane>.json`, and is checked against lightweight acceptance rules.
+- The same contract system now handles non-coding lanes too, including research, analysis, authoring, and review/validation roles.
+- Acceptance can now run small bounded repo-local commands when a lane declares `command_succeeds`.
+- Backend/frontend lanes also get automatic handoff JSON field checks, so `outputs.endpoints` and `outputs.api_calls` must actually be populated.
+- Docs/authoring lanes now get the same treatment via `outputs.deliverables`, so non-code artifacts are tracked in a machine-readable way too.
+- Research/review and docs/authoring runs now also get lightweight cross-lane findings/deliverables audits in the final report.
+- Backend/frontend runs also get a lightweight cross-lane API audit from handoff JSON, so method/path mismatches are surfaced in the final report.
+- Failed lanes can get a small self-repair pass controlled by `LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS` (clamped to `0..2`).
 
 ## Supported Providers
 

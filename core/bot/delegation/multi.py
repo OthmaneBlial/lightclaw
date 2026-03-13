@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 from pathlib import Path
@@ -11,6 +12,51 @@ from ...markdown import _escape_html
 
 class DelegationMultiPlanMixin:
     @staticmethod
+    def _multi_lane_role_text(label: str, role: str) -> str:
+        return f"{label} {role}".strip().lower()
+
+    def _multi_is_backend_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(backend|api|server|db|database|persistence|migration)\b", text))
+
+    def _multi_is_frontend_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(frontend|web|ui|client|react|next|vue)\b", text))
+
+    def _multi_is_docs_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(doc|docs|documentation|readme)\b", text))
+
+    def _multi_is_test_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(qa|test|testing|e2e)\b", text))
+
+    def _multi_is_research_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(
+            re.search(
+                r"\b(architect|planner|planning|design|spec|research|discovery|analysis|analyst|synthesis|brief)\b",
+                text,
+            )
+        )
+
+    def _multi_is_review_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(re.search(r"\b(review|reviewer|validate|validation|verif|audit)\b", text))
+
+    def _multi_is_authoring_lane(self, label: str, role: str = "") -> bool:
+        text = self._multi_lane_role_text(label, role)
+        return bool(
+            re.search(
+                r"\b(author|authoring|writer|writing|content|copy|marketing|blog|article|newsletter|report)\b",
+                text,
+            )
+        )
+
+    def _multi_is_deliverable_lane(self, label: str, role: str = "") -> bool:
+        return self._multi_is_docs_lane(label, role) or self._multi_is_authoring_lane(label, role)
+
+    @staticmethod
     def _multi_goal_profile(goal: str) -> str:
         text = (goal or "").lower()
         if re.search(
@@ -18,6 +64,11 @@ class DelegationMultiPlanMixin:
             text,
         ):
             return "coding"
+        if re.search(
+            r"\b(research|analy[sz]e|analysis|investigate|compare|benchmark|audit|review|study|brief|report|findings|landscape|competitor|market)\b",
+            text,
+        ):
+            return "analysis"
         if re.search(
             r"\b(blog|article|post|content|seo|copy|marketing|newsletter|landing page)\b",
             text,
@@ -64,6 +115,41 @@ class DelegationMultiPlanMixin:
                     "expected_inputs": ["Builder outputs and handoff notes."],
                     "expected_outputs": [
                         "Validation fixes and quality checks summary.",
+                    ],
+                    "handoff_to": [],
+                },
+            ]
+        elif profile == "analysis":
+            workers = [
+                {
+                    "label": "research",
+                    "agent": primary,
+                    "role": "research",
+                    "depends_on": [],
+                    "responsibilities": [
+                        "Research the topic, gather evidence, and capture key findings.",
+                        "Produce a machine-readable findings handoff for downstream synthesis.",
+                    ],
+                    "expected_inputs": ["Global goal, scope, and evaluation criteria."],
+                    "expected_outputs": [
+                        "Research notes with key findings and evidence.",
+                        "Machine-readable findings list in handoff JSON outputs.findings.",
+                    ],
+                    "handoff_to": ["reviewer"],
+                },
+                {
+                    "label": "reviewer",
+                    "agent": secondary,
+                    "role": "validation",
+                    "depends_on": ["research"],
+                    "responsibilities": [
+                        "Review findings for gaps, contradictions, and unsupported claims.",
+                        "Refine the final handoff with risks, caveats, and recommendations.",
+                    ],
+                    "expected_inputs": ["Research handoff and source artifacts in the workspace."],
+                    "expected_outputs": [
+                        "Validated findings, caveats, and recommendations.",
+                        "Machine-readable findings list in handoff JSON outputs.findings.",
                     ],
                     "handoff_to": [],
                 },
@@ -127,6 +213,27 @@ class DelegationMultiPlanMixin:
                 },
             ]
 
+        for item in workers:
+            label = str(item.get("label") or "").strip().lower()
+            role = str(item.get("role") or "implementation").strip() or "implementation"
+            item["expected_outputs"] = self._augment_multi_expected_outputs(
+                item.get("expected_outputs"),
+                label=label,
+                role=role,
+            )
+            owned_paths = self._normalize_multi_owned_paths(
+                item.get("owned_paths"),
+                label=label,
+                role=role,
+            )
+            item["owned_paths"] = owned_paths
+            item["acceptance_checks"] = self._normalize_multi_acceptance_checks(
+                item.get("acceptance_checks"),
+                label=label,
+                owned_paths=owned_paths,
+                role=role,
+            )
+
         return {
             "version": 1,
             "goal": goal,
@@ -138,6 +245,427 @@ class DelegationMultiPlanMixin:
             },
             "workers": workers,
         }
+
+    @staticmethod
+    def _normalize_multi_contract_path(raw: str) -> str:
+        value = str(raw or "").strip().replace("\\", "/")
+        if not value:
+            return ""
+        value = re.sub(r"/{2,}", "/", value)
+        if value.startswith("./"):
+            value = value[2:]
+        value = value.lstrip("/")
+        if not value or value == ".." or value.startswith("../") or "/../" in value:
+            return ""
+        return value.rstrip("/") or ""
+
+    def _multi_handoff_md_path(self, label: str) -> str:
+        safe = self._sanitize_multi_label(label)
+        return f"handoff/{safe}.md"
+
+    def _multi_handoff_json_path(self, label: str) -> str:
+        safe = self._sanitize_multi_label(label)
+        return f"handoff/{safe}.json"
+
+    def _default_multi_owned_paths(self, label: str, role: str) -> list[str]:
+        text = self._multi_lane_role_text(label, role)
+        if self._multi_is_backend_lane(label, role):
+            return ["backend/**", "api/**", "server/**", "db/**", "migrations/**"]
+        if self._multi_is_frontend_lane(label, role):
+            return ["frontend/**", "web/**", "ui/**", "components/**", "pages/**", "public/**"]
+        if self._multi_is_docs_lane(label, role):
+            return ["README.md", "docs/**"]
+        if self._multi_is_test_lane(label, role):
+            return ["tests/**", "e2e/**", "qa/**"]
+        if self._multi_is_research_lane(label, role):
+            return ["specs/**", "research/**", "analysis/**", "reports/**", "notes/**", "outlines/**"]
+        if self._multi_is_authoring_lane(label, role):
+            return ["content/**", "articles/**", "posts/**", "drafts/**", "reports/**", "docs/**"]
+        if self._multi_is_review_lane(label, role):
+            return []
+        return []
+
+    def _normalize_multi_owned_paths(
+        self,
+        owned_paths_obj: object,
+        label: str,
+        role: str,
+    ) -> list[str]:
+        raw_items = owned_paths_obj if isinstance(owned_paths_obj, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+        for item in raw_items[:8]:
+            value = self._normalize_multi_contract_path(str(item or ""))
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+        if out:
+            return out
+
+        defaults = self._default_multi_owned_paths(label, role)
+        for item in defaults:
+            value = self._normalize_multi_contract_path(item)
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+        return out
+
+    def _augment_multi_expected_outputs(
+        self,
+        expected_outputs_obj: object,
+        label: str,
+        role: str,
+    ) -> list[str]:
+        base = expected_outputs_obj if isinstance(expected_outputs_obj, list) else []
+        out: list[str] = []
+        seen: set[str] = set()
+
+        for item in base[:8]:
+            value = str(item or "").strip()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+
+        if self._multi_is_backend_lane(label, role):
+            backend_hint = "Machine-readable endpoint list in handoff JSON outputs.endpoints."
+            if backend_hint not in seen:
+                seen.add(backend_hint)
+                out.append(backend_hint)
+
+        if self._multi_is_frontend_lane(label, role):
+            frontend_hint = "Machine-readable API usage list in handoff JSON outputs.api_calls."
+            if frontend_hint not in seen:
+                seen.add(frontend_hint)
+                out.append(frontend_hint)
+
+        if self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
+            findings_hint = "Machine-readable findings list in handoff JSON outputs.findings."
+            if findings_hint not in seen:
+                seen.add(findings_hint)
+                out.append(findings_hint)
+
+        if self._multi_is_deliverable_lane(label, role):
+            deliverables_hint = "Machine-readable deliverables list in handoff JSON outputs.deliverables."
+            if deliverables_hint not in seen:
+                seen.add(deliverables_hint)
+                out.append(deliverables_hint)
+
+        return out
+
+    def _default_multi_acceptance_checks(
+        self,
+        label: str,
+        owned_paths: list[str],
+        role: str,
+    ) -> list[dict[str, object]]:
+        checks: list[dict[str, object]] = [
+            {"type": "file_exists", "path": self._multi_handoff_md_path(label)},
+            {"type": "handoff_json", "path": self._multi_handoff_json_path(label)},
+            {"type": "reported_files_exist"},
+        ]
+        if self._multi_is_backend_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.endpoints"})
+        if self._multi_is_frontend_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.api_calls"})
+        if self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.findings"})
+        if self._multi_is_deliverable_lane(label, role):
+            checks.append({"type": "json_field_nonempty", "field": "outputs.deliverables"})
+        if owned_paths:
+            checks.append({"type": "owned_path_touched"})
+            checks.append({"type": "owned_paths_only"})
+        return checks
+
+    def _normalize_multi_acceptance_checks(
+        self,
+        checks_obj: object,
+        label: str,
+        owned_paths: list[str],
+        role: str,
+    ) -> list[dict[str, object]]:
+        raw_checks = checks_obj if isinstance(checks_obj, list) else []
+        normalized: list[dict[str, object]] = []
+
+        for item in raw_checks[:8]:
+            if not isinstance(item, dict):
+                continue
+            kind = str(item.get("type") or "").strip().lower()
+            if kind in {"reported_files_exist", "owned_path_touched", "owned_paths_only"}:
+                normalized.append({"type": kind})
+                continue
+
+            if kind in {"file_exists", "handoff_json"}:
+                path = self._normalize_multi_contract_path(str(item.get("path") or ""))
+                if path:
+                    normalized.append({"type": kind, "path": path})
+                continue
+
+            if kind == "glob_nonempty":
+                pattern = self._normalize_multi_contract_path(str(item.get("pattern") or ""))
+                if pattern:
+                    normalized.append({"type": kind, "pattern": pattern})
+                continue
+
+            if kind == "command_succeeds":
+                command = str(item.get("command") or "").strip()
+                if not command:
+                    continue
+                normalized_check: dict[str, object] = {
+                    "type": kind,
+                    "command": command[:300],
+                }
+                cwd = self._normalize_multi_contract_path(str(item.get("cwd") or ""))
+                if cwd:
+                    normalized_check["cwd"] = cwd
+                timeout_raw = item.get("timeout_sec")
+                try:
+                    timeout_sec = int(timeout_raw)
+                except Exception:
+                    timeout_sec = 20
+                normalized_check["timeout_sec"] = max(1, min(45, timeout_sec))
+                normalized.append(normalized_check)
+                continue
+
+            if kind == "json_field_nonempty":
+                field = str(item.get("field") or "").strip()
+                if field:
+                    normalized.append({"type": kind, "field": field[:120]})
+                continue
+
+        baseline = self._default_multi_acceptance_checks(label, owned_paths, role)
+        for check in baseline:
+            if check not in normalized:
+                normalized.append(check)
+        return normalized
+
+    @staticmethod
+    def _multi_path_matches_pattern(path: str, pattern: str) -> bool:
+        normalized_path = re.sub(r"/{2,}", "/", str(path or "").strip().replace("\\", "/")).lstrip("./")
+        normalized_pattern = re.sub(r"/{2,}", "/", str(pattern or "").strip().replace("\\", "/")).lstrip("./")
+        if not normalized_path or not normalized_pattern:
+            return False
+        if fnmatch.fnmatch(normalized_path, normalized_pattern):
+            return True
+        if normalized_pattern.endswith("/**"):
+            prefix = normalized_pattern[:-3].rstrip("/")
+            return normalized_path == prefix or normalized_path.startswith(prefix + "/")
+        return False
+
+    def _multi_path_matches_any(self, path: str, patterns: list[str]) -> bool:
+        return any(self._multi_path_matches_pattern(path, pattern) for pattern in patterns)
+
+    def _describe_multi_acceptance_check(self, check: dict[str, object]) -> str:
+        kind = str(check.get("type") or "").strip().lower()
+        if kind == "file_exists":
+            return f"file exists: {check.get('path')}"
+        if kind == "handoff_json":
+            return f"valid handoff json: {check.get('path')}"
+        if kind == "glob_nonempty":
+            return f"glob has files: {check.get('pattern')}"
+        if kind == "command_succeeds":
+            cwd = str(check.get("cwd") or "").strip()
+            command = str(check.get("command") or "").strip()
+            if cwd:
+                return f"command succeeds in {cwd}: {command}"
+            return f"command succeeds: {command}"
+        if kind == "json_field_nonempty":
+            return f"handoff json field is non-empty: {check.get('field')}"
+        if kind == "reported_files_exist":
+            return "handoff json lists existing changed_files"
+        if kind == "owned_path_touched":
+            return "at least one changed file is inside owned_paths"
+        if kind == "owned_paths_only":
+            return "reported changed_files stay inside owned_paths"
+        return kind or "unknown acceptance check"
+
+    @staticmethod
+    def _multi_goal_label_pattern(label: str) -> str:
+        escaped = re.escape(str(label or "").strip().lower())
+        return rf"(?<![a-z0-9_-]){escaped}(?![a-z0-9_-])"
+
+    def _extract_goal_dependency_overrides(
+        self,
+        goal: str,
+        labels: list[str],
+    ) -> dict[str, list[str]]:
+        text = re.sub(r"\s+", " ", (goal or "").strip().lower())
+        if not text or not labels:
+            return {}
+
+        all_other_patterns = [
+            r"\ball of them\b",
+            r"\ball others\b",
+            r"\ball other agents\b",
+            r"\bthe other agents\b",
+            r"\bthe other workers\b",
+            r"\bevery other worker\b",
+            r"\bevery other lane\b",
+            r"\beveryone else\b",
+            r"\bthe rest\b",
+            r"\bcombined insights of the other agents\b",
+            r"\bcombined insights of the other workers\b",
+        ]
+
+        def _deps_from_clause(target_label: str, clause: str) -> list[str]:
+            trimmed = re.split(
+                r"\b(?:then|and then|after that|afterwards|before synthesizing|before producing)\b",
+                clause,
+                maxsplit=1,
+            )[0]
+            deps: list[str] = []
+            for candidate in labels:
+                if candidate == target_label:
+                    continue
+                if re.search(self._multi_goal_label_pattern(candidate), trimmed):
+                    deps.append(candidate)
+            if deps:
+                return deps
+            if any(re.search(pattern, trimmed) for pattern in all_other_patterns):
+                return [candidate for candidate in labels if candidate != target_label]
+            return []
+
+        overrides: dict[str, list[str]] = {}
+        for label in labels:
+            label_pattern = self._multi_goal_label_pattern(label)
+
+            final_patterns = [
+                rf"(?:make|keep|set)\s+{label_pattern}\s+(?:as\s+)?(?:the\s+)?final\s+(?:lane|worker|step|phase)\b",
+                rf"{label_pattern}\s+(?:must|should)?\s*(?:be\s+)?(?:the\s+)?final\s+(?:lane|worker|step|phase)\b",
+            ]
+            if any(re.search(pattern, text) for pattern in final_patterns):
+                overrides[label] = [candidate for candidate in labels if candidate != label]
+                continue
+
+            clause_patterns = [
+                rf"{label_pattern}\s+(?:must|should)\s+wait\s+for\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"{label_pattern}\s+waits\s+for\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"{label_pattern}\s+(?:must|should)\s+depend(?:s)?\s+on\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"{label_pattern}\s+depend(?:s)?\s+on\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"(?:make|keep|set)\s+{label_pattern}\s+wait\s+for\b(?P<deps>.*?)(?:[.;]|\n|$)",
+                rf"(?:make|keep|set)\s+{label_pattern}\s+depend(?:s)?\s+on\b(?P<deps>.*?)(?:[.;]|\n|$)",
+            ]
+            for pattern in clause_patterns:
+                match = re.search(pattern, text)
+                if not match:
+                    continue
+                deps = _deps_from_clause(label, match.group("deps") or "")
+                if deps:
+                    overrides[label] = deps
+                    break
+
+        return overrides
+
+    def _apply_goal_dependency_overrides(
+        self,
+        goal: str,
+        workers: list[dict[str, object]],
+        warnings: list[str] | None = None,
+    ) -> None:
+        labels = [str(item.get("label") or "").strip() for item in workers]
+        labels = [label for label in labels if label]
+        if not labels:
+            return
+
+        label_set = set(labels)
+        overrides = self._extract_goal_dependency_overrides(goal, labels)
+        if not overrides:
+            return
+
+        by_label = {
+            str(item.get("label") or "").strip(): item
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        for label, deps in overrides.items():
+            item = by_label.get(label)
+            if not item:
+                continue
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for dep in deps:
+                dep_label = str(dep or "").strip()
+                if not dep_label or dep_label == label or dep_label not in label_set or dep_label in seen:
+                    continue
+                seen.add(dep_label)
+                cleaned.append(dep_label)
+            if not cleaned:
+                continue
+            item["depends_on"] = cleaned
+            if warnings is not None:
+                warnings.append(
+                    f"Applied goal dependency hint: `{label}` waits for {', '.join(cleaned)}."
+                )
+
+    def _apply_explicit_dependency_overrides(
+        self,
+        explicit_dependency_specs: dict[str, list[str]] | None,
+        workers: list[dict[str, object]],
+        warnings: list[str] | None = None,
+    ) -> None:
+        if not isinstance(explicit_dependency_specs, dict) or not explicit_dependency_specs:
+            return
+
+        labels = [str(item.get("label") or "").strip() for item in workers]
+        label_set = {label for label in labels if label}
+        if not label_set:
+            return
+
+        by_label = {
+            str(item.get("label") or "").strip(): item
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        for label, deps_obj in explicit_dependency_specs.items():
+            owner = str(label or "").strip()
+            if owner not in by_label:
+                continue
+            dep_values = deps_obj if isinstance(deps_obj, list) else []
+            cleaned: list[str] = []
+            seen: set[str] = set()
+            for dep in dep_values:
+                dep_label = str(dep or "").strip()
+                if not dep_label or dep_label == owner or dep_label not in label_set or dep_label in seen:
+                    continue
+                seen.add(dep_label)
+                cleaned.append(dep_label)
+            by_label[owner]["depends_on"] = cleaned
+            if warnings is not None:
+                dep_text = ", ".join(cleaned) if cleaned else "(none)"
+                warnings.append(
+                    f"Applied explicit dependency: `{owner}` waits for {dep_text}."
+                )
+
+    def _remove_multi_dependency_cycles(
+        self,
+        workers: list[dict[str, object]],
+        warnings: list[str] | None = None,
+    ) -> None:
+        pending_map: dict[str, set[str]] = {
+            str(item.get("label") or "").strip(): set(item.get("depends_on") or [])
+            for item in workers
+            if str(item.get("label") or "").strip()
+        }
+        resolved_labels: set[str] = set()
+        while pending_map:
+            ready = [label for label, deps in pending_map.items() if deps <= resolved_labels]
+            if not ready:
+                cycle_labels = sorted(pending_map.keys())
+                for item in workers:
+                    label = str(item.get("label") or "").strip()
+                    if label in pending_map:
+                        item["depends_on"] = []
+                if warnings is not None:
+                    warnings.append(
+                        "Explicit dependency cycle detected and removed for: "
+                        + ", ".join(cycle_labels)
+                    )
+                return
+            for label in ready:
+                resolved_labels.add(label)
+                pending_map.pop(label, None)
 
     def _build_multi_planner_prompt(
         self,
@@ -161,6 +689,14 @@ class DelegationMultiPlanMixin:
             "- maximize safe parallelism by default.\n"
             "- implementation lanes (backend/frontend/etc) should run in parallel after planning.\n"
             "- only add implementation->implementation dependencies when strictly contract-critical.\n\n"
+            "- every worker must write handoff/<label>.md and handoff/<label>.json.\n"
+            "- backend/API lanes should write outputs.endpoints as HTTP method/path strings like GET /api/items.\n"
+            "- frontend/client lanes should write outputs.api_calls as HTTP method/path strings like GET /api/items.\n"
+            "- research/analysis/review lanes should write outputs.findings as a machine-readable list of findings, caveats, or recommendations.\n"
+            "- docs/authoring/content lanes should write outputs.deliverables as a machine-readable list of produced artifacts.\n"
+            "- use command_succeeds only for cheap repo-local verification commands; never use installs, servers, or long-running commands.\n"
+            "- use owned_paths when a worker clearly owns specific files or folders.\n"
+            "- allowed acceptance_checks.type values: file_exists, glob_nonempty, command_succeeds, json_field_nonempty, handoff_json, reported_files_exist, owned_path_touched, owned_paths_only.\n\n"
             f"Goal:\n{goal}\n\n"
             f"Preferred agents order:\n{preferred}\n\n"
             f"Regeneration feedback:\n{feedback_text}\n\n"
@@ -175,7 +711,14 @@ class DelegationMultiPlanMixin:
             '      "responsibilities": ["..."],\n'
             '      "expected_inputs": ["..."],\n'
             '      "expected_outputs": ["..."],\n'
-            '      "handoff_to": ["reviewer"]\n'
+            '      "handoff_to": ["reviewer"],\n'
+            '      "owned_paths": ["src/**"],\n'
+            '      "acceptance_checks": [\n'
+            '        {"type": "file_exists", "path": "handoff/builder.md"},\n'
+            '        {"type": "command_succeeds", "command": "python -m py_compile src/main.py", "timeout_sec": 15},\n'
+            '        {"type": "json_field_nonempty", "field": "outputs.deliverables"},\n'
+            '        {"type": "handoff_json", "path": "handoff/builder.json"}\n'
+            "      ]\n"
             "    }\n"
             "  ]\n"
             "}\n"
@@ -187,7 +730,7 @@ class DelegationMultiPlanMixin:
         role = str(item.get("role") or "").strip().lower()
         text = f"{label} {role}"
 
-        if re.search(r"\b(architect|planner|planning|design|spec|research|discovery)\b", text):
+        if re.search(r"\b(architect|planner|planning|design|spec|research|discovery|analysis|analyst|synthesis|brief)\b", text):
             return "planning"
         if re.search(r"\b(doc|docs|documentation|readme)\b", text):
             return "docs"
@@ -363,6 +906,8 @@ class DelegationMultiPlanMixin:
             expected_outputs = item.get("expected_outputs")
             depends_on = item.get("depends_on")
             handoff_to = item.get("handoff_to")
+            owned_paths = item.get("owned_paths")
+            acceptance_checks = item.get("acceptance_checks")
 
             normalized.append(
                 {
@@ -394,6 +939,8 @@ class DelegationMultiPlanMixin:
                         if isinstance(handoff_to, list)
                         else []
                     ),
+                    "owned_paths": owned_paths,
+                    "acceptance_checks": acceptance_checks,
                 }
             )
 
@@ -486,6 +1033,25 @@ class DelegationMultiPlanMixin:
                 cleaned_handoff = [candidate for candidate in labels if candidate != label]
             item["handoff_to"] = cleaned_handoff
 
+            role = str(item.get("role") or "implementation").strip() or "implementation"
+            item["expected_outputs"] = self._augment_multi_expected_outputs(
+                item.get("expected_outputs"),
+                label=label,
+                role=role,
+            )
+            owned_paths = self._normalize_multi_owned_paths(
+                item.get("owned_paths"),
+                label=label,
+                role=role,
+            )
+            item["owned_paths"] = owned_paths
+            item["acceptance_checks"] = self._normalize_multi_acceptance_checks(
+                item.get("acceptance_checks"),
+                label=label,
+                owned_paths=owned_paths,
+                role=role,
+            )
+
         final_workers = [
             (str(item.get("label") or "").strip(), str(item.get("agent") or "").strip())
             for item in normalized
@@ -510,6 +1076,7 @@ class DelegationMultiPlanMixin:
         goal: str,
         available_agents: dict[str, str],
         explicit_specs: list[tuple[str, str]],
+        explicit_dependency_specs: dict[str, list[str]] | None,
         preferred_agents: list[str],
         feedback: str = "",
     ) -> tuple[dict[str, object], str]:
@@ -550,7 +1117,12 @@ class DelegationMultiPlanMixin:
                     "Explicit roster had one worker; auto-added a reviewer lane to keep multi mode."
                 )
 
-            payload = self._build_agents_plan_payload(goal=goal, workers=workers)
+            payload = self._build_agents_plan_payload(
+                goal=goal,
+                workers=workers,
+                explicit_dependency_specs=explicit_dependency_specs,
+                warnings=warnings,
+            )
             return {
                 "goal": goal,
                 "workers": workers,
@@ -559,6 +1131,7 @@ class DelegationMultiPlanMixin:
                 "selection_mode": "explicit",
                 "planner_mode": "explicit",
                 "explicit_specs": explicit_specs,
+                "explicit_dependency_specs": explicit_dependency_specs or {},
                 "preferred_agents": preferred_agents,
             }, ""
 
@@ -621,6 +1194,7 @@ class DelegationMultiPlanMixin:
             "selection_mode": "auto",
             "planner_mode": planner_mode,
             "explicit_specs": [],
+            "explicit_dependency_specs": {},
             "preferred_agents": preferred_agents,
         }, ""
 
@@ -666,11 +1240,22 @@ class DelegationMultiPlanMixin:
                     if candidate:
                         first_resp = candidate
                         break
+            owned_paths_obj = contract.get("owned_paths")
+            owned_paths = (
+                [str(path).strip() for path in owned_paths_obj]
+                if isinstance(owned_paths_obj, list)
+                else []
+            )
             lines.append(
                 f"• <code>{_escape_html(tag)}</code> — role: <code>{_escape_html(role)}</code> — depends_on: <code>{_escape_html(deps_text)}</code>"
             )
             if first_resp:
                 lines.append(f"  task: {_escape_html(first_resp)}")
+            if owned_paths:
+                owned_text = ", ".join(owned_paths[:3])
+                if len(owned_paths) > 3:
+                    owned_text += ", ..."
+                lines.append(f"  owns: <code>{_escape_html(owned_text)}</code>")
 
         if warnings:
             lines.append("")
@@ -717,18 +1302,52 @@ class DelegationMultiPlanMixin:
     ) -> str:
         roster = ", ".join(f"{name}={agent}" for name, agent in workers)
         lane = label.lower()
+        role = str((worker_plan or {}).get("role") or "implementation").strip() or "implementation"
         lane_hint = "Focus only on your lane and avoid unrelated files."
-        if "backend" in lane:
+        handoff_contract_hint = (
+            "Keep handoff JSON accurate and machine-readable for downstream verification."
+        )
+        if self._multi_is_backend_lane(label, role):
             lane_hint = (
                 "Focus on backend APIs, data models, persistence, and backend tests."
             )
-        elif "frontend" in lane:
+            handoff_contract_hint = (
+                "In handoff JSON outputs.endpoints, list each served HTTP method/path as strings like `GET /api/items`."
+            )
+        elif self._multi_is_frontend_lane(label, role):
             lane_hint = (
                 "Focus on frontend UI, routing/state, and integration with backend API contracts."
             )
-        elif "doc" in lane:
+            handoff_contract_hint = (
+                "In handoff JSON outputs.api_calls, list each backend HTTP method/path the frontend calls as strings like `GET /api/items`."
+            )
+        elif self._multi_is_research_lane(label, role):
+            lane_hint = (
+                "Focus on research, analysis, synthesis, and crisp evidence-backed findings."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.findings, list the key findings, caveats, or recommendations as a machine-readable list."
+            )
+        elif self._multi_is_review_lane(label, role):
+            lane_hint = (
+                "Focus on validation, critique, gap detection, and practical recommendations."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.findings, list the validated findings, risks, caveats, or unresolved issues as a machine-readable list."
+            )
+        elif self._multi_is_authoring_lane(label, role):
+            lane_hint = (
+                "Focus on producing the requested artifact clearly and keeping the deliverable set explicit."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.deliverables, list the produced artifacts as a machine-readable list of paths or artifact names."
+            )
+        elif self._multi_is_docs_lane(label, role):
             lane_hint = (
                 "Focus on documentation: setup, architecture, usage, and developer workflow."
+            )
+            handoff_contract_hint = (
+                "In handoff JSON outputs.deliverables, list the documentation artifacts you produced as a machine-readable list of paths."
             )
 
         worker_plan = worker_plan or {}
@@ -758,6 +1377,18 @@ class DelegationMultiPlanMixin:
             if isinstance(handoff_to, list)
             else []
         )
+        owned_paths = worker_plan.get("owned_paths")
+        owned_paths_list = (
+            [str(item).strip() for item in owned_paths]
+            if isinstance(owned_paths, list)
+            else []
+        )
+        acceptance_checks = worker_plan.get("acceptance_checks")
+        acceptance_checks_list = (
+            [self._describe_multi_acceptance_check(item) for item in acceptance_checks if isinstance(item, dict)]
+            if isinstance(acceptance_checks, list)
+            else []
+        )
 
         deps_text = ", ".join(depends_on) if depends_on else "(none)"
         responsibilities_text = (
@@ -772,6 +1403,14 @@ class DelegationMultiPlanMixin:
         handoff_text = (
             ", ".join(handoff_to_list) if handoff_to_list else "(none)"
         )
+        owned_paths_text = (
+            "\n".join(f"- {item}" for item in owned_paths_list) if owned_paths_list else "- (none)"
+        )
+        acceptance_text = (
+            "\n".join(f"- {item}" for item in acceptance_checks_list) if acceptance_checks_list else "- (none)"
+        )
+        handoff_md_path = self._multi_handoff_md_path(label)
+        handoff_json_path = self._multi_handoff_json_path(label)
 
         return (
             "You are one worker in a LightClaw multi-agent delegation run.\n\n"
@@ -797,13 +1436,24 @@ class DelegationMultiPlanMixin:
             f"{expected_outputs_text}\n\n"
             "YOUR HANDOFF TARGETS:\n"
             f"{handoff_text}\n\n"
+            "YOUR OWNED PATHS:\n"
+            f"{owned_paths_text}\n\n"
+            "YOUR ACCEPTANCE CHECKS:\n"
+            f"{acceptance_text}\n\n"
             "RULES:\n"
             "- Work only on your own lane.\n"
             "- Do not wait for confirmations.\n"
             "- Make practical assumptions and implement directly.\n"
             "- Keep output concise and summarize created/updated files.\n"
-            f"- Write handoff notes to `handoff/{lane}.md` for downstream workers.\n"
+            f"- Write handoff notes to `{handoff_md_path}` for downstream workers.\n"
+            f"- Write machine-readable handoff JSON to `{handoff_json_path}`.\n"
+            "- The handoff JSON must be raw JSON with keys: lane, status, summary, changed_files, outputs, handoff.\n"
+            "- In changed_files, list only files that currently exist in the workspace and that you directly changed for this lane.\n"
+            "- If owned_paths are provided, stay inside them unless the worker contract explicitly requires a broader change.\n"
+            "- If your acceptance checks mention a command, assume the orchestrator will run it exactly as written.\n"
+            "- If your acceptance checks mention a handoff JSON field, keep that field populated with real machine-readable data.\n"
             "- Do not output planning narrative in final answer.\n"
+            f"- {handoff_contract_hint}\n"
             "- Final answer format must be:\n"
             "  1) `Summary:` one short paragraph\n"
             "  2) `Outputs:` bullet list of key files\n"
@@ -811,10 +1461,89 @@ class DelegationMultiPlanMixin:
             f"- {lane_hint}\n"
         )
 
+    def _build_multi_agent_repair_task(
+        self,
+        label: str,
+        goal: str,
+        workers: list[tuple[str, str]],
+        worker_plan: dict[str, object] | None,
+        acceptance_failures: list[str],
+        previous_result: str,
+        task_workspace_label: str = "",
+    ) -> str:
+        roster = ", ".join(f"{name}={agent}" for name, agent in workers)
+        worker_plan = worker_plan or {}
+        role = str(worker_plan.get("role") or "implementation").strip() or "implementation"
+        owned_paths = worker_plan.get("owned_paths")
+        owned_paths_list = (
+            [str(item).strip() for item in owned_paths]
+            if isinstance(owned_paths, list)
+            else []
+        )
+        owned_paths_text = (
+            "\n".join(f"- {item}" for item in owned_paths_list) if owned_paths_list else "- (none)"
+        )
+        failures_text = (
+            "\n".join(f"- {item}" for item in acceptance_failures)
+            if acceptance_failures
+            else "- previous execution failed"
+        )
+        previous_excerpt = self._short_progress_text(previous_result, max_chars=1200)
+        handoff_md_path = self._multi_handoff_md_path(label)
+        handoff_json_path = self._multi_handoff_json_path(label)
+        repair_handoff_hint = "Keep handoff JSON aligned with the final workspace state."
+        if self._multi_is_backend_lane(label, role):
+            repair_handoff_hint = (
+                "Keep outputs.endpoints in handoff JSON aligned with the backend routes you actually serve."
+            )
+        elif self._multi_is_frontend_lane(label, role):
+            repair_handoff_hint = (
+                "Keep outputs.api_calls in handoff JSON aligned with the backend methods and paths the frontend actually calls."
+            )
+        elif self._multi_is_research_lane(label, role) or self._multi_is_review_lane(label, role):
+            repair_handoff_hint = (
+                "Keep outputs.findings in handoff JSON aligned with the actual findings, caveats, and recommendations produced by this lane."
+            )
+        elif self._multi_is_deliverable_lane(label, role):
+            repair_handoff_hint = (
+                "Keep outputs.deliverables in handoff JSON aligned with the actual artifacts produced by this lane."
+            )
+        return (
+            "You are repairing your own lane in an existing LightClaw multi-agent run.\n\n"
+            "GLOBAL GOAL:\n"
+            f"{goal}\n\n"
+            "TASK WORKSPACE:\n"
+            f"{task_workspace_label or '(unknown)'}\n\n"
+            "WORKER ROSTER:\n"
+            f"{roster}\n\n"
+            "YOUR LANE:\n"
+            f"{label}\n\n"
+            "YOUR OWNED PATHS:\n"
+            f"{owned_paths_text}\n\n"
+            "CURRENT FAILURES TO FIX:\n"
+            f"{failures_text}\n\n"
+            "PREVIOUS RESULT EXCERPT:\n"
+            f"{previous_excerpt or '(none)'}\n\n"
+            "REPAIR RULES:\n"
+            "- Inspect the current workspace state and patch only your lane.\n"
+            "- Do not restart or re-plan the whole project.\n"
+            f"- Update `{handoff_md_path}` and `{handoff_json_path}` before finishing.\n"
+            "- Make the acceptance failures pass with the smallest practical change.\n"
+            "- If a command-based acceptance check failed, fix the workspace so that exact command passes.\n"
+            "- If a handoff JSON field check failed, fix that JSON field instead of only changing prose output.\n"
+            f"- {repair_handoff_hint}\n"
+            "- Final answer format must stay:\n"
+            "  1) `Summary:` one short paragraph\n"
+            "  2) `Outputs:` bullet list of key files\n"
+            "  3) `Handoff:` bullet list for downstream workers\n"
+        )
+
     def _build_agents_plan_payload(
         self,
         goal: str,
         workers: list[tuple[str, str]],
+        explicit_dependency_specs: dict[str, list[str]] | None = None,
+        warnings: list[str] | None = None,
     ) -> dict[str, object]:
         labels = [label for label, _ in workers]
         docs_labels = [label for label in labels if "doc" in label.lower()]
@@ -859,6 +1588,46 @@ class DelegationMultiPlanMixin:
                     "UI behavior notes and integration assumptions.",
                 ]
                 handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif self._multi_is_research_lane(label, lowered):
+                role = "research"
+                responsibilities = [
+                    "Research the topic, gather evidence, and capture key findings.",
+                    "Produce a machine-readable findings handoff for downstream workers.",
+                ]
+                expected_inputs = [
+                    "Global goal, scope, and constraints from AGENTS.md.",
+                ]
+                expected_outputs = [
+                    "Research notes, evidence, and synthesized findings.",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif self._multi_is_authoring_lane(label, lowered):
+                role = "authoring"
+                responsibilities = [
+                    "Create the requested written or synthesized artifact for this lane.",
+                    "Use upstream findings and constraints to produce a clear final deliverable.",
+                ]
+                expected_inputs = [
+                    "Global goal, upstream handoffs, and workspace artifacts relevant to this deliverable.",
+                ]
+                expected_outputs = [
+                    "Final drafted artifact and succinct handoff notes.",
+                ]
+                handoff_to = [lane_label for lane_label in labels if lane_label != label]
+            elif self._multi_is_review_lane(label, lowered):
+                role = "validation"
+                depends_on = [lane_label for lane_label in labels if lane_label != label]
+                responsibilities = [
+                    "Review upstream outputs for gaps, contradictions, and unsupported claims.",
+                    "Refine the final findings, caveats, and recommendations.",
+                ]
+                expected_inputs = [
+                    "Upstream handoff files and generated artifacts from the workspace.",
+                ]
+                expected_outputs = [
+                    "Validated findings, caveats, and recommendations.",
+                ]
+                handoff_to = []
             elif "doc" in lowered:
                 role = "documentation"
                 depends_on = [lane_label for lane_label in nondocs_labels if lane_label != label]
@@ -887,6 +1656,23 @@ class DelegationMultiPlanMixin:
                 ]
                 handoff_to = [lane_label for lane_label in labels if lane_label != label]
 
+            owned_paths = self._normalize_multi_owned_paths(
+                None,
+                label=label,
+                role=role,
+            )
+            acceptance_checks = self._normalize_multi_acceptance_checks(
+                None,
+                label=label,
+                owned_paths=owned_paths,
+                role=role,
+            )
+            expected_outputs = self._augment_multi_expected_outputs(
+                expected_outputs,
+                label=label,
+                role=role,
+            )
+
             plan_workers.append(
                 {
                     "label": label,
@@ -897,8 +1683,18 @@ class DelegationMultiPlanMixin:
                     "expected_inputs": expected_inputs,
                     "expected_outputs": expected_outputs,
                     "handoff_to": handoff_to,
+                    "owned_paths": owned_paths,
+                    "acceptance_checks": acceptance_checks,
                 }
             )
+
+        self._apply_goal_dependency_overrides(goal, plan_workers, warnings)
+        self._apply_explicit_dependency_overrides(
+            explicit_dependency_specs,
+            plan_workers,
+            warnings,
+        )
+        self._remove_multi_dependency_cycles(plan_workers, warnings)
 
         return {
             "version": 1,
@@ -945,6 +1741,14 @@ class DelegationMultiPlanMixin:
             exp_out = [str(v).strip() for v in expected_outputs] if isinstance(expected_outputs, list) else []
             handoff_to = item.get("handoff_to")
             handoff = [str(v).strip() for v in handoff_to] if isinstance(handoff_to, list) else []
+            owned_paths = item.get("owned_paths")
+            owned = [str(v).strip() for v in owned_paths] if isinstance(owned_paths, list) else []
+            acceptance_checks = item.get("acceptance_checks")
+            checks = (
+                [self._describe_multi_acceptance_check(v) for v in acceptance_checks if isinstance(v, dict)]
+                if isinstance(acceptance_checks, list)
+                else []
+            )
 
             lines.append(f"### {label}")
             lines.append(f"- agent: {agent}")
@@ -957,6 +1761,10 @@ class DelegationMultiPlanMixin:
             lines.append("- expected_outputs:")
             lines.extend(f"  - {r}" for r in (exp_out or ["(none)"]))
             lines.append(f"- handoff_to: {', '.join(handoff) if handoff else '(none)'}")
+            lines.append("- owned_paths:")
+            lines.extend(f"  - {r}" for r in (owned or ["(none)"]))
+            lines.append("- acceptance_checks:")
+            lines.extend(f"  - {r}" for r in (checks or ["(none)"]))
             lines.append("")
 
         lines.append("## Machine Plan")

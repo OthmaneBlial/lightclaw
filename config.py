@@ -139,6 +139,7 @@ class Config:
         default_factory=lambda: ["claude", "codex"]
     )
     local_agent_multi_auto_continue: bool = False
+    local_agent_multi_repair_attempts: int = 1
 
     # Skills
     skills_hub_base_url: str = "https://clawhub.ai"
@@ -198,6 +199,9 @@ def load_config() -> Config:
             os.getenv("LOCAL_AGENT_MULTI_AUTO_CONTINUE", "no"),
             default=False,
         ),
+        local_agent_multi_repair_attempts=int(
+            os.getenv("LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS", "1")
+        ),
         skills_hub_base_url=os.getenv("SKILLS_HUB_BASE_URL", "https://clawhub.ai") or "https://clawhub.ai",
         skills_state_path=os.getenv("SKILLS_STATE_PATH", ".lightclaw/skills_state.json") or ".lightclaw/skills_state.json",
         groq_api_key=_strip_inline_comment(os.getenv("GROQ_API_KEY", "")),
@@ -232,5 +236,9 @@ def load_config() -> Config:
         cfg.local_agent_safety_mode = "off"
     if not cfg.local_agent_multi_default_agents:
         cfg.local_agent_multi_default_agents = ["claude", "codex"]
+    cfg.local_agent_multi_repair_attempts = max(
+        0,
+        min(2, int(cfg.local_agent_multi_repair_attempts)),
+    )
 
     return cfg
