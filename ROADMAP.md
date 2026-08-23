@@ -125,22 +125,22 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 - [x] Add a GitHub Actions matrix for Python 3.10–3.13 on Ubuntu and macOS.
 - [x] Run tests, formatting/linting, package build/install smoke tests, and dependency auditing.
 - [x] Pin third-party Actions to full commit SHAs with read-only permissions by default.
-- [ ] Protect `main` with required green checks, resolved conversations, and blocked force-push/deletion.
+- [x] Protect `main` with required green checks, resolved conversations, and blocked force-push/deletion.
 
 ### P0.6 Publish the security contract
 
-- [ ] Add `SECURITY.md`, supported-version policy, private vulnerability reporting, and a response target. (Repository policy is present; live private reporting is enabled after this push.)
+- [x] Add `SECURITY.md`, supported-version policy, private vulnerability reporting, and a response target.
 - [x] Add a short threat model covering Telegram identity, prompt injection, skills, workspace writes, delegated CLIs, secrets, logs, and the host boundary.
-- [ ] Enable Dependabot, CodeQL, secret scanning where available, and OpenSSF Scorecard after the basic controls are real.
+- [x] Enable Dependabot, CodeQL, secret scanning where available, and OpenSSF Scorecard after the basic controls are real.
 - [x] Document what LightClaw cannot protect when a user explicitly enables trusted host execution.
 
 ### Phase 0 exit criteria
 
-- [ ] A clean macOS and Ubuntu install completes without editing global Python or a generic home `.env`. (macOS verified locally; Ubuntu is covered by the pending CI run.)
+- [x] A clean macOS and Ubuntu install completes without editing global Python or a generic home `.env`.
 - [x] Unauthorized Telegram users fail every privileged integration test.
 - [x] Delegated child processes receive zero unrelated secrets in a regression fixture.
 - [x] Cancellation kills the worker tree and preserves pre-existing user changes.
-- [ ] CI is green on all supported Python/OS combinations.
+- [x] CI is green on all supported Python/OS combinations.
 - [x] No unresolved critical or high-severity dependency/security finding.
 - [x] `SECURITY.md`, threat model, install, upgrade, and uninstall paths are public.
 
