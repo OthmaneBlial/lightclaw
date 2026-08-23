@@ -930,6 +930,15 @@ class DelegationExecutionMixin:
         started_at = self._utc_now()
         checkpoint = await asyncio.to_thread(capture_git_checkpoint, target_workspace)
         run_id = f"run-{int(time.time())}-{secrets.token_hex(4)}"
+        for attribute in (
+            "_active_run_ids_by_session",
+            "_active_run_tasks_by_session",
+            "_last_run_ids_by_session",
+            "_last_run_receipts_by_session",
+            "_last_run_workspaces_by_session",
+        ):
+            if not hasattr(self, attribute):
+                setattr(self, attribute, {})
         durable_store = getattr(self, "jobs", None) if manage_job else None
         heartbeat_task: asyncio.Task[None] | None = None
         if durable_store is not None:
@@ -966,6 +975,10 @@ class DelegationExecutionMixin:
                 )
                 if not claimed or claimed["run_id"] != durable["run_id"]:
                     return f"⏳ Delegation queued as `{run_id}`; another writer owns this workspace."
+                self._active_run_ids_by_session[session_id] = run_id
+                current_run_task = asyncio.current_task()
+                if current_run_task:
+                    self._active_run_tasks_by_session[session_id] = current_run_task
                 await asyncio.to_thread(
                     durable_store.update_lane,
                     run_id,
@@ -1028,6 +1041,8 @@ class DelegationExecutionMixin:
                     await asyncio.to_thread(durable_store.mark_canceled, run_id)
                 except JobStateError:
                     pass
+            if self._active_run_ids_by_session.get(session_id) == run_id:
+                self._active_run_ids_by_session.pop(session_id, None)
             raise
         finally:
             if heartbeat_task:
@@ -1141,6 +1156,9 @@ class DelegationExecutionMixin:
             )
             receipt_paths = (receipt_json, receipt_markdown)
             receipt = safe_receipt
+            self._last_run_ids_by_session[session_id] = run_id
+            self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
+            self._last_run_workspaces_by_session[session_id] = target_workspace.as_posix()
         if evidence_sink is not None:
             evidence_sink.clear()
             evidence_sink.update(receipt)
@@ -1178,4 +1196,8 @@ class DelegationExecutionMixin:
             lines.append(f"🧾 Receipt: `{receipt_paths[1].as_posix()}`")
 
         log.info("Local agent run finished")
+        if self._active_run_ids_by_session.get(session_id) == run_id:
+            self._active_run_ids_by_session.pop(session_id, None)
+        if self._active_run_tasks_by_session.get(session_id) is asyncio.current_task():
+            self._active_run_tasks_by_session.pop(session_id, None)
         return "\n".join(lines).strip()

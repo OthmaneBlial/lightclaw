@@ -225,11 +225,11 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P2.2 Make approvals first-class in Telegram
 
-- [ ] Add compact inline actions for approve, edit scope, deny, cancel, retry failed lane, view diff, and accept result.
-- [ ] Show changed paths, proposed commands, risk level, and estimated cost/time before approval.
-- [ ] Require a second confirmation for destructive operations, publishing, credential changes, or writes outside the normal workspace.
-- [ ] Render long results as files/artifacts instead of unreadable Telegram walls of text.
-- [ ] Make voice goals first-class but always show the transcription before executing.
+- [x] Add compact inline actions for approve, edit scope, deny, cancel, retry failed lane, view diff, and accept result.
+- [x] Show changed paths, proposed commands, risk level, and estimated cost/time before approval.
+- [x] Require a second confirmation for destructive operations, publishing, credential changes, or writes outside the normal workspace.
+- [x] Render long results as files/artifacts instead of unreadable Telegram walls of text.
+- [x] Make voice goals first-class but always show the transcription before executing.
 
 ### P2.3 Add durable job control
 

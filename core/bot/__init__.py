@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .approvals import BotApprovalsMixin
 from .base import BotBaseMixin
 from .commands import BotCommandsMixin
 from .context import BotContextMixin
@@ -13,6 +14,7 @@ from .messaging import BotMessagingMixin
 
 class LightClawBot(
     BotMessagingMixin,
+    BotApprovalsMixin,
     BotHandlersMixin,
     BotFileOpsMixin,
     BotCommandsMixin,

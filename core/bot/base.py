@@ -77,6 +77,13 @@ class BotBaseMixin:
         self._pending_multi_plan_ttl_sec: int = 15 * 60
         # Explicit confirmation gate for trusted-command one-shot runs.
         self._pending_trusted_agent_run_by_session: dict[str, dict[str, object]] = {}
+        # Explicit voice-transcription approval gate and live run controls.
+        self._pending_voice_goal_by_session: dict[str, dict[str, object]] = {}
+        self._active_run_tasks_by_session: dict[str, asyncio.Task[object]] = {}
+        self._active_run_ids_by_session: dict[str, str] = {}
+        self._last_run_ids_by_session: dict[str, str] = {}
+        self._last_run_receipts_by_session: dict[str, str] = {}
+        self._last_run_workspaces_by_session: dict[str, str] = {}
         # Sliding-window limiter for high-authority Telegram commands.
         self._privileged_request_times: dict[tuple[str, str], list[float]] = {}
         # Compiled strict-mode deny patterns for delegated local-agent tasks.
@@ -361,6 +368,7 @@ class BotBaseMixin:
         update: Update,
         text: str,
         parse_mode: str | None = None,
+        reply_markup=None,
     ):
         """Reply to Telegram and mirror the same content to terminal logs."""
         session_id = self._session_id_from_update(update)
@@ -368,7 +376,11 @@ class BotBaseMixin:
         self._log_bot_message(session_id, logged_text)
 
         if parse_mode:
-            return await update.message.reply_text(text, parse_mode=parse_mode)
-        return await update.message.reply_text(text)
+            return await update.message.reply_text(
+                text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup,
+            )
+        return await update.message.reply_text(text, reply_markup=reply_markup)
 
     # ── Token Estimation ─────────────────────────────────────

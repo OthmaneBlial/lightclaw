@@ -107,14 +107,27 @@ class BotHandlersMixin:
             user_text = f"[voice transcription: {text}]"
             if caption:
                 user_text = f"{caption}\n{user_text}"
-            log.info(f"Voice transcribed: {text[:80]}")
+            log.info("Voice message transcribed and awaiting approval")
+            session_id = str(chat_id)
+            self._pending_voice_goal_by_session[session_id] = {
+                "text": user_text,
+                "transcription": text,
+                "expires_at": time.time() + 10 * 60,
+            }
+            await self._reply_logged(
+                update,
+                "🎙 <b>Voice transcription — not executed</b>\n\n"
+                f"{_escape_html(text)}\n\n"
+                "Review the transcription, then explicitly approve or discard it.",
+                parse_mode=ParseMode.HTML,
+                reply_markup=self._inline_voice_keyboard(),
+            )
+            return
         else:
-            user_text = "[voice message received — transcription not available]"
-            if update.message.caption:
-                user_text = f"{update.message.caption}\n{user_text}"
-
-        # Process through the normal agent loop
-        await self._process_user_message(update, context, user_text)
+            await self._reply_logged(
+                update,
+                "Voice transcription is unavailable. Nothing was executed; send a text goal instead.",
+            )
 
     # ── Photo Handler ─────────────────────────────────────────
 
@@ -185,7 +198,27 @@ class BotHandlersMixin:
         if pending_multi:
             decision = self._classify_pending_multi_reply(user_text)
             if decision == "confirm":
-                await self._execute_pending_multi_plan(update, session_id)
+                review = (
+                    pending_multi.get("review")
+                    if isinstance(pending_multi.get("review"), dict)
+                    else {}
+                )
+                if review.get("second_confirmation_required") and not review.get("second_confirmed"):
+                    await self._reply_logged(
+                        update,
+                        "⚠️ <b>Second confirmation required.</b> Use the high-risk confirmation button.",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=self._inline_plan_keyboard(second_confirmation=True),
+                    )
+                    return
+                current = asyncio.current_task()
+                if current:
+                    self._active_run_tasks_by_session[session_id] = current
+                try:
+                    await self._execute_pending_multi_plan(update, session_id)
+                finally:
+                    if self._active_run_tasks_by_session.get(session_id) is current:
+                        self._active_run_tasks_by_session.pop(session_id, None)
                 return
             if decision == "cancel":
                 self._clear_pending_multi_plan(session_id)

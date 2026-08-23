@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from config import load_config
 
@@ -128,6 +128,7 @@ def main():
     app = (
         Application.builder()
         .token(config.telegram_bot_token)
+        .concurrent_updates(8)
         .post_init(_post_init)
         .post_shutdown(_post_shutdown)
         .build()
@@ -147,6 +148,7 @@ def main():
     app.add_handler(CommandHandler("heartbeat", bot.cmd_heartbeat))
     app.add_handler(CommandHandler("cron", bot.cmd_cron))
     app.add_handler(CommandHandler("show", bot.cmd_show))
+    app.add_handler(CallbackQueryHandler(bot.handle_run_action, pattern=r"^lc:"))
     app.add_handler(MessageHandler(filters.VOICE, bot.handle_voice))
     app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))
     app.add_handler(MessageHandler(filters.Document.ALL, bot.handle_document))

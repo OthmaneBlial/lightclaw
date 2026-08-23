@@ -505,6 +505,12 @@ class JobStore:
             error=error,
         )
 
+    def accept(self, run_id: str) -> dict[str, object]:
+        return self._transition(run_id, {"succeeded"}, "accepted", "accepted")
+
+    def reject(self, run_id: str) -> dict[str, object]:
+        return self._transition(run_id, {"succeeded", "failed"}, "rejected", "rejected")
+
     @staticmethod
     def _pid_alive(pid: int | None) -> bool:
         if not pid or pid <= 0:

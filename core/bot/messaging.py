@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import re
+import secrets
+import tempfile
 import time
+from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -12,9 +16,32 @@ from telegram.ext import ContextTypes
 
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
+from ..security import redact_text
+from ..workspaces import validate_workspace_root
 
 
 class BotMessagingMixin:
+    def _write_long_response_artifact(self, text: str) -> Path:
+        root = validate_workspace_root(self.config.workspace_path)
+        output = root / ".lightclaw-meta" / "messages"
+        output.mkdir(parents=True, exist_ok=True, mode=0o700)
+        output.chmod(0o700)
+        path = output / f"response-{int(time.time())}-{secrets.token_hex(4)}.md"
+        fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=output)
+        temp = Path(raw_temp)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(redact_text(text))
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp, path)
+            path.chmod(0o600)
+        finally:
+            temp.unlink(missing_ok=True)
+        return path
+
     @staticmethod
     def _chunk_message(text: str, max_len: int = 3500) -> list[str]:
         """Split a long message into chunks that fit Telegram's limit.
@@ -48,6 +75,26 @@ class BotMessagingMixin:
 
         Chunks BEFORE HTML conversion to account for entity expansion.
         """
+        if len(markdown_response) > 6000 or self._is_large_code_leak(markdown_response):
+            artifact = self._write_long_response_artifact(markdown_response)
+            summary = (
+                "Result is too large for safe inline review. "
+                "Attached as a private Markdown artifact."
+            )
+            if placeholder:
+                await self._try_send(placeholder.edit_text, summary)
+            if update.message:
+                try:
+                    with artifact.open("rb") as handle:
+                        await update.message.reply_document(
+                            document=handle,
+                            filename=artifact.name,
+                            caption="LightClaw result artifact — review before sharing.",
+                        )
+                    return
+                except Exception as exc:
+                    log.warning("Could not attach long result artifact: %s", exc)
+
         # First chunk the markdown (before HTML conversion which expands entities)
         markdown_chunks = self._chunk_message(markdown_response, max_len=3000)
         chat_id = update.effective_chat.id if update.effective_chat else 0
@@ -131,4 +178,3 @@ class BotMessagingMixin:
         except Exception as e:
             log.error(f"Failed to send message chunk: {e}")
             return False
-

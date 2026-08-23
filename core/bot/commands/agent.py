@@ -211,10 +211,12 @@ class CommandsAgentMixin:
                     return
                 pending_payload = self._set_pending_multi_plan(
                     session_id,
-                    {
-                        **planned,
-                        "feedback": feedback,
-                    },
+                    self._decorate_pending_plan(
+                        {
+                            **planned,
+                            "feedback": feedback,
+                        }
+                    ),
                 )
                 preview_payload_obj = pending_payload.get("plan_payload")
                 preview_payload = (
@@ -235,7 +237,13 @@ class CommandsAgentMixin:
                     warnings=[str(item) for item in preview_warnings],
                     include_confirm_hint=True,
                 )
-                await self._reply_logged(update, preview, parse_mode=ParseMode.HTML)
+                preview += "\n\n" + self._render_plan_review(pending_payload)
+                await self._reply_logged(
+                    update,
+                    preview,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=self._inline_plan_keyboard(),
+                )
                 return
 
             goal = str(parsed.get("goal") or "").strip()
@@ -274,7 +282,10 @@ class CommandsAgentMixin:
                 await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
                 return
 
-            pending_payload = self._set_pending_multi_plan(session_id, planned)
+            pending_payload = self._set_pending_multi_plan(
+                session_id,
+                self._decorate_pending_plan(planned),
+            )
             preview_payload_obj = pending_payload.get("plan_payload")
             preview_payload = (
                 preview_payload_obj if isinstance(preview_payload_obj, dict) else {}
@@ -288,16 +299,21 @@ class CommandsAgentMixin:
                 workers=list(pending_payload.get("workers") or []),
                 plan_payload=preview_payload,
                 warnings=[str(item) for item in preview_warnings],
-                include_confirm_hint=not bool(self.config.local_agent_multi_auto_continue),
+                include_confirm_hint=True,
             )
-            await self._reply_logged(update, preview, parse_mode=ParseMode.HTML)
+            preview += "\n\n" + self._render_plan_review(pending_payload)
+            await self._reply_logged(
+                update,
+                preview,
+                parse_mode=ParseMode.HTML,
+                reply_markup=self._inline_plan_keyboard(),
+            )
 
             if self.config.local_agent_multi_auto_continue:
                 await self._reply_logged(
                     update,
-                    "Auto-continue is enabled. Executing multi-agent run now...",
+                    "Auto-continue is ignored for safety. Use the explicit Approve button.",
                 )
-                await self._execute_pending_multi_plan(update, session_id)
             return
 
         if sub in {"observe", "trusted"}:
@@ -1318,6 +1334,7 @@ class CommandsAgentMixin:
                 parse_mode=ParseMode.HTML,
             )
             return
+        self._active_run_ids_by_session[session_id] = run_id
 
         multi_execution_task = asyncio.current_task()
 
@@ -1789,6 +1806,9 @@ class CommandsAgentMixin:
         final_lines.append("")
         final_lines.append(f"🧾 Receipt: `{receipt_markdown.as_posix()}`")
         final_lines.append(f"JSON: `{receipt_json.as_posix()}`")
+        self._last_run_ids_by_session[session_id] = run_id
+        self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
+        self._last_run_workspaces_by_session[session_id] = multi_workspace.as_posix()
 
         await asyncio.to_thread(
             self.jobs.finish,
@@ -1801,6 +1821,8 @@ class CommandsAgentMixin:
             await durable_heartbeat
         except asyncio.CancelledError:
             pass
+        if self._active_run_ids_by_session.get(session_id) == run_id:
+            self._active_run_ids_by_session.pop(session_id, None)
 
         request_entry = (
             "[delegation-request]\n"
@@ -1820,3 +1842,8 @@ class CommandsAgentMixin:
             asyncio.create_task(self.maybe_summarize(session_id))
 
         await self._send_response(None, update, "\n".join(final_lines).strip())
+        await self._reply_logged(
+            update,
+            "Review the evidence before accepting the result.",
+            reply_markup=self._inline_result_keyboard(sorted(failed)),
+        )

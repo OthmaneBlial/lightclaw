@@ -126,6 +126,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Real Telegram verification](docs/MANUAL_VERIFICATION.md)
 - [Run receipts and sanitized Run Cards](docs/RUN_RECEIPTS.md)
 - [Durable queues, cancellation, and recovery](docs/JOB_CONTROL.md)
+- [Telegram approvals and high-risk confirmation](docs/APPROVALS.md)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)
