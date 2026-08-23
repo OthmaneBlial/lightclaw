@@ -1,0 +1,82 @@
+name: Reproducible bug
+description: Report a concrete defect with a minimal, sanitized reproduction.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for making LightClaw more reliable. Never include tokens, private prompts,
+        receipts, repository contents, or other secrets. Security issues belong in
+        [private vulnerability reporting](https://github.com/OthmaneBlial/lightclaw/security/advisories/new).
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is not a vulnerability or support request.
+          required: true
+        - label: I removed private data and credentials from this report.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: LightClaw version or commit
+      placeholder: v0.1.0 or 0123abc
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Ubuntu/Linux
+        - macOS
+        - Other/unsupported
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: Python 3.13.5
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: List the smallest deterministic steps, using disposable data.
+      placeholder: |
+        1. Install ...
+        2. Run ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and sanitized evidence
+      description: Paste a short redacted traceback, test failure, or receipt excerpt.
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Capability profile, if delegation was involved
+      options:
+        - Not applicable
+        - observe
+        - workspace-write
+        - trusted-command
+    validations:
+      required: true
+

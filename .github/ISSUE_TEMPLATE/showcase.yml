@@ -1,0 +1,45 @@
+name: Sanitized showcase submission
+description: Submit a reproducible workflow without uploading private runtime data.
+title: "[Showcase]: "
+labels: ["showcase", "needs-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a small forkable recipe, not a core feature. LightClaw never needs your raw
+        receipt, real prompt, repository name, token, username, or analytics.
+  - type: input
+    id: recipe
+    attributes:
+      label: Recipe path or branch
+      description: Link to a proposed showcase directory or pull request.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Verified outcome
+      description: What did the workflow produce, and which checks passed?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction command
+      description: Give the token-free or bounded command and expected output.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy review
+      options:
+        - label: The prompt and setup use synthetic or explicitly publishable data.
+          required: true
+        - label: The receipt is a sanitized Run Card, not a raw private receipt.
+          required: true
+        - label: Repository names, local paths, usernames, tokens, and provider request IDs are absent.
+          required: true
+        - label: I understand the submission becomes public under this repository's license.
+          required: true
+

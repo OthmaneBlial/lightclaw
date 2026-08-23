@@ -152,12 +152,13 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e '.[dev]'
-ruff check config.py lightclaw_cli.py main.py memory.py providers.py skills.py core tests
-pytest -q
-python -m build
-pip-audit --skip-editable
+python scripts/quality.py
 ```
 
-CI runs the key-free suite on Python 3.10–3.13 across Ubuntu and macOS, builds and installs the wheel, audits dependencies, and runs all three deterministic product stories.
+This is the canonical local quality command. CI additionally runs the key-free suite on
+Python 3.10–3.13 across Ubuntu and macOS, installs the wheel in a clean environment,
+audits dependencies, and runs all three deterministic product stories. Read
+[CONTRIBUTING.md](CONTRIBUTING.md), the [support routes](SUPPORT.md), and the
+[Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 
 Licensed under [MIT](LICENSE).

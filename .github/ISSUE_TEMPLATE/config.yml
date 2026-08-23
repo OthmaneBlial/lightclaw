@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/OthmaneBlial/lightclaw/security/advisories/new
+    about: Report vulnerabilities privately. Never disclose security details in a public issue.
+  - name: Support and setup questions
+    url: https://github.com/OthmaneBlial/lightclaw/discussions/categories/q-a
+    about: Ask for installation, configuration, or usage help in Discussions.
+  - name: Ideas and design discussion
+    url: https://github.com/OthmaneBlial/lightclaw/discussions/categories/ideas
+    about: Discuss an idea before proposing a scoped implementation.
+

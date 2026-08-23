@@ -19,6 +19,22 @@ LightClaw is a Telegram-first control surface around hosted model providers and 
 
 Compatibility compositions in `core/bot/commands/agent.py` and `core/bot/delegation/multi.py` preserve existing mixin imports without recombining implementation responsibilities.
 
+## Contribution map
+
+| Change | Start here | Required evidence |
+|---|---|---|
+| Authentication, capabilities, process environment | `core/security.py`, `core/bot/delegation/execution.py` | Security regression and threat-boundary note |
+| Telegram command behavior | `core/bot/commands/`, `core/bot/handlers.py` | Authorized and unauthorized handler tests |
+| Plans and worker contracts | `core/bot/delegation/planning.py`, `tasks.py` | Deterministic DAG/fixture test |
+| Jobs, receipts, files, workspaces | `core/jobs.py`, `core/receipts.py`, `core/fs.py`, `core/workspaces.py` | Restart, redaction, symlink, or ownership test as applicable |
+| Memory | `memory.py` | Namespace/retention test and evaluation when retrieval changes |
+| Skills | `skills.py` | Manifest, hash, provenance, and permission test |
+| Provider adapters | `core/llm/` | Recorded fixture plus shared contract test |
+| CLI/install lifecycle | `lightclaw_cli.py`, `core/paths.py` | Isolated-home or clean-wheel smoke test |
+
+Run `python scripts/quality.py` after changing any domain. Changes that cross multiple
+rows should explain why a smaller boundary is insufficient.
+
 ## Enforced budget
 
 The versioned [core budget](architecture/core-budget.json) caps total runtime lines, module/function size, AST branch points, direct dependencies, cold-start p95, and wheel size. [Module boundaries](architecture/module-boundaries.json) assert separate planning, execution, persistence, rendering, and acceptance owners.

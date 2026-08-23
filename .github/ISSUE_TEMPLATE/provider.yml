@@ -1,0 +1,57 @@
+name: Provider compatibility
+description: Report an adapter or official SDK contract mismatch.
+title: "[Provider]: "
+labels: ["provider", "needs-triage"]
+body:
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - OpenAI
+        - xAI
+        - Anthropic
+        - Gemini
+        - DeepSeek
+        - Z-AI
+        - Proposed new provider
+    validations:
+      required: true
+  - type: input
+    id: sdk
+    attributes:
+      label: Official SDK and installed version
+      placeholder: openai 2.x
+    validations:
+      required: true
+  - type: input
+    id: lightclaw
+    attributes:
+      label: LightClaw version or commit
+      placeholder: v0.1.0 or 0123abc
+    validations:
+      required: true
+  - type: textarea
+    id: mismatch
+    attributes:
+      label: Contract mismatch
+      description: Explain which request, response, retry, usage, or error behavior differs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Sanitized reproduction
+      description: Prefer a recorded response fixture with all identifiers and content redacted.
+    validations:
+      required: true
+  - type: checkboxes
+    id: maintenance
+    attributes:
+      label: Maintenance requirement
+      options:
+        - label: I can add or update a recorded fixture and the shared adapter contract tests.
+          required: true
+        - label: For a new provider, a named maintainer is willing to own SDK lifecycle changes.
+          required: false
+

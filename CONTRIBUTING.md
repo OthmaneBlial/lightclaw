@@ -54,15 +54,18 @@ A PR is less likely to be accepted if it:
 - Introduces large abstractions for small problems.
 - Increases maintenance burden without strong justification.
 
-## No Vibe-Coded PRs
+## Evidence Standard for Every PR
 
-Vibe-coded PRs are not welcomed and will not be accepted.
+AI-assisted work is welcome. The standard is ownership and evidence, regardless of which
+tools produced the first draft:
 
-If AI tools were used, that is fine, but the submission must show human ownership:
 - You understand every changed line.
 - You can explain why each change exists.
-- You tested it.
+- You tested observable behavior and relevant failure paths.
 - You can describe risks and tradeoffs clearly.
+
+Unreviewed output, unverifiable claims, and changes the contributor cannot maintain will
+not be accepted. The same standard applies to hand-written and AI-assisted work.
 
 ## Security Contributions Are Highly Welcome
 
@@ -87,6 +90,27 @@ Please include a short threat/risk note in security PRs:
 - Avoid unrelated refactors.
 
 Rule of thumb: if your PR adds more code than it removes, explain why the added complexity is necessary for safety, reliability, or correctness.
+
+## Start Locally
+
+Use Python 3.10–3.13, install the development dependencies, and run the one canonical
+quality command before submitting:
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev]'
+python scripts/quality.py
+```
+
+It checks lint, generated provider/architecture contracts, runtime budgets, the safe-skill
+fixture, the full test suite, and package construction. CI adds the supported OS/Python
+matrix, coverage evidence, dependency review, and clean-wheel smoke tests.
+
+Use the [architecture module map](docs/ARCHITECTURE.md#runtime-domains) to find the owner
+of a behavior. Compatibility facades should stay small; put a change in its stable domain.
+Open support questions in [Discussions](SUPPORT.md), vulnerabilities privately through
+[SECURITY.md](SECURITY.md), and code changes through the structured issue and PR forms.
 
 ## Final Note
 

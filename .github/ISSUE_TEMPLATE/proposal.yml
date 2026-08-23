@@ -1,0 +1,58 @@
+name: Bounded proposal
+description: Propose a small safety, reliability, or simplicity improvement.
+title: "[Proposal]: "
+labels: ["proposal", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        LightClaw is intentionally Telegram-first and small. Proposals should solve one
+        observed problem without creating a platform or new channel surface.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I read CONTRIBUTING.md and this proposal fits the stated non-goals.
+          required: true
+        - label: I searched existing issues and discussions.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Observed problem
+      description: Describe current behavior and who is blocked. Do not start with a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add a sanitized reproduction, failed workflow, benchmark, or concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: change
+    attributes:
+      label: Smallest proposed change
+      description: State the bounded behavior change and what remains explicitly out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Observable behavior ...
+        - [ ] Test proves ...
+        - [ ] Documentation explains ...
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: Risk and maintenance cost
+      description: Include security, compatibility, dependency, and complexity impact.
+    validations:
+      required: true
+

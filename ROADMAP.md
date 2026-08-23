@@ -311,12 +311,12 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P4.1 Make contribution predictable
 
-- [ ] Add issue forms for reproducible bugs, bounded proposals, provider compatibility, and showcase submissions.
-- [ ] Route vulnerabilities to private reporting and support questions to Discussions.
-- [ ] Add a PR template requiring before/after behavior, tests, risk note, compatibility impact, and docs updates.
-- [ ] Add `CODE_OF_CONDUCT.md`, `SUPPORT.md`, a module map, and one canonical local quality command.
-- [ ] Reframe “No Vibe-Coded PRs” as an evidence standard: AI-assisted work is welcome when the contributor understands, tests, and owns it.
-- [ ] Seed 8–12 real `good first issue` tasks with acceptance criteria; do not manufacture feature work.
+- [x] Add issue forms for reproducible bugs, bounded proposals, provider compatibility, and showcase submissions.
+- [x] Route vulnerabilities to private reporting and support questions to Discussions.
+- [x] Add a PR template requiring before/after behavior, tests, risk note, compatibility impact, and docs updates.
+- [x] Add `CODE_OF_CONDUCT.md`, `SUPPORT.md`, a module map, and one canonical local quality command.
+- [x] Reframe “No Vibe-Coded PRs” as an evidence standard: AI-assisted work is welcome when the contributor understands, tests, and owns it.
+- [x] Seed 8–12 real `good first issue` tasks with acceptance criteria; do not manufacture feature work.
 
 ### P4.2 Build a privacy-respecting showcase loop
 
