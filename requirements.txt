@@ -5,5 +5,5 @@ python-telegram-bot~=21.0
 openai>=2,<4
 anthropic>=1,<2
 google-genai>=2,<3
-httpx>=0.27,<1
+httpx==0.28.1
 python-dotenv==1.2.3

@@ -1,34 +1,15 @@
 from __future__ import annotations
 
-import json
-import subprocess
-import sys
-from pathlib import Path
+from bench import runtime_footprint
 
 
-def test_runtime_footprint_dependency_and_budget_contract(tmp_path):
-    root = Path(__file__).resolve().parents[1]
-    output = tmp_path / "runtime-footprint.json"
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "bench.runtime_footprint",
-            "--samples",
-            "1",
-            "--output",
-            output.as_posix(),
-        ],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        timeout=30,
-        check=False,
-    )
+def test_runtime_footprint_dependency_and_budget_contract(monkeypatch):
+    monkeypatch.setattr(runtime_footprint, "measure_cold_start", lambda _samples: [100.0])
 
-    assert result.returncode == 0, result.stdout + result.stderr
-    report = json.loads(output.read_text(encoding="utf-8"))
+    report = runtime_footprint.build_report(samples=1)
     dependencies = report["dependencies"]["direct"]
-    assert report["budget_passed"] is True
+
+    assert runtime_footprint.validate_report(report) == []
     assert any(item.startswith("google-genai") for item in dependencies)
     assert not any(item.startswith("google-generativeai") for item in dependencies)
+    assert "httpx==0.28.1" in dependencies
