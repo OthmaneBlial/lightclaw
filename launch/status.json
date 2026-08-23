@@ -1,0 +1,25 @@
+{
+  "public_launch": {
+    "evidence_url": null,
+    "status": "not_started"
+  },
+  "schema_version": 1,
+  "stages": {
+    "private_alpha": {
+      "completed_reports": 0,
+      "status": "not_started",
+      "target_reports_max": 20,
+      "target_reports_min": 10
+    },
+    "v0.1.0": {
+      "release_url": null,
+      "status": "not_released"
+    },
+    "v0.2.0": {
+      "release_url": null,
+      "status": "not_released"
+    }
+  },
+  "updated_at": "2026-08-24"
+}
+

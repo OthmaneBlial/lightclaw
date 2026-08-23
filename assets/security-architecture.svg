@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="680" viewBox="0 0 1200 680" role="img" aria-labelledby="title desc">
+  <title id="title">LightClaw architecture and security boundaries</title>
+  <desc id="desc">Telegram owner input enters a fail-closed LightClaw control process. Hosted providers receive bounded prompt context. Local coding agents receive a minimal environment and an owned task workspace. Private receipts remain local unless a person explicitly exports and reviews a sanitized Run Card.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#081018"/>
+      <stop offset="1" stop-color="#102b30"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#72f1b8"/>
+      <stop offset="1" stop-color="#58c7ff"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8Z" fill="#58c7ff"/>
+    </marker>
+    <style>
+      .sans{font-family:Inter,ui-sans-serif,system-ui,sans-serif}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.title{font-size:30px;font-weight:750}.head{font-size:18px;font-weight:750}.body{font-size:15px}.label{font-size:12px;font-weight:750;letter-spacing:1.2px}.white{fill:#edf7f5}.muted{fill:#9ab0b4}.green{fill:#72f1b8}.cyan{fill:#58c7ff}.box{fill:#101d24;stroke:#36515a;stroke-width:1.5}.safe{fill:#102b2b;stroke:#397967;stroke-width:1.5}.boundary{fill:none;stroke:#58c7ff;stroke-width:2;stroke-dasharray:9 8}.flow{fill:none;stroke:#58c7ff;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+  </defs>
+  <rect width="1200" height="680" rx="30" fill="url(#bg)"/>
+  <text x="58" y="62" class="sans title white">Architecture with explicit trust boundaries</text>
+  <text x="58" y="92" class="sans body muted">Local orchestration · least privilege · private evidence by default</text>
+
+  <rect x="42" y="128" width="1116" height="440" rx="25" class="boundary"/>
+  <text x="66" y="158" class="sans label cyan">LOCAL HOST BOUNDARY</text>
+
+  <rect x="74" y="200" width="212" height="132" rx="18" class="box"/>
+  <text x="98" y="235" class="sans head white">Telegram owner</text>
+  <text x="98" y="268" class="sans body muted">numeric allowlist</text>
+  <text x="98" y="293" class="sans body muted">approve · edit · deny</text>
+
+  <rect x="382" y="182" width="348" height="170" rx="20" class="safe"/>
+  <text x="408" y="218" class="sans head green">LightClaw control process</text>
+  <text x="408" y="250" class="sans body white">scoped DAG · risk preview</text>
+  <text x="408" y="276" class="sans body white">durable job state · cancellation</text>
+  <text x="408" y="302" class="sans body white">acceptance checks · redaction</text>
+  <text x="408" y="328" class="sans label green">NO AUTOMATIC PUBLIC UPLOAD</text>
+
+  <rect x="818" y="192" width="268" height="144" rx="18" class="box"/>
+  <text x="844" y="228" class="sans head white">Local coding agent</text>
+  <text x="844" y="260" class="sans body muted">minimal environment</text>
+  <text x="844" y="285" class="sans body muted">explicit capability profile</text>
+  <text x="844" y="310" class="sans body muted">owned task workspace</text>
+
+  <path d="M286 266 H374" class="flow"/>
+  <text x="302" y="250" class="sans label cyan">AUTHORIZED</text>
+  <path d="M730 266 H810" class="flow"/>
+  <text x="749" y="250" class="sans label cyan">BOUNDED</text>
+
+  <rect x="382" y="405" width="348" height="112" rx="18" class="box"/>
+  <text x="408" y="440" class="sans head white">Private local evidence</text>
+  <text x="408" y="472" class="sans body muted">jobs · memory · artifacts · receipts</text>
+  <text x="408" y="497" class="sans body muted">owner-readable files and scoped recovery</text>
+  <path d="M556 352 V397" class="flow"/>
+
+  <rect x="72" y="610" width="320" height="44" rx="14" class="box"/>
+  <text x="95" y="638" class="sans head white">Hosted model provider</text>
+  <path d="M455 352 C420 470 337 538 252 603" class="flow"/>
+  <text x="82" y="592" class="sans label cyan">CONFIGURED PROMPT CONTEXT LEAVES HOST</text>
+
+  <rect x="794" y="610" width="320" height="44" rx="14" class="box"/>
+  <text x="817" y="638" class="sans head white">Reviewed public Run Card</text>
+  <path d="M730 462 C818 474 876 535 930 603" class="flow"/>
+  <text x="793" y="592" class="sans label green">EXPLICIT EXPORT + HUMAN REVIEW</text>
+</svg>

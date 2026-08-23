@@ -1,0 +1,23 @@
+{
+  "architecture_security_diagram": "../assets/security-architecture.svg",
+  "clip": {
+    "duration_seconds": 24,
+    "path": "../assets/demo.svg"
+  },
+  "comparisons": "COMPARISONS.md",
+  "five_minute_quickstart": "../docs/QUICKSTART.md",
+  "headline": "HEADLINE.md",
+  "raw_benchmarks": [
+    "../bench/results/2026-08-23-macos-arm64-py313.json",
+    "../bench/results/2026-08-23-macos-arm64-py313.csv",
+    "../bench/results/memory-eval-v1.json"
+  ],
+  "recipes": [
+    "../showcase/entries/persistent-memory",
+    "../showcase/entries/verified-repo-patch",
+    "../showcase/entries/audited-multi-agent"
+  ],
+  "schema_version": 1,
+  "status": "status.json"
+}
+

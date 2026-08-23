@@ -55,6 +55,7 @@ def main() -> int:
             [PYTHON, "-m", "lightclaw_cli", "skills", "validate", "--path", "examples/safe-skill"],
         )
         _run("showcase privacy and replay", [PYTHON, "scripts/validate_showcase.py", "--execute"])
+        _run("launch evidence pack", [PYTHON, "scripts/check_launch_pack.py"])
         _run("tests", [PYTHON, "-m", "pytest", "-q"])
         _run("package build", [PYTHON, "-m", "build"])
     print("\nAll canonical LightClaw quality checks passed.")

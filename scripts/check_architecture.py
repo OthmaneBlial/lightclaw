@@ -48,8 +48,8 @@ def _runtime_paths() -> list[Path]:
 def _direct_dependencies() -> list[str]:
     try:
         import tomllib
-    except ModuleNotFoundError as exc:  # pragma: no cover - quality jobs use 3.11+
-        raise RuntimeError("architecture check requires Python 3.11+") from exc
+    except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI lane
+        import tomli as tomllib
     project = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = project.get("project", {}).get("dependencies", [])
     return sorted(str(item) for item in dependencies)

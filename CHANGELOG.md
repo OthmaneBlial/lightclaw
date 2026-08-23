@@ -10,6 +10,9 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
   standard, and one canonical local quality command.
 - A privacy-gated public showcase with three token-free recipes, sanitized Run Cards,
   declared provenance, replay validation, and an explicit no-telemetry/no-upload contract.
+- A validated evidence-led launch pack with one headline, a 24-second clip, five-minute
+  quickstart, three recipes, security diagram, raw benchmarks, honest comparisons, and
+  explicit not-started external launch status.
 - Token-free `lightclaw demo` stories for memory, repository work, and multi-agent orchestration.
 - Private JSON/Markdown run receipts with checks, file hashes, artifacts, commands, and recovery context.
 - Reproducible raw benchmark JSON/CSV output.
@@ -20,6 +23,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Python 3.10 development checks use the `tomli` compatibility parser for architecture and
+  runtime-footprint contracts.
 - Migrated Gemini from deprecated `google-generativeai` to `google-genai`; updated supported OpenAI and Anthropic SDK major ranges behind the provider protocol.
 - Release evidence now includes cold-start samples, direct dependency count, and wheel size as a separate machine-readable artifact.
 

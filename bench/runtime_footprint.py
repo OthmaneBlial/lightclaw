@@ -18,8 +18,8 @@ BUDGET_PATH = PROJECT_ROOT / "docs" / "architecture" / "core-budget.json"
 def read_direct_dependencies() -> list[str]:
     try:
         import tomllib
-    except ModuleNotFoundError as exc:  # pragma: no cover - measurement uses 3.11+
-        raise RuntimeError("runtime footprint measurement requires Python 3.11+") from exc
+    except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI lane
+        import tomli as tomllib
     payload = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     return sorted(str(item) for item in payload.get("project", {}).get("dependencies", []))
 

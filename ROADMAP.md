@@ -342,6 +342,10 @@ use a workflow -> export a sanitized Run Card -> submit it -> get featured
 
 The reusable launch pack should contain one headline, one 30-second clip, one five-minute quickstart, three recipes, one architecture/security diagram, raw benchmark data, and honest comparison tables.
 
+Implementation: the versioned [evidence-led launch pack](launch/) contains and validates
+each asset above. Its machine-readable status keeps external alpha, release, community,
+and public-launch work explicitly incomplete until durable evidence exists.
+
 ### P4.4 Improve repository discovery
 
 - [ ] Add a real homepage/docs URL to GitHub metadata.
