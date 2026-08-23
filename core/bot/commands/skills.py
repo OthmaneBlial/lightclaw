@@ -3,14 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import tempfile
-import time
-import uuid
-from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -18,9 +10,8 @@ from telegram.ext import ContextTypes
 
 from skills import SkillError
 
-from ...logging_setup import log
-from ...markdown import _escape_html, markdown_to_telegram_html
-from ...personality import build_system_prompt, runtime_root_from_workspace
+from ...markdown import _escape_html
+
 
 class CommandsSkillsMixin:
     @staticmethod
@@ -81,6 +72,12 @@ class CommandsSkillsMixin:
         if not update.effective_user or not update.message:
             return
         if not self.is_allowed(update.effective_user.id):
+            return
+        if self._privileged_rate_limited(update.effective_user.id, "skills", limit=10):
+            await self._reply_logged(
+                update,
+                "⚠️ Too many privileged skill requests. Retry in about one minute.",
+            )
             return
 
         session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
@@ -356,4 +353,3 @@ class CommandsSkillsMixin:
             "Unknown /skills subcommand.\n\n" + self._skills_usage_text(),
             parse_mode=ParseMode.HTML,
         )
-

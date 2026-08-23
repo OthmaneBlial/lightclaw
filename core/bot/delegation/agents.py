@@ -48,6 +48,9 @@ class DelegationAgentsMixin:
             "<code>/agent off</code> - disable delegation mode for this chat\n"
             "<code>/agent run &lt;task&gt;</code> - run one task with current active agent\n"
             "<code>/agent run &lt;agent&gt; &lt;task&gt;</code> - one-shot with a specific agent\n"
+            "<code>/agent observe &lt;agent&gt; &lt;task&gt;</code> - read-only one-shot\n"
+            "<code>/agent trusted &lt;agent&gt; &lt;task&gt;</code> - request one unsandboxed run\n"
+            "<code>/agent trusted confirm</code> - confirm the pending trusted run\n"
             "<code>/agent multi &lt;goal&gt;</code> - auto-plan multi-agent run\n"
             "<code>/agent multi @claude @codex &lt;goal&gt;</code> - prefer specific agents\n"
             "<code>/agent multi --agent &lt;label=agent&gt; [--agent ...] &lt;goal&gt;</code> - explicit worker roster\n"
@@ -396,6 +399,14 @@ class DelegationAgentsMixin:
         lines.append(
             "<b>Multi repair attempts:</b> "
             + _escape_html(str(self.config.local_agent_multi_repair_attempts))
+        )
+        lines.append(
+            "<b>Capability profile:</b> "
+            + _escape_html(self.config.local_agent_capability_profile)
+        )
+        lines.append(
+            "<b>Telegram access:</b> "
+            + _escape_html(self._access_policy_label())
         )
         lines.append("")
         lines.append(self._agent_usage_text())

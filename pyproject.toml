@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lightclaw-ai"
+version = "0.1.0.dev0"
+description = "Auditable Telegram mission control for local AI coding agents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+  { name = "Othmane Blial" },
+]
+keywords = ["ai-agent", "coding-agent", "self-hosted", "telegram"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Communications :: Chat",
+  "Topic :: Software Development",
+]
+dependencies = [
+  "anthropic>=0.40,<1",
+  "google-generativeai>=0.8,<1",
+  "numpy>=1.26,<3",
+  "openai>=1,<3",
+  "python-dotenv>=1,<2",
+  "python-telegram-bot>=21,<23",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "pip-audit>=2.8,<3",
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=0.24,<2",
+  "pytest-cov>=6,<8",
+  "ruff>=0.9,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/OthmaneBlial/lightclaw"
+Documentation = "https://github.com/OthmaneBlial/lightclaw#readme"
+Issues = "https://github.com/OthmaneBlial/lightclaw/issues"
+Repository = "https://github.com/OthmaneBlial/lightclaw.git"
+
+[project.scripts]
+lightclaw = "lightclaw_cli:main"
+
+[tool.setuptools]
+include-package-data = true
+py-modules = ["config", "lightclaw_cli", "main", "memory", "providers", "skills"]
+
+[tool.setuptools.packages.find]
+include = ["core", "core.*"]
+
+[tool.setuptools.data-files]
+"share/lightclaw" = [".env.example"]
+"share/lightclaw/templates/personality" = [
+  "templates/personality/HEARTBEAT.md",
+  "templates/personality/IDENTITY.md",
+  "templates/personality/SOUL.md",
+  "templates/personality/USER.md",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-markers --strict-config -ra"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = ["build", "dist"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+ignore = ["E501"]

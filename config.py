@@ -6,10 +6,9 @@ Flat .env-based configuration system.
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
+
 from dotenv import load_dotenv
-
-load_dotenv()
-
 
 LATEST_MODEL_DEFAULTS = {
     "openai": "gpt-5.2",
@@ -22,6 +21,33 @@ LATEST_MODEL_DEFAULTS = {
 
 _MODEL_DEFAULT_SENTINELS = {"", "latest", "auto", "default"}
 DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
+CAPABILITY_PROFILES = {"observe", "workspace-write", "trusted-command"}
+
+
+def _config_file_candidates() -> list[Path]:
+    """Return explicit, app-specific, then legacy config candidates."""
+    override = os.getenv("LIGHTCLAW_CONFIG", "").strip()
+    if override:
+        return [Path(override).expanduser().resolve()]
+
+    home_raw = os.getenv("LIGHTCLAW_HOME", "").strip()
+    home = Path(home_raw).expanduser().resolve() if home_raw else Path.home().resolve()
+    xdg_raw = os.getenv("XDG_CONFIG_HOME", "").strip()
+    config_root = (
+        Path(xdg_raw).expanduser().resolve()
+        if xdg_raw and not home_raw
+        else home / ".config"
+    )
+    return [config_root / "lightclaw" / "config.env", home / ".env"]
+
+
+def _load_config_env() -> str:
+    """Load one known config file without directory crawling."""
+    for candidate in _config_file_candidates():
+        if candidate.is_file():
+            load_dotenv(candidate, override=False)
+            return candidate.as_posix()
+    return _config_file_candidates()[0].as_posix()
 
 
 def _strip_inline_comment(value: str) -> str:
@@ -105,6 +131,8 @@ def _parse_multi_default_agents(raw: str) -> list[str]:
 
 @dataclass
 class Config:
+    config_path: str = ""
+
     # LLM Provider
     llm_provider: str = ""
     llm_model: str = ""
@@ -122,6 +150,7 @@ class Config:
     # Telegram
     telegram_bot_token: str = ""
     telegram_allowed_users: list[str] = field(default_factory=list)
+    telegram_public_bot_ack: bool = False
 
     # Memory
     memory_db_path: str = ".lightclaw/lightclaw.db"
@@ -133,7 +162,8 @@ class Config:
     max_output_tokens: int = 12000
     local_agent_timeout_sec: int = 1800
     local_agent_progress_interval_sec: int = 30
-    local_agent_safety_mode: str = "off"
+    local_agent_safety_mode: str = "strict"
+    local_agent_capability_profile: str = "workspace-write"
     local_agent_deny_patterns: list[str] = field(default_factory=list)
     local_agent_multi_default_agents: list[str] = field(
         default_factory=lambda: ["claude", "codex"]
@@ -160,10 +190,12 @@ def _resolve_model(provider: str, model: str) -> str:
 
 def load_config() -> Config:
     """Load config from environment variables with auto-detection."""
+    loaded_config_path = _load_config_env()
     allowed_raw = os.getenv("TELEGRAM_ALLOWED_USERS", "")
     allowed = _parse_allowed_users(allowed_raw)
 
     cfg = Config(
+        config_path=loaded_config_path,
         llm_provider=_strip_inline_comment(os.getenv("LLM_PROVIDER", "")),
         llm_model=_strip_inline_comment(os.getenv("LLM_MODEL", "")),
         openai_api_key=_strip_inline_comment(os.getenv("OPENAI_API_KEY", "")),
@@ -179,6 +211,10 @@ def load_config() -> Config:
         zai_api_key=_strip_inline_comment(os.getenv("ZAI_API_KEY", "")),
         telegram_bot_token=_strip_inline_comment(os.getenv("TELEGRAM_BOT_TOKEN", "")),
         telegram_allowed_users=allowed,
+        telegram_public_bot_ack=_parse_bool(
+            os.getenv("LIGHTCLAW_PUBLIC_BOT_ACK", "no"),
+            default=False,
+        ),
         memory_db_path=os.getenv("MEMORY_DB_PATH", ".lightclaw/lightclaw.db"),
         memory_top_k=int(os.getenv("MEMORY_TOP_K", "5")),
         workspace_path=os.getenv("WORKSPACE_PATH", ".lightclaw/workspace"),
@@ -188,7 +224,10 @@ def load_config() -> Config:
         local_agent_progress_interval_sec=int(
             os.getenv("LOCAL_AGENT_PROGRESS_INTERVAL_SEC", "30")
         ),
-        local_agent_safety_mode=os.getenv("LOCAL_AGENT_SAFETY_MODE", "off"),
+        local_agent_safety_mode=os.getenv("LOCAL_AGENT_SAFETY_MODE", "strict"),
+        local_agent_capability_profile=os.getenv(
+            "LOCAL_AGENT_CAPABILITY_PROFILE", "workspace-write"
+        ),
         local_agent_deny_patterns=_parse_deny_patterns(
             os.getenv("LOCAL_AGENT_DENY_PATTERNS", "")
         ),
@@ -230,10 +269,15 @@ def load_config() -> Config:
         10, int(cfg.local_agent_progress_interval_sec)
     )
     cfg.local_agent_safety_mode = _strip_inline_comment(
-        cfg.local_agent_safety_mode or "off"
+        cfg.local_agent_safety_mode or "strict"
     ).lower()
     if cfg.local_agent_safety_mode not in {"off", "strict"}:
-        cfg.local_agent_safety_mode = "off"
+        cfg.local_agent_safety_mode = "strict"
+    cfg.local_agent_capability_profile = _strip_inline_comment(
+        cfg.local_agent_capability_profile or "workspace-write"
+    ).lower()
+    if cfg.local_agent_capability_profile not in CAPABILITY_PROFILES:
+        cfg.local_agent_capability_profile = "workspace-write"
     if not cfg.local_agent_multi_default_agents:
         cfg.local_agent_multi_default_agents = ["claude", "codex"]
     cfg.local_agent_multi_repair_attempts = max(

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 import time
+from pathlib import Path
+
+from ...workspaces import register_task_workspace, validate_workspace_root
 
 
 class DelegationWorkspaceMixin:
@@ -17,8 +19,7 @@ class DelegationWorkspaceMixin:
         return slug or "task"
 
     def _create_task_workspace(self, goal_text: str) -> Path:
-        root = Path(self.config.workspace_path).resolve()
-        root.mkdir(parents=True, exist_ok=True)
+        root = validate_workspace_root(self.config.workspace_path)
 
         stamp = time.strftime("%Y%m%d_%H%M%S")
         slug = self._slugify_goal_name(goal_text)
@@ -29,10 +30,11 @@ class DelegationWorkspaceMixin:
             candidate = root / f"{base_name}_{idx}"
             idx += 1
         candidate.mkdir(parents=True, exist_ok=False)
+        register_task_workspace(root, candidate, goal_text)
         return candidate
 
     def _workspace_rel_label(self, workspace: Path) -> str:
-        root = Path(self.config.workspace_path).resolve()
+        root = validate_workspace_root(self.config.workspace_path)
         try:
             return workspace.resolve().relative_to(root).as_posix()
         except Exception:

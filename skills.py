@@ -26,10 +26,11 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-
 DEFAULT_HUB_BASE_URL = "https://clawhub.ai"
 DEFAULT_API_PREFIX = "/api/v1"
 MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024
+MAX_SKILL_TEXT_BYTES = 512 * 1024
+MAX_SKILL_META_BYTES = 128 * 1024
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)")
 _SAFE_ID_RE = re.compile(r"[^a-zA-Z0-9._-]+")
@@ -286,21 +287,30 @@ class SkillManager:
         except zipfile.BadZipFile as e:
             raise SkillError("download is not a valid zip bundle") from e
 
-        skill_member = None
-        meta_member = None
-        for name in zf.namelist():
-            leaf = Path(name).name.lower()
+        skill_member: zipfile.ZipInfo | None = None
+        meta_member: zipfile.ZipInfo | None = None
+        for info in zf.infolist():
+            leaf = Path(info.filename).name.lower()
             if leaf == "skill.md" and skill_member is None:
-                skill_member = name
+                skill_member = info
             elif leaf == "_meta.json" and meta_member is None:
-                meta_member = name
+                meta_member = info
 
         if not skill_member:
             raise SkillError("bundle missing SKILL.md")
 
-        skill_text = zf.read(skill_member).decode("utf-8", errors="replace")
+        if skill_member.flag_bits & 0x1:
+            raise SkillError("encrypted skill bundles are not supported")
+        if skill_member.file_size > MAX_SKILL_TEXT_BYTES:
+            raise SkillError("SKILL.md exceeds the uncompressed size limit")
+        skill_bytes = zf.read(skill_member)
+        if len(skill_bytes) > MAX_SKILL_TEXT_BYTES:
+            raise SkillError("SKILL.md exceeds the uncompressed size limit")
+        skill_text = skill_bytes.decode("utf-8", errors="replace")
         meta = None
         if meta_member:
+            if meta_member.file_size > MAX_SKILL_META_BYTES:
+                raise SkillError("skill metadata exceeds the uncompressed size limit")
             try:
                 meta = json.loads(zf.read(meta_member).decode("utf-8", errors="replace"))
             except Exception:

@@ -3,24 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import tempfile
 import time
-import uuid
-from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from skills import SkillError
-
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import build_system_prompt, runtime_root_from_workspace
+
 
 class CommandsHeartbeatMixin:
     @staticmethod
@@ -267,6 +260,12 @@ class CommandsHeartbeatMixin:
             return
         if not self.is_allowed(update.effective_user.id):
             return
+        if self._privileged_rate_limited(update.effective_user.id, "heartbeat", limit=10):
+            await self._reply_logged(
+                update,
+                "⚠️ Too many privileged heartbeat requests. Retry in about one minute.",
+            )
+            return
 
         session_id = self._session_id_from_update(update)
         self._heartbeat_last_chat_id = session_id
@@ -346,4 +345,3 @@ class CommandsHeartbeatMixin:
             "Unknown /heartbeat subcommand.\n\n" + self._heartbeat_usage_text(),
             parse_mode=ParseMode.HTML,
         )
-

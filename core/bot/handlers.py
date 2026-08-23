@@ -55,6 +55,8 @@ class BotHandlersMixin:
             f"<b>File mode:</b> {_escape_html(file_mode)}\n"
             f"<b>Delegation progress interval:</b> {self.config.local_agent_progress_interval_sec}s\n"
             f"<b>Delegation safety:</b> {_escape_html(self.config.local_agent_safety_mode)}\n"
+            f"<b>Capability profile:</b> {_escape_html(self.config.local_agent_capability_profile)}\n"
+            f"<b>Telegram access:</b> {_escape_html(self._access_policy_label())}\n"
             f"<b>Multi defaults:</b> {_escape_html(multi_defaults)}\n"
             f"<b>Multi auto-continue:</b> {'yes' if self.config.local_agent_multi_auto_continue else 'no'}\n"
             f"<b>Pending multi plan:</b> {'yes' if pending_multi else 'no'}\n"

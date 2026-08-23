@@ -4,14 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import shlex
 import subprocess
-import tempfile
 import time
-import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -20,17 +16,20 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from skills import SkillError
+from ...markdown import _escape_html
 
-from ...logging_setup import log
-from ...markdown import _escape_html, markdown_to_telegram_html
-from ...personality import build_system_prompt, runtime_root_from_workspace
 
 class CommandsAgentMixin:
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
         if not self.is_allowed(update.effective_user.id):
+            return
+        if self._privileged_rate_limited(update.effective_user.id, "agent", limit=12):
+            await self._reply_logged(
+                update,
+                "⚠️ Too many privileged agent requests. Retry in about one minute.",
+            )
             return
 
         session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
@@ -299,6 +298,72 @@ class CommandsAgentMixin:
                 await self._execute_pending_multi_plan(update, session_id)
             return
 
+        if sub in {"observe", "trusted"}:
+            profile = "observe" if sub == "observe" else "trusted-command"
+            if sub == "trusted" and len(args) >= 2 and args[1].lower() == "confirm":
+                pending = self._pending_trusted_agent_run_by_session.get(session_id)
+                if not pending or float(pending.get("expires_at") or 0) < time.time():
+                    self._pending_trusted_agent_run_by_session.pop(session_id, None)
+                    await self._reply_logged(
+                        update,
+                        "No pending trusted run. Start with "
+                        "<code>/agent trusted &lt;agent&gt; &lt;task&gt;</code>.",
+                        parse_mode=ParseMode.HTML,
+                    )
+                    return
+                self._pending_trusted_agent_run_by_session.pop(session_id, None)
+                agent = str(pending.get("agent") or "")
+                task = str(pending.get("task") or "")
+                await self._execute_one_shot_delegation(
+                    update,
+                    session_id=session_id,
+                    agent=agent,
+                    task=task,
+                    capability_profile=profile,
+                )
+                return
+
+            if len(args) < 3:
+                await self._reply_logged(
+                    update,
+                    f"Usage: <code>/agent {sub} &lt;codex|claude&gt; &lt;task&gt;</code>",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+            agent = self._resolve_local_agent_name(args[1])
+            task = " ".join(args[2:]).strip()
+            if not agent or not task:
+                await self._reply_logged(
+                    update,
+                    "A supported agent and non-empty task are required.",
+                )
+                return
+
+            if sub == "trusted":
+                self._pending_trusted_agent_run_by_session[session_id] = {
+                    "agent": agent,
+                    "task": task,
+                    "expires_at": time.time() + 90,
+                }
+                await self._reply_logged(
+                    update,
+                    "⚠️ <b>Trusted host execution requested.</b>\n"
+                    "This disables the coding agent sandbox for one run and may affect "
+                    "files or processes outside the task workspace.\n\n"
+                    "Confirm within 90 seconds with <code>/agent trusted confirm</code>.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            await self._execute_one_shot_delegation(
+                update,
+                session_id=session_id,
+                agent=agent,
+                task=task,
+                capability_profile=profile,
+            )
+            return
+
         # One-shot convenience: /agent codex <task...>
         direct_agent = self._resolve_local_agent_name(sub)
         if direct_agent:
@@ -421,6 +486,53 @@ class CommandsAgentMixin:
             "Unknown /agent subcommand.\n\n" + self._agent_usage_text(),
             parse_mode=ParseMode.HTML,
         )
+
+    async def _execute_one_shot_delegation(
+        self,
+        update: Update,
+        *,
+        session_id: str,
+        agent: str,
+        task: str,
+        capability_profile: str,
+    ) -> None:
+        progress = await self._reply_logged(
+            update,
+            f"🤖 Delegating to <code>{_escape_html(agent)}</code> "
+            f"with <code>{_escape_html(capability_profile)}</code> capability...",
+            parse_mode=ParseMode.HTML,
+        )
+
+        async def _delegation_progress_update(text: str):
+            try:
+                await progress.edit_text(text)
+            except Exception:
+                pass
+
+        result_text = await self._run_local_agent_task(
+            session_id,
+            agent,
+            task,
+            progress_cb=_delegation_progress_update,
+            capability_profile=capability_profile,
+        )
+        request_entry = (
+            "[delegation-request]\n"
+            "mode: single\n"
+            f"capability: {capability_profile}\n"
+            f"agent: {agent}\n"
+            f"task: {task}"
+        )
+        self.memory.ingest("user", request_entry, session_id)
+        memory_entry = self._build_single_delegation_memory_entry(
+            agent=agent,
+            task=task,
+            result_text=result_text,
+        )
+        self.memory.ingest("assistant", memory_entry, session_id)
+        if not self._llm_backoff_active():
+            asyncio.create_task(self.maybe_summarize(session_id))
+        await self._send_response(progress, update, result_text)
 
     @staticmethod
     def _multi_handoff_lookup(data: dict[str, Any], dotted_path: str) -> Any:

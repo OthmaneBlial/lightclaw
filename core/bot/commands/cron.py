@@ -16,11 +16,10 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from skills import SkillError
-
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
-from ...personality import build_system_prompt, runtime_root_from_workspace
+from ...personality import runtime_root_from_workspace
+
 
 def _atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
     """Atomically write text to disk using fsync + rename."""
@@ -233,8 +232,16 @@ class CommandsCronMixin:
                 message = f"⏰ Cron reminder\n\n{message_text}"
                 html = markdown_to_telegram_html(message)
 
-                async def _send_message(text: str, parse_mode: str | None = None):
-                    return await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+                async def _send_message(
+                    text: str,
+                    parse_mode: str | None = None,
+                    target_chat_id=chat_id,
+                ):
+                    return await bot.send_message(
+                        chat_id=target_chat_id,
+                        text=text,
+                        parse_mode=parse_mode,
+                    )
 
                 sent = await self._try_send(_send_message, html)
                 if not sent:
@@ -301,6 +308,12 @@ class CommandsCronMixin:
         if not update.effective_user or not update.message:
             return
         if not self.is_allowed(update.effective_user.id):
+            return
+        if self._privileged_rate_limited(update.effective_user.id, "cron", limit=10):
+            await self._reply_logged(
+                update,
+                "⚠️ Too many privileged scheduler requests. Retry in about one minute.",
+            )
             return
 
         session_id = self._session_id_from_update(update)
@@ -497,4 +510,3 @@ class CommandsCronMixin:
             "Unknown /cron subcommand.\n\n" + self._cron_usage_text(),
             parse_mode=ParseMode.HTML,
         )
-

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import json
 import os
-from pathlib import Path
 import re
+import signal
 import subprocess
 import time
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 from ...logging_setup import log
+from ...security import delegated_process_env, redact_text
 
 
 class DelegationExecutionMixin:
@@ -215,7 +217,14 @@ class DelegationExecutionMixin:
         workspace: Path,
         prompt: str,
         stream_output: bool,
+        capability_profile: str | None = None,
     ) -> tuple[list[str], str | None]:
+        profile = (
+            capability_profile
+            or getattr(self.config, "local_agent_capability_profile", "workspace-write")
+        ).strip().lower()
+        if profile not in {"observe", "workspace-write", "trusted-command"}:
+            profile = "workspace-write"
         run_input: str | None = None
         if agent == "codex":
             cmd = [
@@ -223,14 +232,16 @@ class DelegationExecutionMixin:
                 "exec",
                 "--json",
                 "--ephemeral",
-                "--dangerously-bypass-approvals-and-sandbox",
                 "--skip-git-repo-check",
                 "--color",
                 "never",
-                "-C",
-                workspace.as_posix(),
-                "-",
             ]
+            if profile == "trusted-command":
+                cmd.append("--dangerously-bypass-approvals-and-sandbox")
+            else:
+                sandbox = "read-only" if profile == "observe" else "workspace-write"
+                cmd.extend(["--sandbox", sandbox])
+            cmd.extend(["-C", workspace.as_posix(), "-"])
             run_input = prompt
             return cmd, run_input
 
@@ -238,11 +249,15 @@ class DelegationExecutionMixin:
             cmd = [
                 "claude",
                 "-p",
-                "--dangerously-skip-permissions",
                 "--no-chrome",
                 "--no-session-persistence",
-                "-",
             ]
+            if profile == "trusted-command":
+                cmd.append("--dangerously-skip-permissions")
+            else:
+                permission_mode = "plan" if profile == "observe" else "acceptEdits"
+                cmd.extend(["--permission-mode", permission_mode])
+            cmd.append("-")
             if stream_output:
                 cmd.extend(
                     [
@@ -503,20 +518,22 @@ class DelegationExecutionMixin:
         task: str,
         workspace: Path | None = None,
         progress_cb: Callable[[str], Awaitable[None]] | None = None,
+        capability_profile: str | None = None,
     ) -> dict:
         workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
-        timeout_sec = max(60, int(self.config.local_agent_timeout_sec))
+        timeout_sec = max(1, int(self.config.local_agent_timeout_sec))
         progress_interval = max(10, int(self.config.local_agent_progress_interval_sec))
         prompt = self._build_delegation_prompt(task, workspace=workspace)
-        env = os.environ.copy()
-        env["LIGHTCLAW_DELEGATED_AGENT"] = "1"
-        env["CI"] = "1"
+        env = delegated_process_env(
+            extra={"LIGHTCLAW_DELEGATED_AGENT": agent, "CI": "1"}
+        )
 
         cmd, run_input = self._build_local_agent_command(
             agent=agent,
             workspace=workspace,
             prompt=prompt,
             stream_output=True,
+            capability_profile=capability_profile,
         )
         if not cmd:
             return {
@@ -538,6 +555,7 @@ class DelegationExecutionMixin:
                 stderr=asyncio.subprocess.PIPE,
                 cwd=workspace.as_posix(),
                 env=env,
+                start_new_session=True,
             )
         except Exception as e:
             return {
@@ -655,11 +673,25 @@ class DelegationExecutionMixin:
         except asyncio.TimeoutError:
             timed_out = True
             try:
-                proc.kill()
+                os.killpg(proc.pid, signal.SIGKILL)
             except Exception:
-                pass
+                proc.kill()
             await proc.wait()
             stderr_lines.append(f"Timed out after {timeout_sec}s")
+        except asyncio.CancelledError:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except Exception:
+                proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except Exception:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except Exception:
+                    proc.kill()
+                await proc.wait()
+            raise
         finally:
             heartbeat_stop.set()
             if heartbeat_task:
@@ -673,13 +705,14 @@ class DelegationExecutionMixin:
 
         elapsed = time.monotonic() - started
         exit_code = 124 if timed_out else int(proc.returncode if proc.returncode is not None else 1)
-        stdout = "\n".join(stdout_lines)
-        stderr = "\n".join(stderr_lines)
+        stdout = redact_text("\n".join(stdout_lines))
+        stderr = redact_text("\n".join(stderr_lines))
 
         if agent == "codex":
             summary = self._parse_codex_exec_output(stdout)
         else:
             summary = self._parse_claude_cli_output(stdout)
+        summary = redact_text(summary)
 
         ok = exit_code == 0
         if summary.strip().lower().startswith("error:"):
@@ -700,19 +733,21 @@ class DelegationExecutionMixin:
         agent: str,
         task: str,
         workspace: Path | None = None,
+        capability_profile: str | None = None,
     ) -> dict:
         workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
-        timeout_sec = max(60, int(self.config.local_agent_timeout_sec))
+        timeout_sec = max(1, int(self.config.local_agent_timeout_sec))
         prompt = self._build_delegation_prompt(task, workspace=workspace)
-        env = os.environ.copy()
-        env["LIGHTCLAW_DELEGATED_AGENT"] = "1"
-        env["CI"] = "1"
+        env = delegated_process_env(
+            extra={"LIGHTCLAW_DELEGATED_AGENT": agent, "CI": "1"}
+        )
 
         cmd, run_input = self._build_local_agent_command(
             agent=agent,
             workspace=workspace,
             prompt=prompt,
             stream_output=False,
+            capability_profile=capability_profile,
         )
         if not cmd:
             return {
@@ -726,24 +761,40 @@ class DelegationExecutionMixin:
             }
 
         started = time.monotonic()
+        process: subprocess.Popen[str] | None = None
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 cmd,
-                input=run_input,
+                stdin=subprocess.PIPE if run_input is not None else None,
                 text=True,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 cwd=workspace.as_posix(),
                 env=env,
+                start_new_session=True,
+            )
+            stdout_raw, stderr_raw = process.communicate(
+                input=run_input,
                 timeout=timeout_sec,
             )
             elapsed = time.monotonic() - started
         except subprocess.TimeoutExpired as e:
+            if process is not None:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except Exception:
+                    process.kill()
+                stdout_raw, stderr_raw = process.communicate()
+            else:
+                stdout_raw, stderr_raw = str(e.stdout or ""), str(e.stderr or "")
             elapsed = time.monotonic() - started
             return {
                 "ok": False,
                 "exit_code": 124,
-                "stdout": str(e.stdout or ""),
-                "stderr": (str(e.stderr or "") + f"\nTimed out after {timeout_sec}s").strip(),
+                "stdout": redact_text(stdout_raw or ""),
+                "stderr": redact_text(
+                    ((stderr_raw or "") + f"\nTimed out after {timeout_sec}s").strip()
+                ),
                 "summary": "",
                 "elapsed": elapsed,
                 "timed_out": True,
@@ -760,21 +811,23 @@ class DelegationExecutionMixin:
                 "timed_out": False,
             }
 
-        stdout = completed.stdout or ""
-        stderr = completed.stderr or ""
+        stdout = redact_text(stdout_raw or "")
+        stderr = redact_text(stderr_raw or "")
 
         if agent == "codex":
             summary = self._parse_codex_exec_output(stdout)
         else:
             summary = self._parse_claude_cli_output(stdout)
+        summary = redact_text(summary)
 
-        ok = completed.returncode == 0
+        return_code = process.returncode if process is not None else 1
+        ok = return_code == 0
         if summary.strip().lower().startswith("error:"):
             ok = False
 
         return {
             "ok": ok,
-            "exit_code": int(completed.returncode if ok or completed.returncode != 0 else 1),
+            "exit_code": int(return_code if ok or return_code != 0 else 1),
             "stdout": stdout,
             "stderr": stderr,
             "summary": summary,
@@ -790,6 +843,7 @@ class DelegationExecutionMixin:
         progress_cb: Callable[[str], Awaitable[None]] | None = None,
         include_workspace_delta: bool = True,
         workspace_dir: Path | str | None = None,
+        capability_profile: str | None = None,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -813,6 +867,11 @@ class DelegationExecutionMixin:
             )
 
         progress_interval = max(10, int(self.config.local_agent_progress_interval_sec))
+        profile = (
+            capability_profile or self.config.local_agent_capability_profile
+        ).strip().lower()
+        if profile not in {"observe", "workspace-write", "trusted-command"}:
+            profile = "workspace-write"
 
         target_workspace: Path
         if workspace_dir is None:
@@ -828,7 +887,8 @@ class DelegationExecutionMixin:
                     (
                         f"🧠 {agent} started. I'll post summarized progress about every "
                         f"{progress_interval}s.\n"
-                        f"📁 Task workspace: `{workspace_label}`"
+                        f"📁 Task workspace: `{workspace_label}`\n"
+                        f"🔐 Capability: `{profile}`"
                     )
                 )
             except Exception:
@@ -840,6 +900,7 @@ class DelegationExecutionMixin:
             task=task,
             workspace=target_workspace,
             progress_cb=progress_cb,
+            capability_profile=profile,
         )
         after = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
 

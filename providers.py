@@ -6,7 +6,9 @@ Unified LLM provider interface.
 
 import asyncio
 import logging
+
 from config import Config
+from core.security import redact_text
 
 log = logging.getLogger("lightclaw.providers")
 OFFICIAL_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
@@ -154,26 +156,26 @@ class LLMClient:
             elif self.provider_name == "gemini":
                 return await self._chat_gemini(messages, system_prompt, max_output_tokens)
         except Exception as e:
-            err_text = str(e)
+            err_text = redact_text(str(e), vars(self.config))
             lower_err = err_text.lower()
             if self.provider_name == "zai" and (
                 "1113" in err_text
                 or "余额不足" in err_text
                 or "无可用资源包" in err_text
             ):
-                log.error(f"LLM call failed ({self.provider_name}): {e}")
+                log.error(f"LLM call failed ({self.provider_name}): {err_text}")
                 return (
                     "⚠️ Error communicating with zai: account balance/package is exhausted "
                     "(provider code 1113). Recharge your ZAI account or switch provider."
                 )
             if "429" in lower_err and "too many requests" in lower_err:
-                log.error(f"LLM call failed ({self.provider_name}): {e}")
+                log.error(f"LLM call failed ({self.provider_name}): {err_text}")
                 return (
                     f"⚠️ Error communicating with {self.provider_name}: rate limit hit (429). "
                     "Please retry in a moment."
                 )
-            log.error(f"LLM call failed ({self.provider_name}): {e}")
-            return f"⚠️ Error communicating with {self.provider_name}: {e}"
+            log.error(f"LLM call failed ({self.provider_name}): {err_text}")
+            return f"⚠️ Error communicating with {self.provider_name}: {err_text}"
 
     # ── OpenAI / xAI ──────────────────────────────────────────
 

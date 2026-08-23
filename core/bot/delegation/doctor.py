@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import subprocess
 import time
+from pathlib import Path
 
 from ...markdown import _escape_html
 
@@ -233,6 +233,9 @@ class DelegationDoctorMixin:
             "🩺 <b>Local Agent Doctor</b>",
             "",
             "Legend: ✅ ready, ⚠️ attention needed, ❌ action required",
+            f"Telegram access: {_escape_html(self._access_policy_label())}",
+            "Capability profile: "
+            f"<code>{_escape_html(self.config.local_agent_capability_profile)}</code>",
             "",
         ]
 

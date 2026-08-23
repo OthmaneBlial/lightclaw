@@ -723,13 +723,14 @@ class BotFileOpsMixin:
             "```\n"
             "Do not include prose."
         )
+        joined_snippets = "\n\n".join(snippets)
         retry_user = (
             "The previous edit failed because SEARCH text did not match exactly.\n\n"
             f"Original user request:\n{user_text}\n\n"
             "Previous model response:\n"
             f"{original_model_response}\n\n"
             "Current file contents:\n"
-            f"{'\n\n'.join(snippets)}\n\n"
+            f"{joined_snippets}\n\n"
             "Generate corrected edit blocks that apply exactly to these files. "
             "If no change is needed, reply exactly: NO_CHANGES"
         )
@@ -780,8 +781,9 @@ class BotFileOpsMixin:
                 shown += "\n... [truncated]"
             snippets.append(f"### {rel_path}\n```text\n{shown}\n```")
 
+        joined_snippets = "\n\n".join(snippets)
         file_context = (
-            f"Current candidate workspace files:\n{'\n\n'.join(snippets)}"
+            f"Current candidate workspace files:\n{joined_snippets}"
             if snippets
             else "Current candidate workspace files:\n(none yet - create new files in workspace as needed)"
         )

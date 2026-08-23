@@ -2,19 +2,19 @@
 """Compatibility facade for the modularized LightClaw core."""
 
 from core import (
+    FALLBACK_IDENTITY,
+    FILE_IO_RULES,
+    PROJECT_ROOT,
+    STRICT_LOCAL_AGENT_DENY_PATTERNS,
+    FileOperationResult,
+    LightClawBot,
     _escape_html,
     build_system_prompt,
-    FALLBACK_IDENTITY,
-    FileOperationResult,
-    FILE_IO_RULES,
-    LightClawBot,
     load_personality,
     log,
     main,
     markdown_to_telegram_html,
-    PROJECT_ROOT,
     resolve_runtime_path,
-    STRICT_LOCAL_AGENT_DENY_PATTERNS,
     transcribe_voice,
 )
 

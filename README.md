@@ -1,6 +1,6 @@
 # LightClaw
 
-LightClaw is a **self-hosted Telegram AI agent** inspired by OpenClaw: a small Python codebase with long-term memory, multi-provider LLM routing, skills, and local multi-agent delegation.
+LightClaw is a **self-hosted Telegram AI agent** inspired by OpenClaw: a Python codebase with persistent local memory, multi-provider LLM routing, skills, and local multi-agent delegation.
 
 If you are searching for an **OpenClaw alternative**, **OpenClaw in Python**, or a **Telegram AI bot with memory**, this project is built for that workflow.
 
@@ -10,8 +10,9 @@ If you are searching for an **OpenClaw alternative**, **OpenClaw in Python**, or
 
 ## Security Disclaimer
 
-LightClaw can execute impactful actions (file edits and delegated local agent runs).  
-Use least-privilege credentials, review installed skills, and restrict bot access with `TELEGRAM_ALLOWED_USERS`.
+LightClaw can execute impactful actions (file edits and delegated local agent runs). It fails closed unless numeric `TELEGRAM_ALLOWED_USERS` are configured; public access requires the explicit `LIGHTCLAW_PUBLIC_BOT_ACK=yes` override. Use least-privilege credentials and review installed skills.
+
+Read the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md) before exposing a bot.
 
 ## Why LightClaw
 
@@ -21,7 +22,7 @@ Use least-privilege credentials, review installed skills, and restrict bot acces
 
 ## Core Features
 
-- Infinite memory with SQLite + semantic recall.
+- Persistent SQLite memory with local lexical recall.
 - 6 LLM providers: OpenAI, xAI, Anthropic, Gemini, DeepSeek, Z-AI.
 - Telegram-first experience with command-driven workflow.
 - Local terminal chat mode (`lightclaw chat`) using the same runtime stack.
@@ -42,7 +43,7 @@ git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash 
 `setup.sh` does everything automatically:
 
 - Installs the `lightclaw` command at `~/.local/bin/lightclaw`
-- Writes your config to `~/.env`
+- Writes private app config to `~/.config/lightclaw/config.env`
 - Creates runtime files in `~/.lightclaw`
 
 Then run:
@@ -62,17 +63,19 @@ If your shell has not reloaded `PATH` yet, use:
 ```bash
 git clone https://github.com/OthmaneBlial/lightclaw.git
 cd lightclaw
-pip install -r requirements.txt
-./lightclaw onboard
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+lightclaw onboard
 ```
 
-Then edit `~/.env` and start:
+Then edit `~/.config/lightclaw/config.env` and start:
 
 ```bash
-./lightclaw run
+lightclaw run
 ```
 
-## Minimal `.env` Example
+## Minimal App Config Example
 
 ```env
 # Provider selection
@@ -88,7 +91,8 @@ DEEPSEEK_API_KEY=
 
 # Telegram
 TELEGRAM_BOT_TOKEN=
-TELEGRAM_ALLOWED_USERS=
+TELEGRAM_ALLOWED_USERS=123456789
+LIGHTCLAW_PUBLIC_BOT_ACK=no
 
 # Optional generation tuning
 MAX_OUTPUT_TOKENS=12000
@@ -99,7 +103,8 @@ LOCAL_AGENT_PROGRESS_INTERVAL_SEC=30
 LOCAL_AGENT_MULTI_DEFAULT_AGENTS=claude,codex
 LOCAL_AGENT_MULTI_AUTO_CONTINUE=no
 LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS=1
-LOCAL_AGENT_SAFETY_MODE=off
+LOCAL_AGENT_SAFETY_MODE=strict
+LOCAL_AGENT_CAPABILITY_PROFILE=workspace-write
 LOCAL_AGENT_DENY_PATTERNS=
 
 # Skills
@@ -113,10 +118,16 @@ SKILLS_STATE_PATH=.lightclaw/skills_state.json
 lightclaw onboard
 lightclaw onboard --reset-env
 lightclaw onboard --configure
+lightclaw doctor
+lightclaw doctor --json
 lightclaw run
 lightclaw run --provider deepseek --model deepseek-chat
 lightclaw chat
+lightclaw undo <task-workspace-label>
+lightclaw uninstall --dry-run
 ```
+
+See the complete [install, upgrade, undo, and uninstall guide](docs/INSTALL.md).
 
 ## Telegram / Chat Commands
 

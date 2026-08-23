@@ -19,6 +19,7 @@ from skills import SkillManager
 from ..constants import STRICT_LOCAL_AGENT_DENY_PATTERNS
 from ..logging_setup import log
 from ..personality import load_personality
+from ..security import access_policy_label, redact_text
 
 
 class BotBaseMixin:
@@ -71,14 +72,44 @@ class BotBaseMixin:
         # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
         self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
         self._pending_multi_plan_ttl_sec: int = 15 * 60
+        # Explicit confirmation gate for trusted-command one-shot runs.
+        self._pending_trusted_agent_run_by_session: dict[str, dict[str, object]] = {}
+        # Sliding-window limiter for high-authority Telegram commands.
+        self._privileged_request_times: dict[tuple[str, str], list[float]] = {}
         # Compiled strict-mode deny patterns for delegated local-agent tasks.
         self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
 
     def is_allowed(self, user_id: int) -> bool:
-        """Check if this user is in the allowlist (empty = allow all)."""
-        if not self.config.telegram_allowed_users:
+        """Fail closed unless an allowlist or explicit public override exists."""
+        if self.config.telegram_allowed_users:
+            return str(user_id) in self.config.telegram_allowed_users
+        return bool(self.config.telegram_public_bot_ack)
+
+    def _access_policy_label(self) -> str:
+        return access_policy_label(
+            self.config.telegram_allowed_users,
+            self.config.telegram_public_bot_ack,
+        )
+
+    def _privileged_rate_limited(
+        self,
+        user_id: int,
+        action: str,
+        *,
+        limit: int = 8,
+        window_sec: int = 60,
+    ) -> bool:
+        """Return True when a privileged action exceeds its sliding-window limit."""
+        now = time.monotonic()
+        key = (str(user_id), str(action))
+        cutoff = now - max(1, int(window_sec))
+        recent = [stamp for stamp in self._privileged_request_times.get(key, []) if stamp >= cutoff]
+        if len(recent) >= max(1, int(limit)):
+            self._privileged_request_times[key] = recent
             return True
-        return str(user_id) in self.config.telegram_allowed_users
+        recent.append(now)
+        self._privileged_request_times[key] = recent
+        return False
 
     @staticmethod
     def _session_id_from_update(update: Update | None) -> str:
@@ -97,10 +128,12 @@ class BotBaseMixin:
         return re.sub(r"<[^>]+>", "", text)
 
     def _log_user_message(self, session_id: str, text: str):
-        log.info(f"[{session_id}] User: {self._trim_for_log(text)}")
+        safe = redact_text(self._trim_for_log(text), os.environ)
+        log.info(f"[{session_id}] User: {safe}")
 
     def _log_bot_message(self, session_id: str, text: str):
-        log.info(f"[{session_id}] Bot: {self._trim_for_log(text)}")
+        safe = redact_text(self._trim_for_log(text), os.environ)
+        log.info(f"[{session_id}] Bot: {safe}")
 
     @staticmethod
     def _extract_file_mentions(text: str) -> list[str]:

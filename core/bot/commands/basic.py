@@ -3,24 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import tempfile
 import time
-import uuid
-from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from skills import SkillError
+from ...markdown import _escape_html
 
-from ...logging_setup import log
-from ...markdown import _escape_html, markdown_to_telegram_html
-from ...personality import build_system_prompt, runtime_root_from_workspace
 
 class CommandsBasicMixin:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -87,6 +77,12 @@ class CommandsBasicMixin:
         if not update.effective_user or not update.message:
             return
         if not self.is_allowed(update.effective_user.id):
+            return
+        if self._privileged_rate_limited(update.effective_user.id, "wipe-memory", limit=4):
+            await self._reply_logged(
+                update,
+                "⚠️ Too many destructive requests. Retry in about one minute.",
+            )
             return
 
         session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
@@ -248,4 +244,3 @@ class CommandsBasicMixin:
             "Coding/edit prompts can now write files in the workspace.",
             parse_mode=ParseMode.HTML,
         )
-

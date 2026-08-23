@@ -4,9 +4,7 @@ SQLite-backed persistent memory with TF-IDF vector similarity for RAG recall.
 SQLite-based infinite memory with vector-based RAG.
 """
 
-import json
 import logging
-import math
 import re
 import sqlite3
 import time

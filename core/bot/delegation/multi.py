@@ -268,7 +268,6 @@ class DelegationMultiPlanMixin:
         return f"handoff/{safe}.json"
 
     def _default_multi_owned_paths(self, label: str, role: str) -> list[str]:
-        text = self._multi_lane_role_text(label, role)
         if self._multi_is_backend_lane(label, role):
             return ["backend/**", "api/**", "server/**", "db/**", "migrations/**"]
         if self._multi_is_frontend_lane(label, role):
@@ -1301,7 +1300,6 @@ class DelegationMultiPlanMixin:
         task_workspace_label: str = "",
     ) -> str:
         roster = ", ".join(f"{name}={agent}" for name, agent in workers)
-        lane = label.lower()
         role = str((worker_plan or {}).get("role") or "implementation").strip() or "implementation"
         lane_hint = "Focus only on your lane and avoid unrelated files."
         handoff_contract_hint = (

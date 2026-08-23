@@ -15,6 +15,7 @@ from .personality import (
     resolve_runtime_path,
     runtime_root_from_workspace,
 )
+from .security import access_policy_label
 
 
 def main():
@@ -34,12 +35,26 @@ def main():
 
     # Validate required config
     if not config.telegram_bot_token:
-        log.error("TELEGRAM_BOT_TOKEN is required. Set it in .env")
+        log.error("TELEGRAM_BOT_TOKEN is required. Set it in %s", config.config_path)
+        return
+
+    access_policy = access_policy_label(
+        config.telegram_allowed_users,
+        config.telegram_public_bot_ack,
+    )
+    if not config.telegram_allowed_users and not config.telegram_public_bot_ack:
+        log.error(
+            "Telegram access is blocked: configure TELEGRAM_ALLOWED_USERS in %s. "
+            "To intentionally run a public high-authority bot, set "
+            "LIGHTCLAW_PUBLIC_BOT_ACK=yes.",
+            config.config_path,
+        )
         return
 
     if not config.llm_provider:
         log.error(
-            "No LLM provider configured. Set LLM_PROVIDER and the corresponding API key in .env"
+            "No LLM provider configured. Set LLM_PROVIDER and the corresponding API key in %s",
+            config.config_path,
         )
         return
 
@@ -52,6 +67,7 @@ def main():
     log.info(f"   Context window: {config.context_window:,} tokens")
     log.info(f"   Max output: {config.max_output_tokens:,} tokens")
     log.info(f"   Local agent timeout: {config.local_agent_timeout_sec}s")
+    log.info(f"   Telegram access: {access_policy}")
     log.info(
         "   Local agent progress summary interval: "
         f"{config.local_agent_progress_interval_sec}s"
@@ -76,9 +92,7 @@ def main():
     else:
         log.info("   Voice: ❌ disabled (set GROQ_API_KEY)")
     if config.telegram_allowed_users:
-        log.info(f"   Allowed users: {', '.join(config.telegram_allowed_users)}")
-    else:
-        log.info("   Allowed users: everyone")
+        log.info("   Allowed user count: %d", len(config.telegram_allowed_users))
 
     bot = LightClawBot(config)
 
