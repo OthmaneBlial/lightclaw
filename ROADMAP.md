@@ -249,9 +249,9 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### Phase 2 exit criteria
 
-- [ ] A single demo shows phone request to verified patch/PR preview without hidden manual steps.
-- [ ] 100 repeated fixture runs produce valid receipts with no secret leakage.
-- [ ] Crash/restart/cancel/undo tests preserve unrelated user work.
+- [x] A single demo shows phone request to verified patch/PR preview without hidden manual steps.
+- [x] 100 repeated fixture runs produce valid receipts with no secret leakage.
+- [x] Crash/restart/cancel/undo tests preserve unrelated user work.
 - [ ] Five external users complete a real bounded repo task and can explain what LightClaw changed.
 - [ ] At least three sanitized Run Cards are voluntarily submitted to the public showcase.
 

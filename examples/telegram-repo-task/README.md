@@ -1,6 +1,6 @@
 # Telegram Repository Task Story
 
-This fixture reproduces the core LightClaw promise without remote services: a scoped goal becomes a file change, an actual test run, an artifact, and a receipt.
+This fixture reproduces the core LightClaw promise without remote services: a recorded phone/Telegram request and approval become a scoped Git change, an actual test run, a review patch, and a receipt.
 
 ## Prerequisites
 
@@ -24,7 +24,10 @@ Expected evidence:
 - `artifact/service.py` exposes `health()`;
 - `artifact/test_service.py` checks the exact response;
 - LightClaw really runs `python -m unittest -v` in a minimal environment;
-- `artifact/test-output.txt` and both receipt formats record the result.
+- `phone-to-patch.json` records the request, preview, approval, verified result, and zero hidden manual steps;
+- `review/changes.patch` is a standard Git patch and `review/artifact.json` records its base, branch, paths, and SHA-256;
+- `artifact/test-output.txt` and both receipt formats record the result;
+- no branch is pushed and no pull request is opened.
 
 Typical fixture duration is under 2 seconds and cost is exactly $0. A real delegated coding task can take minutes and can incur provider or coding-agent subscription cost.
 

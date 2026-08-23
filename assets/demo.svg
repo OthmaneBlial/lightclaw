@@ -85,7 +85,7 @@
   <text x="555" y="304" class="ui small muted">plan</text><text x="700" y="304" class="ui small white">builder → verifier</text>
   <text x="555" y="340" class="ui small muted">command</text><text x="700" y="340" class="ui small white">python -m unittest -v</text>
   <text x="555" y="376" class="ui small muted">evidence</text><text x="700" y="376" class="ui small green">PASS · actual exit 0</text>
-  <text x="555" y="412" class="ui small muted">artifacts</text><text x="700" y="412" class="ui small white">diff · test-output.txt</text>
+  <text x="555" y="412" class="ui small muted">artifacts</text><text x="700" y="412" class="ui small white">changes.patch · test evidence</text>
   <text x="555" y="448" class="ui small muted">recovery</text><text x="700" y="448" class="ui small white">owned directory only</text>
   <rect x="555" y="486" width="552" height="54" rx="15" fill="#102b2b"/>
   <circle cx="582" cy="513" r="8" fill="#72f1b8"/>

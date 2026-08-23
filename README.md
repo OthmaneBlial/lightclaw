@@ -37,7 +37,7 @@ python -m pip install -e .
 lightclaw demo
 ```
 
-It creates a tiny Git-backed Python service, runs a real unit test, and finishes with `changes.patch`, `artifact.json`, `receipt.json`, and `receipt.md`. Nothing is pushed. Try every product story:
+It replays a recorded phone request and approval, creates a tiny Git-backed Python service, runs a real unit test, and finishes with `changes.patch`, `artifact.json`, `receipt.json`, and `receipt.md`. Nothing is pushed. Try every product story:
 
 ```bash
 lightclaw demo --scenario memory

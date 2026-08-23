@@ -56,6 +56,8 @@ jobs:
           lightclaw demo --scenario multi-agent --output "$demo_root/multi-agent" --json
           test -s "$demo_root/memory/receipt.json"
           test -s "$demo_root/repo-task/artifact/test-output.txt"
+          test -s "$demo_root/repo-task/phone-to-patch.json"
+          test -s "$demo_root/repo-task/review/changes.patch"
           test -s "$demo_root/multi-agent/artifact/final-audit.json"
       - name: Run reproducible fixture benchmark
         run: |

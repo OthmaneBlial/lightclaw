@@ -47,6 +47,8 @@ jobs:
           lightclaw demo --scenario memory --output "$demo_root/memory" --json
           lightclaw demo --scenario repo-task --output "$demo_root/repo-task" --json
           lightclaw demo --scenario multi-agent --output "$demo_root/multi-agent" --json
+          test -s "$demo_root/repo-task/phone-to-patch.json"
+          test -s "$demo_root/repo-task/review/changes.patch"
       - name: Build and inspect distributions
         run: |
           python -m build

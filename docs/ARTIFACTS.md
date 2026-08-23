@@ -66,6 +66,6 @@ Only that final command pushes the isolated branch and opens a pull request. The
 
 ## Deterministic proof
 
-`lightclaw demo --scenario repo-task` creates a baseline repository, applies a bounded health-check change, runs a real unit test, and returns a valid private receipt plus `review/changes.patch` and `review/artifact.json`. It needs no Telegram account, model, token, network, or hidden manual step.
+`lightclaw demo --scenario repo-task` replays a recorded phone/Telegram request and approval, creates a baseline repository, applies a bounded health-check change, runs a real unit test, and returns `phone-to-patch.json`, a valid private receipt, `review/changes.patch`, and `review/artifact.json`. It needs no Telegram account, model, token, network, or hidden manual step.
 
 The demo proves the local request-to-verified-patch loop. It does not prove that an external coding model will produce a correct change or that GitHub authentication is configured.

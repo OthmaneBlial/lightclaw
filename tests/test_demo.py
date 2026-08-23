@@ -42,6 +42,7 @@ def test_repo_demo_finishes_with_a_reviewable_git_patch(tmp_path):
     receipt = json.loads((output / "receipt.json").read_text(encoding="utf-8"))
     patch = output / "review" / "changes.patch"
     manifest = json.loads((output / "review" / "artifact.json").read_text(encoding="utf-8"))
+    story = json.loads((output / "phone-to-patch.json").read_text(encoding="utf-8"))
 
     assert result["ok"] is True
     assert patch.is_file()
@@ -51,3 +52,13 @@ def test_repo_demo_finishes_with_a_reviewable_git_patch(tmp_path):
     assert "review/changes.patch" in receipt["artifacts"]
     assert receipt["checkpoint"]["type"] == "git-checkpoint"
     assert receipt["file_changes"][0]["change"] == "modified"
+    assert story["adapter"] == "recorded-telegram-fixture"
+    assert story["hidden_manual_steps"] == 0
+    assert [event["event"] for event in story["events"]] == [
+        "request",
+        "approval-preview",
+        "approve",
+        "verified-result",
+    ]
+    assert story["events"][-1]["published"] is False
+    assert all(check["passed"] for check in receipt["checks"])

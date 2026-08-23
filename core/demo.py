@@ -115,6 +115,45 @@ def _run_repo_scenario(artifact: Path, run_id: str) -> dict[str, object]:
         artifact.parent / "review",
         run_id=run_id,
     )
+    phone_story = _write(
+        artifact.parent / "phone-to-patch.json",
+        json.dumps(
+            {
+                "adapter": "recorded-telegram-fixture",
+                "hidden_manual_steps": 0,
+                "events": [
+                    {
+                        "actor": "phone-owner",
+                        "event": "request",
+                        "text": "Add a health check, test it, and return only verified work.",
+                    },
+                    {
+                        "actor": "lightclaw",
+                        "event": "approval-preview",
+                        "risk": "low",
+                        "scope": "deterministic local fixture directory only",
+                        "plan": ["builder", "verifier"],
+                    },
+                    {
+                        "actor": "phone-owner",
+                        "event": "approve",
+                        "callback": "lc:plan:approve",
+                    },
+                    {
+                        "actor": "lightclaw",
+                        "event": "verified-result",
+                        "test_exit_code": completed.returncode,
+                        "patch": "review/changes.patch",
+                        "patch_sha256": bundle["patch_sha256"],
+                        "published": False,
+                    },
+                ],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+    )
     return {
         "plan": [
             {"label": "builder", "worker": "fixture-builder", "task": "Add a bounded health function", "depends_on": []},
@@ -132,7 +171,12 @@ def _run_repo_scenario(artifact: Path, run_id: str) -> dict[str, object]:
                 "name": "unit tests",
                 "passed": completed.returncode == 0,
                 "evidence": "artifact/test-output.txt records the real unittest result",
-            }
+            },
+            {
+                "name": "phone request to verified patch",
+                "passed": completed.returncode == 0 and Path(str(bundle["patch"])).is_file(),
+                "evidence": "phone-to-patch.json records request, preview, approval, test, and patch with zero hidden steps",
+            },
         ],
         "files": [service, test_file, evidence],
         "file_change_types": {
@@ -144,6 +188,7 @@ def _run_repo_scenario(artifact: Path, run_id: str) -> dict[str, object]:
             evidence.relative_to(artifact.parent).as_posix(),
             Path(str(bundle["patch"])).relative_to(artifact.parent).as_posix(),
             Path(str(bundle["manifest"])).relative_to(artifact.parent).as_posix(),
+            phone_story.relative_to(artifact.parent).as_posix(),
         ],
         "handoffs": [],
         "checkpoint": checkpoint,
