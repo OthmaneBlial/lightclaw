@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ...jobs import JobStateError
 from ...logging_setup import log
 from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
@@ -892,6 +893,7 @@ class DelegationExecutionMixin:
         capability_profile: str | None = None,
         emit_receipt: bool = True,
         evidence_sink: dict[str, object] | None = None,
+        manage_job: bool = True,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -927,6 +929,70 @@ class DelegationExecutionMixin:
         workspace_label = self._workspace_rel_label(target_workspace)
         started_at = self._utc_now()
         checkpoint = await asyncio.to_thread(capture_git_checkpoint, target_workspace)
+        run_id = f"run-{int(time.time())}-{secrets.token_hex(4)}"
+        durable_store = getattr(self, "jobs", None) if manage_job else None
+        heartbeat_task: asyncio.Task[None] | None = None
+        if durable_store is not None:
+            durable_plan = [
+                {
+                    "label": "delegation",
+                    "worker": agent,
+                    "depends_on": [],
+                    "owned_paths": [],
+                    "idempotent": False,
+                    "resumable": False,
+                    "max_attempts": 1,
+                }
+            ]
+            try:
+                durable = await asyncio.to_thread(
+                    durable_store.create_job,
+                    workspace=target_workspace,
+                    session_id=session_id,
+                    goal=task,
+                    approved_scope=f"LightClaw-owned task workspace: {workspace_label}",
+                    risk_level="high" if profile == "trusted-command" else "medium",
+                    capability_profile=profile,
+                    plan=durable_plan,
+                    status="queued",
+                    resumable=False,
+                    max_retries=0,
+                    run_id=run_id,
+                )
+                claimed = await asyncio.to_thread(
+                    durable_store.claim_next,
+                    workspace=target_workspace,
+                    worker_pid=os.getpid(),
+                )
+                if not claimed or claimed["run_id"] != durable["run_id"]:
+                    return f"⏳ Delegation queued as `{run_id}`; another writer owns this workspace."
+                await asyncio.to_thread(
+                    durable_store.update_lane,
+                    run_id,
+                    "delegation",
+                    "running",
+                    increment_attempt=True,
+                )
+                delegated_task = asyncio.current_task()
+
+                async def durable_heartbeat() -> None:
+                    while True:
+                        await asyncio.sleep(30)
+                        try:
+                            current_job = await asyncio.to_thread(
+                                durable_store.heartbeat,
+                                run_id,
+                                worker_pid=os.getpid(),
+                            )
+                            if current_job["status"] == "cancel_requested" and delegated_task:
+                                delegated_task.cancel()
+                                return
+                        except JobStateError:
+                            return
+
+                heartbeat_task = asyncio.create_task(durable_heartbeat())
+            except JobStateError as exc:
+                return f"⚠️ Durable job control refused the run: {exc}"
 
         if progress_cb:
             try:
@@ -942,14 +1008,55 @@ class DelegationExecutionMixin:
                 pass
 
         before = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
-        result = await self._invoke_local_agent_streaming(
-            agent=agent,
-            task=task,
-            workspace=target_workspace,
-            progress_cb=progress_cb,
-            capability_profile=profile,
-        )
+        try:
+            result = await self._invoke_local_agent_streaming(
+                agent=agent,
+                task=task,
+                workspace=target_workspace,
+                progress_cb=progress_cb,
+                capability_profile=profile,
+            )
+        except asyncio.CancelledError:
+            if durable_store is not None:
+                try:
+                    await asyncio.to_thread(
+                        durable_store.update_lane,
+                        run_id,
+                        "delegation",
+                        "canceled",
+                    )
+                    await asyncio.to_thread(durable_store.mark_canceled, run_id)
+                except JobStateError:
+                    pass
+            raise
+        finally:
+            if heartbeat_task:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
         after = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
+
+        if durable_store is not None:
+            lane_status = "succeeded" if result.get("ok") else "failed"
+            await asyncio.to_thread(
+                durable_store.update_lane,
+                run_id,
+                "delegation",
+                lane_status,
+                error="" if result.get("ok") else str(result.get("stderr") or "delegation failed")[:500],
+            )
+            current = await asyncio.to_thread(durable_store.get_job, run_id)
+            if current["status"] == "cancel_requested":
+                await asyncio.to_thread(durable_store.mark_canceled, run_id)
+            else:
+                await asyncio.to_thread(
+                    durable_store.finish,
+                    run_id,
+                    succeeded=bool(result.get("ok")),
+                    error="" if result.get("ok") else str(result.get("stderr") or "delegation failed")[:500],
+                )
 
         summary = self._compact_external_agent_summary(str(result.get("summary") or ""))
         delta_summary = self._summarize_workspace_delta(before, after)
@@ -962,7 +1069,6 @@ class DelegationExecutionMixin:
             before,
             after,
         )
-        run_id = f"run-{int(time.time())}-{secrets.token_hex(4)}"
         command_name = f"{agent} delegated invocation; prompt passed through stdin"
         reported_commands = result.get("commands")
         commands = (

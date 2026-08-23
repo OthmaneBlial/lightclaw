@@ -233,11 +233,11 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P2.3 Add durable job control
 
-- [ ] Persist run state in SQLite so restart does not erase what happened.
-- [ ] Support one active writer per workspace, a visible queue, priorities, cancel, resume, and bounded retry.
-- [ ] Make every lane idempotent or explicitly non-resumable.
-- [ ] Detect overlapping owned paths before parallel execution.
-- [ ] Surface stalled/abandoned processes through `lightclaw doctor` and Telegram status.
+- [x] Persist run state in SQLite so restart does not erase what happened.
+- [x] Support one active writer per workspace, a visible queue, priorities, cancel, resume, and bounded retry.
+- [x] Make every lane idempotent or explicitly non-resumable.
+- [x] Detect overlapping owned paths before parallel execution.
+- [x] Surface stalled/abandoned processes through `lightclaw doctor` and Telegram status.
 
 ### P2.4 Deliver a real code artifact
 

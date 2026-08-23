@@ -1285,6 +1285,77 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if report["overall"] == "error" else 0
 
 
+def cmd_jobs(args: argparse.Namespace) -> int:
+    """Inspect or control durable workspace jobs."""
+    home = _resolve_home(args.home)
+    env_path = app_config_path(home)
+    os.environ["LIGHTCLAW_HOME"] = home.as_posix()
+    os.environ["LIGHTCLAW_CONFIG"] = env_path.as_posix()
+    if env_path.is_file():
+        load_dotenv(env_path, override=False)
+
+    from config import load_config
+    from core.jobs import JobStateError, JobStore
+    from core.personality import resolve_runtime_path
+
+    config = load_config()
+    config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
+    store = JobStore(Path(config.memory_db_path).resolve().with_name("jobs.db"))
+    try:
+        action = args.jobs_action
+        if action == "list":
+            jobs = store.list_jobs(status=args.status, limit=args.limit)
+            payload: object = {"diagnostics": store.diagnostics(), "jobs": jobs}
+        else:
+            if not args.run_id:
+                print(f"jobs {action} requires a run id")
+                return 2
+            if action == "status":
+                payload = store.get_job(args.run_id)
+            elif action == "cancel":
+                payload = store.request_cancel(args.run_id)
+            elif action == "resume":
+                payload = store.resume(args.run_id)
+            elif action == "retry":
+                if not args.lane:
+                    print("jobs retry requires --lane <label>")
+                    return 2
+                payload = store.retry_lane(args.run_id, args.lane)
+            else:
+                print(f"unknown jobs action: {action}")
+                return 2
+    except JobStateError as exc:
+        print(f"Job control refused: {exc}")
+        return 2
+    finally:
+        store.close()
+
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 0
+    if isinstance(payload, dict) and "jobs" in payload:
+        jobs = payload.get("jobs") if isinstance(payload.get("jobs"), list) else []
+        print(f"LightClaw durable jobs ({len(jobs)})")
+        for job in jobs:
+            if isinstance(job, dict):
+                print(
+                    f"- {job.get('run_id')} [{job.get('status')}] "
+                    f"priority={job.get('priority')} workspace={job.get('workspace')}"
+                )
+        return 0
+    if isinstance(payload, dict):
+        print(f"Run: {payload.get('run_id')}")
+        print(f"Status: {payload.get('status')}")
+        print(f"Workspace: {payload.get('workspace')}")
+        for lane in payload.get("lanes", []):
+            if isinstance(lane, dict):
+                print(
+                    f"- lane {lane.get('label')}: {lane.get('status')} "
+                    f"attempt={lane.get('attempt')}/{lane.get('max_attempts')}"
+                )
+    return 0
+
+
 def cmd_demo(args: argparse.Namespace) -> int:
     """Run a deterministic, token-free product story."""
     from core.demo import run_demo
@@ -1411,6 +1482,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit a stable JSON report for support and CI",
     )
     doctor.set_defaults(func=cmd_doctor)
+
+    jobs = sub.add_parser(
+        "jobs",
+        help="Inspect, cancel, resume, or retry durable workspace jobs",
+    )
+    jobs.add_argument(
+        "jobs_action",
+        nargs="?",
+        choices=("list", "status", "cancel", "resume", "retry"),
+        default="list",
+    )
+    jobs.add_argument("run_id", nargs="?", help="Run id for status/control actions")
+    jobs.add_argument("--lane", help="Failed idempotent lane label for retry")
+    jobs.add_argument("--status", help="Filter list output by exact status")
+    jobs.add_argument("--limit", type=int, default=50, help="Maximum jobs to list")
+    jobs.add_argument("--home", help="Runtime home directory (default: user home)")
+    jobs.add_argument("--json", action="store_true", help="Emit stable JSON")
+    jobs.set_defaults(func=cmd_jobs)
 
     demo = sub.add_parser(
         "demo",

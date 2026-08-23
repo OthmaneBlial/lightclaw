@@ -16,6 +16,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from ...jobs import JobConflictError, JobStateError
 from ...markdown import _escape_html
 from ...receipts import write_receipt
 
@@ -1265,6 +1266,85 @@ class CommandsAgentMixin:
             0,
             min(2, int(getattr(self.config, "local_agent_multi_repair_attempts", 1))),
         )
+        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
+        durable_plan: list[dict[str, object]] = []
+        for label, agent in workers:
+            contract = worker_contract_by_label.get(label, {})
+            owned_paths = contract.get("owned_paths")
+            durable_plan.append(
+                {
+                    "label": label,
+                    "worker": agent,
+                    "depends_on": dependency_map.get(label, []),
+                    "owned_paths": owned_paths if isinstance(owned_paths, list) else [],
+                    "idempotent": False,
+                    "resumable": False,
+                    "max_attempts": repair_attempts + 1,
+                }
+            )
+        try:
+            await asyncio.to_thread(
+                self.jobs.create_job,
+                workspace=multi_workspace,
+                session_id=session_id,
+                goal=goal,
+                approved_scope=f"LightClaw-owned task workspace: {multi_workspace_label}",
+                risk_level="medium",
+                capability_profile=self.config.local_agent_capability_profile,
+                plan=durable_plan,
+                priority=0,
+                max_retries=repair_attempts,
+                resumable=False,
+                status="queued",
+                run_id=run_id,
+            )
+            claimed_job = await asyncio.to_thread(
+                self.jobs.claim_next,
+                workspace=multi_workspace,
+                worker_pid=None,
+            )
+        except (JobConflictError, JobStateError) as exc:
+            await self._reply_logged(
+                update,
+                f"🛑 Durable job control refused this plan: {_escape_html(str(exc))}\n"
+                f"Owned workspace preserved for review: <code>{_escape_html(multi_workspace_label)}</code>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        if not claimed_job or claimed_job["run_id"] != run_id:
+            await self._reply_logged(
+                update,
+                f"⏳ Run <code>{_escape_html(run_id)}</code> is queued behind the active workspace writer.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        multi_execution_task = asyncio.current_task()
+
+        async def _multi_job_heartbeat() -> None:
+            while True:
+                await asyncio.sleep(30)
+                try:
+                    current_job = await asyncio.to_thread(self.jobs.heartbeat, run_id)
+                    if current_job["status"] == "cancel_requested":
+                        for task in list(running):
+                            task.cancel()
+                        for lane in current_job["lanes"]:
+                            if lane["status"] in {"queued", "running"}:
+                                await asyncio.to_thread(
+                                    self.jobs.update_lane,
+                                    run_id,
+                                    str(lane["label"]),
+                                    "canceled",
+                                )
+                        await asyncio.to_thread(self.jobs.mark_canceled, run_id)
+                        if multi_execution_task:
+                            multi_execution_task.cancel()
+                        return
+                except JobStateError:
+                    return
+
+        durable_heartbeat = asyncio.create_task(_multi_job_heartbeat())
 
         async def _run_worker(index: int, label: str, agent: str, progress_msg):
             tag = self._multi_agent_tag(label, agent, index)
@@ -1286,6 +1366,13 @@ class CommandsAgentMixin:
             last_result = ""
             last_failures: list[str] = []
             attempt_evidence: list[dict[str, object]] = []
+            await asyncio.to_thread(
+                self.jobs.update_lane,
+                run_id,
+                label,
+                "running",
+                increment_attempt=True,
+            )
 
             for attempt in range(repair_attempts + 1):
                 task_prompt = worker_task
@@ -1311,6 +1398,7 @@ class CommandsAgentMixin:
                         workspace_dir=multi_workspace,
                         emit_receipt=False,
                         evidence_sink=worker_evidence,
+                        manage_job=False,
                     )
                     attempt_evidence.append(worker_evidence)
                 except Exception as e:
@@ -1348,6 +1436,12 @@ class CommandsAgentMixin:
                     handoff_data,
                 )
                 if runtime_ok and acceptance_ok:
+                    await asyncio.to_thread(
+                        self.jobs.update_lane,
+                        run_id,
+                        label,
+                        "succeeded",
+                    )
                     try:
                         await progress_msg.edit_text(f"{tag}\n✅ Worker completed.")
                     except Exception:
@@ -1357,6 +1451,13 @@ class CommandsAgentMixin:
                 last_result = enriched_result
                 last_failures = acceptance_failures or ["worker execution failed"]
                 if attempt >= repair_attempts:
+                    await asyncio.to_thread(
+                        self.jobs.update_lane,
+                        run_id,
+                        label,
+                        "failed",
+                        error="; ".join(last_failures)[:500],
+                    )
                     try:
                         await progress_msg.edit_text(f"{tag}\n⚠️ Worker finished with issues.")
                     except Exception:
@@ -1406,6 +1507,13 @@ class CommandsAgentMixin:
             reason = ", ".join(unknown_deps)
             skip_text = f"⚠️ Skipped because AGENTS.md references unknown dependency: {reason}"
             results_by_label[label] = skip_text
+            await asyncio.to_thread(
+                self.jobs.update_lane,
+                run_id,
+                label,
+                "skipped",
+                error=reason[:500],
+            )
             await _set_worker_status(label, skip_text)
 
         while remaining or running:
@@ -1425,6 +1533,13 @@ class CommandsAgentMixin:
                 reason = ", ".join(d for d in dep_list if d in failed) or "failed dependency"
                 skip_text = f"⚠️ Skipped because dependency failed: {reason}"
                 results_by_label[label] = skip_text
+                await asyncio.to_thread(
+                    self.jobs.update_lane,
+                    run_id,
+                    label,
+                    "skipped",
+                    error=reason[:500],
+                )
                 await _set_worker_status(label, skip_text)
 
             ready: list[str] = []
@@ -1460,6 +1575,13 @@ class CommandsAgentMixin:
                     failed.add(label)
                     skip_text = "⚠️ Skipped due to unresolved dependency cycle in AGENTS.md."
                     results_by_label[label] = skip_text
+                    await asyncio.to_thread(
+                        self.jobs.update_lane,
+                        run_id,
+                        label,
+                        "skipped",
+                        error="unresolved dependency cycle",
+                    )
                     await _set_worker_status(label, skip_text)
                 break
 
@@ -1629,7 +1751,6 @@ class CommandsAgentMixin:
                     "owned_paths": contract.get("owned_paths", []),
                 }
             )
-        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
         receipt = {
             "run_id": run_id,
             "original_goal": goal,
@@ -1668,6 +1789,18 @@ class CommandsAgentMixin:
         final_lines.append("")
         final_lines.append(f"🧾 Receipt: `{receipt_markdown.as_posix()}`")
         final_lines.append(f"JSON: `{receipt_json.as_posix()}`")
+
+        await asyncio.to_thread(
+            self.jobs.finish,
+            run_id,
+            succeeded=not failures,
+            error="; ".join(failures[:6])[:500],
+        )
+        durable_heartbeat.cancel()
+        try:
+            await durable_heartbeat
+        except asyncio.CancelledError:
+            pass
 
         request_entry = (
             "[delegation-request]\n"

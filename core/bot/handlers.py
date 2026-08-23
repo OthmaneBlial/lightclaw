@@ -37,6 +37,15 @@ class BotHandlersMixin:
         file_mode = self._get_file_mode(session_id)
         pending_multi = self._get_pending_multi_plan(session_id)
         multi_defaults = ", ".join(self.config.local_agent_multi_default_agents)
+        job_diagnostics = self.jobs.diagnostics()
+        job_counts = job_diagnostics.get("counts", {})
+        queue_count = int(job_counts.get("queued", 0)) if isinstance(job_counts, dict) else 0
+        active_count = (
+            int(job_counts.get("running", 0)) + int(job_counts.get("cancel_requested", 0))
+            if isinstance(job_counts, dict)
+            else 0
+        )
+        stalled_count = int(job_counts.get("stalled", 0)) if isinstance(job_counts, dict) else 0
 
         voice_status = "✅ Groq Whisper" if self.config.groq_api_key else "❌ No GROQ_API_KEY"
 
@@ -60,6 +69,7 @@ class BotHandlersMixin:
             f"<b>Multi defaults:</b> {_escape_html(multi_defaults)}\n"
             f"<b>Multi auto-continue:</b> {'yes' if self.config.local_agent_multi_auto_continue else 'no'}\n"
             f"<b>Pending multi plan:</b> {'yes' if pending_multi else 'no'}\n"
+            f"<b>Durable jobs:</b> {active_count} active / {queue_count} queued / {stalled_count} stalled\n"
             f"<b>Voice:</b> {voice_status}",
             parse_mode=ParseMode.HTML,
         )

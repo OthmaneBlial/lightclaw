@@ -17,6 +17,7 @@ from providers import LLMClient
 from skills import SkillManager
 
 from ..constants import STRICT_LOCAL_AGENT_DENY_PATTERNS
+from ..jobs import JobStore
 from ..logging_setup import log
 from ..personality import load_personality
 from ..security import access_policy_label
@@ -26,6 +27,8 @@ class BotBaseMixin:
     def __init__(self, config: Config):
         self.config = config
         self.memory = MemoryStore(config.memory_db_path)
+        self.jobs = JobStore(Path(config.memory_db_path).expanduser().resolve().with_name("jobs.db"))
+        self.jobs.recover_stalled()
         self.llm = LLMClient(config)
         self.skills = SkillManager(
             workspace_path=config.workspace_path,
@@ -78,6 +81,11 @@ class BotBaseMixin:
         self._privileged_request_times: dict[tuple[str, str], list[float]] = {}
         # Compiled strict-mode deny patterns for delegated local-agent tasks.
         self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
+
+    def close(self) -> None:
+        """Close durable stores during a clean application shutdown."""
+        self.jobs.close()
+        self.memory.db.close()
 
     def is_allowed(self, user_id: int) -> bool:
         """Fail closed unless an allowlist or explicit public override exists."""

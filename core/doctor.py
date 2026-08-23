@@ -10,6 +10,7 @@ from pathlib import Path
 
 from config import Config
 
+from .jobs import inspect_job_database
 from .security import access_policy_label, delegated_process_env
 from .workspaces import WorkspaceSafetyError, validate_workspace_root
 
@@ -76,6 +77,19 @@ def build_doctor_report(config: Config) -> dict[str, object]:
         ", ".join(available_agents) if available_agents else "none found in PATH",
     )
 
+    jobs = inspect_job_database(Path(config.memory_db_path).expanduser().resolve().with_name("jobs.db"))
+    stalled = jobs.get("stalled_run_ids") if isinstance(jobs.get("stalled_run_ids"), list) else []
+    job_error = str(jobs.get("error") or "")
+    if job_error:
+        add("durable_jobs", "error", "job database is unreadable")
+    elif stalled:
+        add("durable_jobs", "warning", f"{len(stalled)} stalled or abandoned run(s) require review")
+    else:
+        counts = jobs.get("counts") if isinstance(jobs.get("counts"), dict) else {}
+        queued = int(counts.get("queued", 0))
+        active = int(counts.get("running", 0)) + int(counts.get("cancel_requested", 0))
+        add("durable_jobs", "ok", f"{active} active, {queued} queued, no stalled runs")
+
     statuses = [str(item["status"]) for item in checks]
     overall = "error" if "error" in statuses else ("warning" if "warning" in statuses else "ok")
     return {
@@ -87,6 +101,7 @@ def build_doctor_report(config: Config) -> dict[str, object]:
             "capability_profile": config.local_agent_capability_profile,
             "access_policy": policy,
         },
+        "jobs": jobs,
         "checks": checks,
     }
 

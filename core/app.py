@@ -121,8 +121,17 @@ def main():
     async def _post_init(application: Application):
         await bot._ensure_cron_task(application.bot)
 
+    async def _post_shutdown(application: Application):
+        bot.close()
+
     # Build Telegram application
-    app = Application.builder().token(config.telegram_bot_token).post_init(_post_init).build()
+    app = (
+        Application.builder()
+        .token(config.telegram_bot_token)
+        .post_init(_post_init)
+        .post_shutdown(_post_shutdown)
+        .build()
+    )
 
     # Register handlers
     app.add_handler(CommandHandler("start", bot.cmd_start))
