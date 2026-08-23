@@ -70,6 +70,7 @@ def main() -> int:
     parser.add_argument("path", nargs="?", type=Path)
     parser.add_argument("--version")
     parser.add_argument("--event", type=Path, help="GitHub release event JSON")
+    parser.add_argument("--published", action="store_true", help="Reject draft markers")
     args = parser.parse_args()
     published_body: str | None = None
     if args.event:
@@ -99,6 +100,8 @@ def main() -> int:
     except OSError as exc:
         print(f"Release notes validation failed: {exc}")
         return 1
+    if args.published and published_body is None:
+        published_body = text
     errors = validate_release_notes(text, version=version, published_body=published_body)
     if errors:
         print("Release notes validation failed:")

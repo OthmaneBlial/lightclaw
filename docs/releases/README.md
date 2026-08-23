@@ -12,15 +12,14 @@ python scripts/check_release_notes.py docs/releases/v0.1.0.md --version 0.1.0
 ```
 
 Immediately before release, remove the explicit draft warning and every placeholder, set
-the stable package version in `pyproject.toml`, then create the release with:
+the stable package version in `pyproject.toml`, commit the final notes, then create and push
+the signed tag:
 
 ```bash
-gh release create v0.1.0 \
-  --repo OthmaneBlial/lightclaw \
-  --title "LightClaw v0.1.0" \
-  --notes-file docs/releases/v0.1.0.md \
-  --verify-tag
+git tag -s v0.1.0 -m "LightClaw v0.1.0"
+git push origin v0.1.0
 ```
 
-Do not publish while the private-alpha aggregate or any security/release checklist gate is
-open.
+The tag workflow publishes PyPI and GHCR first, then creates the GitHub Release with this
+exact notes file and its verified assets. Manual workflow dispatch performs rehearsal only.
+Do not tag while the private-alpha aggregate or any security/release checklist gate is open.

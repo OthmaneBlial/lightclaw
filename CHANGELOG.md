@@ -11,6 +11,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
   counts, and manually inflated readiness.
 - Versioned `v0.1.0` draft notes covering the full release contract, with CI enforcement
   that the eventual GitHub Release body is identical and contains no draft placeholders.
+- A tag-driven atomic release flow: manual runs are rehearsal-only, PyPI and GHCR must
+  succeed before GitHub creates the release from the committed notes and verified assets.
 - Structured contribution forms, predictable support/security routes, an evidence-led PR
   standard, and one canonical local quality command.
 - A privacy-gated public showcase with three token-free recipes, sanitized Run Cards,

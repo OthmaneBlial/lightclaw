@@ -1,6 +1,12 @@
 # Maintainer Release Runbook
 
-Releases are built from GitHub-hosted clean environments. The release workflow verifies the tag against `pyproject.toml`, runs the full suite, builds wheel/sdist, checks their metadata, creates an artifact attestation, attaches distributions to the GitHub release, publishes through PyPI Trusted Publishing, and pushes an optional GHCR image.
+Releases are built from GitHub-hosted clean environments. A signed stable tag starts the
+release workflow, which verifies the tag against `pyproject.toml`, runs the full suite,
+requires GitHub to verify its annotated signature, builds wheel/sdist, checks metadata,
+creates an artifact attestation, publishes through
+PyPI Trusted Publishing, pushes the GHCR image, and only then creates the GitHub Release
+with the exact committed notes and verified assets. Manual dispatch is rehearsal-only and
+cannot publish packages or containers.
 
 ## One-time PyPI setup
 
@@ -17,8 +23,8 @@ Releases are built from GitHub-hosted clean environments. The release workflow v
    match that file exactly and refuses draft markers.
 3. Build locally and inspect `twine check dist/*`.
 4. Push the release commit and wait for all required checks.
-5. Create the signed Git tag and GitHub release with the matching `vX.Y.Z` name and the
-   committed notes file (`gh release create ... --notes-file docs/releases/vX.Y.Z.md`).
+5. Create and push the signed Git tag with the matching `vX.Y.Z` name. Do not create the
+   GitHub Release manually; the workflow creates it only after PyPI and GHCR succeed.
 6. Approve the protected `pypi` environment only after inspecting the workflow's built artifacts.
 7. Verify PyPI metadata/attestations, GitHub assets/attestation, GHCR digest, clean pipx/uv install, deterministic demo, and rollback instructions.
 
