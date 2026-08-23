@@ -15,6 +15,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
   explicit not-started external launch status.
 - Useful 100% GitHub community-profile files, a real docs URL, precise discovery topics,
   recurring release/Discussion update channels, and an evidence-only badge policy.
+- A final roadmap evidence audit that separates completed repository implementation from
+  11 still-unproven release and external-adoption gates.
 - Token-free `lightclaw demo` stories for memory, repository work, and multi-agent orchestration.
 - Private JSON/Markdown run receipts with checks, file hashes, artifacts, commands, and recovery context.
 - Reproducible raw benchmark JSON/CSV output.
@@ -27,6 +29,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 - Python 3.10 development checks use the `tomli` compatibility parser for architecture and
   runtime-footprint contracts.
+- The canonical local quality command retries one transient cold-start measurement without
+  changing the published runtime budget.
 - Migrated Gemini from deprecated `google-generativeai` to `google-genai`; updated supported OpenAI and Anthropic SDK major ranges behind the provider protocol.
 - Release evidence now includes cold-start samples, direct dependency count, and wheel size as a separate machine-readable artifact.
 

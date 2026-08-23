@@ -2,9 +2,10 @@
 
 > A path from a promising repository to a trusted, memorable, and highly shareable open-source product.
 
-**Roadmap date:** 2026-08-23
+**Roadmap date:** 2026-08-24
 
-**Status:** implementation in progress; checkboxes reflect verified repository or live-platform evidence
+**Status:** repository-controlled implementation complete; 11 release/adoption evidence
+gates remain open and are itemized in the [public audit](docs/ROADMAP_AUDIT.md)
 
 **Rule:** stars are a lagging signal. The roadmap optimizes first for successful installs, visible proof, trust, repeat use, and external contributors.
 

@@ -147,6 +147,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Reproducible benchmarks](bench/README.md)
 - [Multi-agent guide](MULTI_AGENT.md)
 - [Roadmap](ROADMAP.md)
+- [Roadmap evidence audit and open external gates](docs/ROADMAP_AUDIT.md)
 - [Security policy](SECURITY.md)
 
 ## Honest alpha limits

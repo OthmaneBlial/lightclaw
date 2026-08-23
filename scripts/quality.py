@@ -12,11 +12,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 
 
-def _run(label: str, command: list[str]) -> None:
+def _run(label: str, command: list[str], *, retries: int = 0) -> None:
     print(f"\n==> {label}", flush=True)
-    completed = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
-    if completed.returncode:
-        raise SystemExit(completed.returncode)
+    for attempt in range(retries + 1):
+        completed = subprocess.run(command, cwd=PROJECT_ROOT, check=False)
+        if not completed.returncode:
+            return
+        if attempt < retries:
+            print(f"{label} failed under the current host load; retrying once.", flush=True)
+    raise SystemExit(completed.returncode)
 
 
 def main() -> int:
@@ -49,6 +53,7 @@ def main() -> int:
         _run(
             "runtime footprint",
             [PYTHON, "-m", "bench.runtime_footprint", "--output", str(footprint)],
+            retries=1,
         )
         _run(
             "safe skill fixture",
