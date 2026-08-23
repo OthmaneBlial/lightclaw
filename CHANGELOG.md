@@ -28,7 +28,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 ### Changed
 
 - GitHub workflows use the current Node 24 action generations for checkout, Python setup,
-  dependency review, and CodeQL while retaining immutable commit pins.
+  artifact handling and attestation, dependency review, and CodeQL while retaining
+  immutable commit pins.
 - Pin HTTPX 0.28.1 so the dependency graph records the installed safe version instead of
   treating an unresolved compatible range as potentially affected by a pre-0.23 advisory.
 - Python 3.10 development checks use the `tomli` compatibility parser for architecture and
