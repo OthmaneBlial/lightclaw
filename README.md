@@ -141,6 +141,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Privacy boundaries and explicit public evidence](docs/PRIVACY.md)
 - [Sanitized, reproducible showcase](showcase/)
 - [Evidence-led launch pack and honest comparisons](launch/)
+- [Maintenance cadence, update channels, and badge policy](docs/MAINTENANCE.md)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)
@@ -154,6 +155,17 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - Fixture demos prove LightClaw contracts, not external model quality.
 - External coding-agent CLIs remain separate security boundaries with their own versions and settings.
 - The package is installable from Git today; the first stable PyPI release follows the release gate in the roadmap.
+
+## Community and updates
+
+- Follow the recurring [development updates and release evidence](https://github.com/OthmaneBlial/lightclaw/discussions/20).
+- Ask support questions in [Discussions Q&A](https://github.com/OthmaneBlial/lightclaw/discussions/categories/q-a).
+- Submit reproducible defects, bounded proposals, provider mismatches, or sanitized
+  workflows through the structured issue forms.
+- Report vulnerabilities only through [private vulnerability reporting](https://github.com/OthmaneBlial/lightclaw/security/advisories/new).
+
+Release notes and the update thread publish fixes, workflows, benchmarks, limitations, and
+explicit pauses. See the [maintenance and badge policy](docs/MAINTENANCE.md).
 
 ## Development
 

@@ -348,11 +348,11 @@ and public-launch work explicitly incomplete until durable evidence exists.
 
 ### P4.4 Improve repository discovery
 
-- [ ] Add a real homepage/docs URL to GitHub metadata.
-- [ ] Keep topics precise: Telegram, Python, self-hosted, coding-agent, local-first, Codex, Claude.
-- [ ] Use release notes and Discussions as recurring update channels.
-- [ ] Reach a 100% community profile with useful files, not placeholders.
-- [ ] Add badges only after the linked CI, release, package, and security signals are real.
+- [x] Add a real homepage/docs URL to GitHub metadata.
+- [x] Keep topics precise: Telegram, Python, self-hosted, coding-agent, local-first, Codex, Claude.
+- [x] Use release notes and Discussions as recurring update channels.
+- [x] Reach a 100% community profile with useful files, not placeholders.
+- [x] Add badges only after the linked CI, release, package, and security signals are real.
 
 ## First 20 implementation issues
 

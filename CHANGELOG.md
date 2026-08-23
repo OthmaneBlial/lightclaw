@@ -13,6 +13,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - A validated evidence-led launch pack with one headline, a 24-second clip, five-minute
   quickstart, three recipes, security diagram, raw benchmarks, honest comparisons, and
   explicit not-started external launch status.
+- Useful 100% GitHub community-profile files, a real docs URL, precise discovery topics,
+  recurring release/Discussion update channels, and an evidence-only badge policy.
 - Token-free `lightclaw demo` stories for memory, repository work, and multi-agent orchestration.
 - Private JSON/Markdown run receipts with checks, file hashes, artifacts, commands, and recovery context.
 - Reproducible raw benchmark JSON/CSV output.

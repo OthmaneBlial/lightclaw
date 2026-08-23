@@ -49,7 +49,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/OthmaneBlial/lightclaw"
-Documentation = "https://github.com/OthmaneBlial/lightclaw#readme"
+Documentation = "https://github.com/OthmaneBlial/lightclaw/tree/main/docs"
 Issues = "https://github.com/OthmaneBlial/lightclaw/issues"
 Repository = "https://github.com/OthmaneBlial/lightclaw.git"
 
