@@ -1,0 +1,47 @@
+{
+  "approved_scope": "deterministic local fixture directory only",
+  "artifacts": [
+    "artifact/recall.json"
+  ],
+  "capability_profile": "fixture-workspace-write",
+  "checks": [
+    {
+      "evidence": "recall.json contains Orchid-47 after reopening SQLite",
+      "name": "fact survives restart",
+      "passed": true
+    }
+  ],
+  "disposition": "accepted",
+  "excluded_private_fields": [
+    "commands",
+    "handoffs",
+    "checkpoint",
+    "undo",
+    "started_at",
+    "finished_at"
+  ],
+  "failures": [],
+  "file_changes": [
+    {
+      "change": "created",
+      "path": "artifact/recall.json"
+    }
+  ],
+  "original_goal": "Remember a synthetic launch code across a restart and recall it.",
+  "plan": [
+    {"depends_on": [], "label": "store", "worker": "fixture-memory"},
+    {"depends_on": ["store"], "label": "restart", "worker": "fixture-memory"},
+    {"depends_on": ["restart"], "label": "recall", "worker": "fixture-verifier"}
+  ],
+  "retries": 0,
+  "risk_level": "low",
+  "run_id": "showcase-persistent-memory",
+  "schema_version": 1,
+  "share_card": true,
+  "usage": {
+    "estimated_cost_usd": 0,
+    "provider": "fixture",
+    "tokens": 0
+  }
+}
+

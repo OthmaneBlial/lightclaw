@@ -25,4 +25,7 @@ lightclaw run export \
   --apply
 ```
 
-The resulting card still uses private file permissions. Read it before voluntarily sharing it; LightClaw never uploads a receipt or card by default.
+The resulting card still uses private file permissions. Read it before voluntarily sharing
+it; LightClaw never uploads a receipt or card by default. Public examples belong in the
+[showcase](../showcase/) only after its provenance, privacy, and reproducibility gate passes.
+See the complete [privacy and public-evidence boundary](PRIVACY.md).

@@ -1,0 +1,23 @@
+{
+  "command": [
+    "lightclaw",
+    "demo",
+    "--scenario",
+    "repo-task",
+    "--output",
+    "{output}",
+    "--json"
+  ],
+  "credentials_required": false,
+  "expected_artifacts": [
+    "artifact/test-output.txt",
+    "phone-to-patch.json",
+    "review/changes.patch",
+    "review/artifact.json",
+    "receipt.json"
+  ],
+  "kind": "recipe",
+  "network_required": false,
+  "schema_version": 1
+}
+

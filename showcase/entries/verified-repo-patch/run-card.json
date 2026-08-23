@@ -1,0 +1,54 @@
+{
+  "approved_scope": "deterministic local fixture directory only",
+  "artifacts": [
+    "artifact/test-output.txt",
+    "phone-to-patch.json",
+    "review/changes.patch",
+    "review/artifact.json"
+  ],
+  "capability_profile": "fixture-workspace-write",
+  "checks": [
+    {
+      "evidence": "artifact/test-output.txt records the real unittest result",
+      "name": "unit tests",
+      "passed": true
+    },
+    {
+      "evidence": "phone-to-patch.json records request, approval, test, and patch with zero hidden steps",
+      "name": "phone request to verified patch",
+      "passed": true
+    }
+  ],
+  "diff_summary": "2 files changed; a health function and focused unit test are reviewable",
+  "disposition": "accepted",
+  "excluded_private_fields": [
+    "commands",
+    "handoffs",
+    "checkpoint",
+    "undo",
+    "started_at",
+    "finished_at"
+  ],
+  "failures": [],
+  "file_changes": [
+    {"change": "modified", "path": "artifact/service.py"},
+    {"change": "created", "path": "artifact/test_service.py"},
+    {"change": "created", "path": "artifact/test-output.txt"}
+  ],
+  "original_goal": "Add a health check to a synthetic Python service and verify it.",
+  "plan": [
+    {"depends_on": [], "label": "builder", "worker": "fixture-builder"},
+    {"depends_on": ["builder"], "label": "verifier", "worker": "fixture-verifier"}
+  ],
+  "retries": 0,
+  "risk_level": "low",
+  "run_id": "showcase-verified-repo-patch",
+  "schema_version": 1,
+  "share_card": true,
+  "usage": {
+    "estimated_cost_usd": 0,
+    "provider": "fixture",
+    "tokens": 0
+  }
+}
+

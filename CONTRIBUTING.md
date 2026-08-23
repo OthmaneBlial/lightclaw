@@ -111,6 +111,8 @@ Use the [architecture module map](docs/ARCHITECTURE.md#runtime-domains) to find 
 of a behavior. Compatibility facades should stay small; put a change in its stable domain.
 Open support questions in [Discussions](SUPPORT.md), vulnerabilities privately through
 [SECURITY.md](SECURITY.md), and code changes through the structured issue and PR forms.
+Showcase contributions must follow the [public evidence contract](showcase/README.md), use
+a sanitized Run Card rather than a raw receipt, and pass the token-free replay validator.
 
 ## Final Note
 

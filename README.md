@@ -51,6 +51,10 @@ The exact prompts, outputs, cost boundaries, cleanup, and limitations live in:
 - [Telegram repository task](examples/telegram-repo-task/README.md)
 - [Telegram multi-agent plan](examples/telegram-multi-agent/README.md)
 
+For public, sanitized evidence that can be forked and replayed, browse the
+[privacy-checked showcase](showcase/). Its three starting recipes are maintainer fixtures,
+not community submissions or claims about live provider quality.
+
 ## LightClaw is / is not
 
 | LightClaw is | LightClaw is not |
@@ -132,6 +136,8 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Build and validate a safe skill in 10 minutes](docs/SAFE_SKILLS.md)
 - [Typed provider contract and generated compatibility matrix](docs/PROVIDERS.md)
 - [Architecture map, enforced budgets, and decision records](docs/ARCHITECTURE.md)
+- [Privacy boundaries and explicit public evidence](docs/PRIVACY.md)
+- [Sanitized, reproducible showcase](showcase/)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)

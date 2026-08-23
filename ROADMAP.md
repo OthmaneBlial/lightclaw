@@ -326,11 +326,11 @@ use a workflow -> export a sanitized Run Card -> submit it -> get featured
         +-------------- fork the recipe/skill <--------------+
 ```
 
-- [ ] Add a curated `showcase/` with prompt, redacted setup, result, receipt, and reproducibility notes.
+- [x] Add a curated `showcase/` with prompt, redacted setup, result, receipt, and reproducibility notes.
 - [ ] Feature one community workflow per release.
-- [ ] Make each example forkable as a small recipe or skill, not a core feature.
-- [ ] Add a validation job for submitted examples and skills.
-- [ ] Never auto-upload receipts, prompts, repository names, or usage analytics.
+- [x] Make each example forkable as a small recipe or skill, not a core feature.
+- [x] Add a validation job for submitted examples and skills.
+- [x] Never auto-upload receipts, prompts, repository names, or usage analytics.
 
 ### P4.3 Run evidence-led launches
 

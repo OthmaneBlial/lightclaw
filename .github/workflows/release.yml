@@ -43,6 +43,7 @@ jobs:
         run: |
           python -m pip install -e '.[dev]'
           python -m pytest -q
+          python scripts/validate_showcase.py --execute
           demo_root="$(mktemp -d)"
           lightclaw demo --scenario memory --output "$demo_root/memory" --json
           lightclaw demo --scenario repo-task --output "$demo_root/repo-task" --json

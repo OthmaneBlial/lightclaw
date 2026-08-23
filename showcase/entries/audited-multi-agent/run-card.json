@@ -1,0 +1,55 @@
+{
+  "approved_scope": "deterministic local fixture directory only",
+  "artifacts": [
+    "artifact/handoff/research.json",
+    "artifact/handoff/initial-failure.json",
+    "artifact/handoff/repair.json",
+    "artifact/final-audit.json"
+  ],
+  "capability_profile": "fixture-workspace-write",
+  "checks": [
+    {
+      "evidence": "final-audit.json records research before builder",
+      "name": "dependency order",
+      "passed": true
+    },
+    {
+      "evidence": "the initial failure and one bounded successful repair remain visible",
+      "name": "failure and repair evidence",
+      "passed": true
+    }
+  ],
+  "disposition": "accepted",
+  "excluded_private_fields": [
+    "commands",
+    "handoffs",
+    "checkpoint",
+    "undo",
+    "started_at",
+    "finished_at"
+  ],
+  "failures": [
+    "the first scoped acceptance check intentionally found a missing deliverable"
+  ],
+  "file_changes": [
+    {"change": "created", "path": "artifact/launch-checklist.md"},
+    {"change": "created", "path": "artifact/final-audit.json"}
+  ],
+  "original_goal": "Research synthetic release risks, build a checklist, and audit the result.",
+  "plan": [
+    {"depends_on": [], "label": "research", "worker": "fixture-researcher"},
+    {"depends_on": ["research"], "label": "builder", "worker": "fixture-builder"},
+    {"depends_on": ["builder"], "label": "audit", "worker": "fixture-verifier"}
+  ],
+  "retries": 1,
+  "risk_level": "low",
+  "run_id": "showcase-audited-multi-agent",
+  "schema_version": 1,
+  "share_card": true,
+  "usage": {
+    "estimated_cost_usd": 0,
+    "provider": "fixture",
+    "tokens": 0
+  }
+}
+

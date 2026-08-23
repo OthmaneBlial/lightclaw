@@ -1,0 +1,29 @@
+{
+  "files": {
+    "prompt": "prompt.md",
+    "receipt": "run-card.json",
+    "recipe": "recipe.json",
+    "reproduce": "REPRODUCE.md",
+    "result": "result.md",
+    "setup": "setup.md"
+  },
+  "kind": "recipe",
+  "privacy": {
+    "credentials_removed": true,
+    "local_paths_removed": true,
+    "repository_names_removed": true,
+    "run_card_only": true,
+    "synthetic_or_publishable_input": true
+  },
+  "provenance": {
+    "author": "LightClaw maintainers",
+    "publication_consent": true,
+    "source": "built-in deterministic memory demo",
+    "type": "maintainer-fixture"
+  },
+  "schema_version": 1,
+  "slug": "persistent-memory",
+  "summary": "Persist and recall a synthetic fact across a local SQLite restart.",
+  "title": "Persistent namespaced memory"
+}
+

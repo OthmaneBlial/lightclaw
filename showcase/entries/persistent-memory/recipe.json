@@ -1,0 +1,21 @@
+{
+  "command": [
+    "lightclaw",
+    "demo",
+    "--scenario",
+    "memory",
+    "--output",
+    "{output}",
+    "--json"
+  ],
+  "credentials_required": false,
+  "expected_artifacts": [
+    "artifact/recall.json",
+    "receipt.json",
+    "receipt.md"
+  ],
+  "kind": "recipe",
+  "network_required": false,
+  "schema_version": 1
+}
+

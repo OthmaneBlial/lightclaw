@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/OthmaneBlial/lightclaw/blob/main/showcase/schema/showcase.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "files": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt": {"type": "string"},
+        "receipt": {"type": "string"},
+        "recipe": {"type": "string"},
+        "reproduce": {"type": "string"},
+        "result": {"type": "string"},
+        "setup": {"type": "string"}
+      },
+      "required": ["prompt", "setup", "result", "receipt", "reproduce", "recipe"],
+      "type": "object"
+    },
+    "kind": {"enum": ["recipe", "skill"]},
+    "privacy": {
+      "additionalProperties": false,
+      "properties": {
+        "credentials_removed": {"const": true},
+        "local_paths_removed": {"const": true},
+        "repository_names_removed": {"const": true},
+        "run_card_only": {"const": true},
+        "synthetic_or_publishable_input": {"const": true}
+      },
+      "required": [
+        "synthetic_or_publishable_input",
+        "run_card_only",
+        "repository_names_removed",
+        "local_paths_removed",
+        "credentials_removed"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "additionalProperties": true,
+      "properties": {
+        "author": {"minLength": 1, "type": "string"},
+        "publication_consent": {"type": "boolean"},
+        "source_url": {"format": "uri", "type": "string"},
+        "type": {"enum": ["maintainer-fixture", "community"]}
+      },
+      "required": ["type", "author"],
+      "type": "object"
+    },
+    "schema_version": {"const": 1},
+    "slug": {"pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "type": "string"},
+    "summary": {"minLength": 1, "type": "string"},
+    "title": {"minLength": 1, "type": "string"}
+  },
+  "required": ["schema_version", "slug", "title", "summary", "kind", "provenance", "privacy", "files"],
+  "title": "LightClaw public showcase entry",
+  "type": "object"
+}
+
