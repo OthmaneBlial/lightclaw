@@ -1,0 +1,271 @@
+{
+  "commit": "f66730e23c172278f2c4973a918e246ac86fcced",
+  "corpus": "lightclaw-memory-lexical-hybrid-v1",
+  "corpus_schema_version": 1,
+  "disclosure": "The hybrid adapter is a deterministic synonym-group fixture, not a semantic model. Results characterize this versioned corpus only.",
+  "environment": {
+    "machine": "arm64",
+    "pid": 30192,
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.14.6",
+    "sqlite": "3.53.2"
+  },
+  "fixture_hybrid": {
+    "cross_namespace_results": 0,
+    "database_bytes": 559632,
+    "details": [
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q1",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "harbor-key"
+        ],
+        "returned": [
+          "harbor-key",
+          "orchard-key",
+          "distractor-release"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q2",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "harbor-rollback"
+        ],
+        "returned": [
+          "harbor-rollback",
+          "distractor-release",
+          "summit-storage"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q3",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "orchard-key"
+        ],
+        "returned": [
+          "orchard-key",
+          "harbor-key",
+          "distractor-release"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q4",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "orchard-health"
+        ],
+        "returned": [
+          "orchard-health",
+          "meadow-status",
+          "distractor-release"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q5",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "summit-token"
+        ],
+        "returned": [
+          "summit-token",
+          "summit-storage",
+          "meadow-status"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q6",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "summit-storage"
+        ],
+        "returned": [
+          "summit-storage",
+          "harbor-rollback",
+          "distractor-release"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q7",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "telegram-review"
+        ],
+        "returned": [
+          "telegram-review",
+          "summit-token"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q8",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "meadow-status"
+        ],
+        "returned": [
+          "meadow-status",
+          "distractor-release",
+          "orchard-key"
+        ]
+      }
+    ],
+    "mean_precision_at_k": 0.3333,
+    "mean_recall_at_k": 1.0,
+    "mean_reciprocal_rank": 1.0,
+    "mode": "fixture hybrid rerank",
+    "queries": 8,
+    "query_latency_ms": {
+      "max": 0.4875,
+      "median": 0.3456,
+      "p95": 0.4875
+    },
+    "top_k": 3
+  },
+  "lexical": {
+    "cross_namespace_results": 0,
+    "database_bytes": 534912,
+    "details": [
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q1",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "harbor-key"
+        ],
+        "returned": [
+          "harbor-key",
+          "orchard-key",
+          "harbor-rollback"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q2",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "harbor-rollback"
+        ],
+        "returned": [
+          "harbor-rollback",
+          "distractor-release",
+          "summit-storage"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q3",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "orchard-key"
+        ],
+        "returned": [
+          "orchard-key",
+          "distractor-release",
+          "harbor-key"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q4",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "orchard-health"
+        ],
+        "returned": [
+          "orchard-health",
+          "meadow-status",
+          "distractor-release"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q5",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "summit-token"
+        ],
+        "returned": [
+          "summit-token",
+          "summit-storage",
+          "meadow-status"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q6",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "summit-storage"
+        ],
+        "returned": [
+          "summit-storage",
+          "harbor-rollback",
+          "distractor-release"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q7",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "telegram-review"
+        ],
+        "returned": [
+          "telegram-review",
+          "summit-token"
+        ]
+      },
+      {
+        "precision_at_k": 0.3333,
+        "query_id": "q8",
+        "recall_at_k": 1.0,
+        "reciprocal_rank": 1.0,
+        "relevant": [
+          "meadow-status"
+        ],
+        "returned": [
+          "meadow-status",
+          "distractor-release",
+          "orchard-key"
+        ]
+      }
+    ],
+    "mean_precision_at_k": 0.3333,
+    "mean_recall_at_k": 1.0,
+    "mean_reciprocal_rank": 1.0,
+    "mode": "sqlite fts5 lexical",
+    "queries": 8,
+    "query_latency_ms": {
+      "max": 0.5215,
+      "median": 0.2958,
+      "p95": 0.5215
+    },
+    "top_k": 3
+  },
+  "recorded_at": "2026-08-23T21:27:45Z",
+  "schema_version": 1
+}

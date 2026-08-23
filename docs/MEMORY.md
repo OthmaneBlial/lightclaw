@@ -41,7 +41,7 @@ MEMORY_CANDIDATE_LIMIT=200
 
 One stored interaction is capped at 32,000 characters. Ingest prunes expired and oldest overflow records. FTS queries accept at most 16 unique query terms, return at most 50 results, inspect at most the configured candidate count, and use a SQLite progress deadline. `lightclaw memory status` reports current size, limits, retrieval mode, last query time, and timeout count.
 
-These are safety ceilings, not performance promises for every disk or host. The versioned evaluation under `bench/fixtures/` publishes measured precision, recall, reciprocal rank, query latency, and database size for its named environment.
+These are safety ceilings, not performance promises for every disk or host. The [versioned raw evaluation](../bench/results/memory-eval-v1.json) uses the public corpus under `bench/fixtures/` and publishes measured precision, recall, reciprocal rank, query latency, database size, and cross-namespace leakage for its named commit and environment.
 
 ## Inspect and export
 

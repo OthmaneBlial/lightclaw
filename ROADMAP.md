@@ -263,12 +263,12 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P3.1 Make memory truthful and useful
 
-- [ ] Rename the current implementation “lexical recall” until semantic behavior is measured.
-- [ ] Add per-user and per-workspace namespaces so unrelated sessions cannot contaminate recall.
-- [ ] Add retention controls, export, selective delete, and a clear local data map.
-- [ ] Use SQLite FTS5 as the lightweight baseline; make embeddings an optional adapter.
-- [ ] Add a hybrid retrieval evaluation corpus and publish precision/recall tradeoffs.
-- [ ] Bound database growth and query latency; remove “infinite” from product copy.
+- [x] Rename the current implementation “lexical recall” until semantic behavior is measured.
+- [x] Add per-user and per-workspace namespaces so unrelated sessions cannot contaminate recall.
+- [x] Add retention controls, export, selective delete, and a clear local data map.
+- [x] Use SQLite FTS5 as the lightweight baseline; make embeddings an optional adapter.
+- [x] Add a hybrid retrieval evaluation corpus and publish precision/recall tradeoffs.
+- [x] Bound database growth and query latency; remove “infinite” from product copy.
 
 ### P3.2 Turn skills into a permissioned extension layer
 
