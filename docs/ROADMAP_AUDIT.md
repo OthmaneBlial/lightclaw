@@ -52,8 +52,11 @@ roadmap's “proof over claims” rule.
 - Test suite: 121 passing tests in the current local audit; the sole local warning comes from
   `google-genai` on an unsupported-for-release Python 3.14 interpreter. Supported CI uses
   Python 3.10–3.13.
-- Latest implementation commit `7ff4fd7`: CI, CodeQL, and OpenSSF Scorecard all succeeded,
+- Latest implementation commit `213decb`: CI, CodeQL, and OpenSSF Scorecard all succeeded,
   including Ubuntu and macOS Python 3.10–3.13.
+- The release workflow's manual rehearsal succeeded at that commit: verified distributions,
+  runtime footprint, attestations, and uploaded workflow artifacts were produced while
+  PyPI, GHCR, and GitHub Release publication jobs remained skipped by contract.
 - A local Linux container build from the preceding alpha-evidence commit succeeded under
   an unprivileged user; `--read-only` plus temporary filesystems completed the deterministic
   memory demo. This is pre-release smoke evidence, not a substitute for a public GHCR digest.
