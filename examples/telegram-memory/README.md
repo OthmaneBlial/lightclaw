@@ -34,3 +34,5 @@ Review the receipt, then delete only the temporary output directory printed by t
 ## Security limits
 
 This is a deterministic local memory fixture, not proof of Telegram delivery, provider availability, encryption at rest, or semantic quality on an arbitrary corpus. Anyone with access to the host account can read the SQLite database.
+
+Use the separate [real Telegram verification checklist](../../docs/MANUAL_VERIFICATION.md#story-a-memory-across-restart) when testing an actual bot and provider.

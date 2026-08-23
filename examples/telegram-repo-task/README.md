@@ -35,3 +35,5 @@ Review the receipt, then delete only the printed temporary output directory. The
 ## Security limits
 
 The fixture worker is built into LightClaw and does not exercise Codex/Claude authentication or their sandbox implementations. Real tasks still require scope review and should use `observe` or `workspace-write`, not `trusted-command`, whenever possible.
+
+Use the separate [real Telegram verification checklist](../../docs/MANUAL_VERIFICATION.md#story-b-bounded-repository-task) when testing an actual bot, provider, and coding-agent CLI.

@@ -36,3 +36,5 @@ Review the local receipt, then delete only the printed temporary output director
 ## Security limits
 
 This scenario simulates worker outputs deterministically; it proves LightClaw's fixture contract, not the correctness of external models. Real multi-agent plans require human approval and can still produce incorrect or harmful workspace changes within granted scope.
+
+Use the separate [real Telegram verification checklist](../../docs/MANUAL_VERIFICATION.md#story-c-two-lane-approved-plan) when testing actual workers.
