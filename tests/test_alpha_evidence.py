@@ -1,6 +1,9 @@
 from copy import deepcopy
+from pathlib import Path
 
 from scripts.aggregate_alpha_reports import build_aggregate, validate_aggregate, validate_report
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _report(index: int, *, demo_completed: bool = True) -> dict[str, object]:
@@ -31,6 +34,16 @@ def test_committed_empty_alpha_aggregate_is_honest_and_valid():
     assert aggregate["collection"]["report_count"] == 0
     assert aggregate["gates"]["release_ready"] == "not_met"
     assert validate_aggregate(aggregate) == []
+
+
+def test_public_alpha_form_defaults_cannot_claim_success():
+    form = (ROOT / ".github" / "ISSUE_TEMPLATE" / "alpha.yml").read_text(encoding="utf-8")
+    assert 'options: ["No", "Yes"]' in form
+    assert 'options: ["Not attempted because install failed", "No", "Yes"]' in form
+    assert form.count('options: ["Not attempted", "No", "Yes"]') == 2
+    assert "options: [Other/unspecified, Linux, macOS]" in form
+    assert "options: [Other/unspecified, pipx" in form
+    assert "id: python\n    attributes:\n      label: Python version\n      description:" in form
 
 
 def test_synthetic_external_cohort_meets_numeric_gates():

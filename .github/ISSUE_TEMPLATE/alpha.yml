@@ -9,6 +9,8 @@ body:
         Thank you for testing LightClaw as an external self-hoster. This issue is public.
         Never include prompts, receipts, repository names/content, local paths, Telegram
         identities, tokens, request IDs, screenshots, or other private data.
+        GitHub preselects the first dropdown value, so every dropdown starts with the most
+        conservative answer. Change it only when you directly observed a different result.
   - type: checkboxes
     id: consent
     attributes:
@@ -31,35 +33,36 @@ body:
     id: os
     attributes:
       label: OS family
-      options: [Linux, macOS, Other]
+      options: [Other/unspecified, Linux, macOS]
     validations:
       required: true
-  - type: dropdown
+  - type: input
     id: python
     attributes:
       label: Python version
-      options: ["3.10", "3.11", "3.12", "3.13"]
+      description: Enter the exact major/minor version. Supported releases are 3.10–3.13.
+      placeholder: "3.13"
     validations:
       required: true
   - type: dropdown
     id: install_method
     attributes:
       label: Isolated install method
-      options: [pipx, uv tool, virtual environment, container, other]
+      options: [Other/unspecified, pipx, uv tool, virtual environment, container]
     validations:
       required: true
   - type: dropdown
     id: install
     attributes:
       label: Did the fresh install complete?
-      options: ["Yes", "No"]
+      options: ["No", "Yes"]
     validations:
       required: true
   - type: dropdown
     id: demo
     attributes:
       label: Did the deterministic demo complete?
-      options: ["Yes", "No", "Not attempted because install failed"]
+      options: ["Not attempted because install failed", "No", "Yes"]
     validations:
       required: true
   - type: input
@@ -74,7 +77,7 @@ body:
     id: telegram
     attributes:
       label: Did a real Telegram task with disposable data complete?
-      options: ["Yes", "No", "Not attempted"]
+      options: ["Not attempted", "No", "Yes"]
     validations:
       required: true
   - type: input
@@ -89,7 +92,7 @@ body:
     id: artifact
     attributes:
       label: Was the expected artifact or receipt produced?
-      options: ["Yes", "No", "Not attempted"]
+      options: ["Not attempted", "No", "Yes"]
     validations:
       required: true
   - type: textarea

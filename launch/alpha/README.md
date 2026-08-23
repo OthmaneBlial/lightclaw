@@ -13,10 +13,13 @@ environment categories, missing values, and deterministic gate states.
 2. Confirm the person is external, consented to an anonymous aggregate, and supplied no
    prompt, receipt, path, repository, Telegram identity, token, or free-text content in the
    structured record.
-3. Create a random opaque ID matching `alpha-[0-9a-f]{12}` and transcribe only the fields
+3. Treat every issue-form dropdown as conservative by default. Transcribe a success only
+   when the tester explicitly selected it, and normalize `Other/unspecified` to `other`.
+   Reject Python versions outside the supported 3.10–3.13 range instead of guessing.
+4. Create a random opaque ID matching `alpha-[0-9a-f]{12}` and transcribe only the fields
    allowed by [`report.schema.json`](report.schema.json) into a local directory such as
    `evidence/private-alpha/`. That directory is ignored by Git.
-4. Generate and inspect the aggregate:
+5. Generate and inspect the aggregate:
 
    ```bash
    python scripts/aggregate_alpha_reports.py \

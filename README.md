@@ -57,6 +57,18 @@ For public, sanitized evidence that can be forked and replayed, browse the
 [privacy-checked showcase](showcase/). Its three starting recipes are maintainer fixtures,
 not community submissions or claims about live provider quality.
 
+## Help qualify v0.1.0
+
+The stable release is intentionally blocked until 10–20 real external self-hosters test a
+fresh install. Follow the [five-minute quickstart](docs/QUICKSTART.md), then submit the
+[bounded alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml).
+The [committed anonymous aggregate](launch/alpha/aggregate.json) is the source of truth for
+the current count, outcomes, timings, and gate status.
+
+The report must never contain prompts, receipts, repository names or content, local paths,
+Telegram identities, tokens, request IDs, screenshots, or other private data. Failures and
+missing timings are useful evidence and remain visible in the denominator.
+
 ## LightClaw is / is not
 
 | LightClaw is | LightClaw is not |
@@ -159,6 +171,8 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 
 ## Community and updates
 
+- Help qualify the first stable release through the privacy-bounded
+  [external alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml).
 - Follow the recurring [development updates and release evidence](https://github.com/OthmaneBlial/lightclaw/discussions/20).
 - Ask support questions in [Discussions Q&A](https://github.com/OthmaneBlial/lightclaw/discussions/categories/q-a).
 - Submit reproducible defects, bounded proposals, provider mismatches, or sanitized

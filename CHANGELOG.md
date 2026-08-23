@@ -34,6 +34,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Alpha reporting now uses conservative GitHub form defaults, captures the exact Python
+  version without a preselected value, and makes the external qualification call prominent.
 - GitHub workflows use the current Node 24 action generations for checkout, Python setup,
   artifact handling and attestation, dependency review, and CodeQL while retaining
   immutable commit pins.
