@@ -10,6 +10,7 @@ Features:
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -20,7 +21,7 @@ import threading
 import time
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
@@ -31,9 +32,28 @@ DEFAULT_API_PREFIX = "/api/v1"
 MAX_DOWNLOAD_BYTES = 5 * 1024 * 1024
 MAX_SKILL_TEXT_BYTES = 512 * 1024
 MAX_SKILL_META_BYTES = 128 * 1024
+SKILL_MANIFEST_NAME = "skill.json"
+SKILL_MANIFEST_SCHEMA_VERSION = 1
+MAX_SKILL_MANIFEST_BYTES = 64 * 1024
+SKILL_CAPABILITIES = frozenset(
+    {
+        "prompt-guidance",
+        "workspace-read",
+        "workspace-write",
+        "network",
+        "subprocess",
+        "trusted-command",
+    }
+)
+SAFE_PROMPT_CAPABILITIES = frozenset({"prompt-guidance"})
 
 _FRONTMATTER_RE = re.compile(r"^---\s*\n([\s\S]*?)\n---\s*(?:\n|$)")
 _SAFE_ID_RE = re.compile(r"[^a-zA-Z0-9._-]+")
+_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+_DOMAIN_RE = re.compile(r"^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)*[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
+_DEPENDENCY_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*(?:\[[A-Za-z0-9,._-]+\])?==[A-Za-z0-9][A-Za-z0-9.!+_-]*$"
+)
 
 
 class SkillError(RuntimeError):
@@ -51,6 +71,11 @@ class SkillRecord:
     slug: str | None = None
     version: str | None = None
     owner: str | None = None
+    manifest_path: Path | None = None
+    manifest: dict[str, Any] | None = None
+    content_sha256: str = ""
+    validation_errors: tuple[str, ...] = ()
+    isolated_only: bool = False
 
 
 @dataclass
@@ -65,6 +90,191 @@ class SkillSearchResult:
 def _sanitize_id(text: str) -> str:
     value = _SAFE_ID_RE.sub("-", text.strip().lower()).strip("-._")
     return value
+
+
+def _sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def _review_sha256(skill_bytes: bytes, manifest_bytes: bytes) -> str:
+    """Bind activation approval to both instructions and declared permissions."""
+    digest = hashlib.sha256()
+    digest.update(b"lightclaw-skill-review-v1\0")
+    digest.update(len(skill_bytes).to_bytes(8, "big"))
+    digest.update(skill_bytes)
+    digest.update(len(manifest_bytes).to_bytes(8, "big"))
+    digest.update(manifest_bytes)
+    return digest.hexdigest()
+
+
+def _safe_relative_path(value: str) -> bool:
+    candidate = PurePosixPath(str(value).replace("\\", "/"))
+    return bool(
+        candidate.as_posix() not in {"", "."}
+        and not candidate.is_absolute()
+        and not re.match(r"^[A-Za-z]:", candidate.as_posix())
+        and ".." not in candidate.parts
+    )
+
+
+def _default_manifest(
+    *,
+    skill_id: str,
+    name: str,
+    version: str,
+    owner: str,
+) -> dict[str, Any]:
+    return {
+        "schema_version": SKILL_MANIFEST_SCHEMA_VERSION,
+        "id": skill_id,
+        "name": name,
+        "version": version,
+        "owner": owner,
+        "capabilities": ["prompt-guidance"],
+        "network": {"allowed": False, "domains": []},
+        "writable_paths": [],
+        "dependencies": [],
+    }
+
+
+def validate_skill_manifest(payload: object) -> list[str]:
+    """Return stable validation errors for the minimal permission manifest."""
+    if not isinstance(payload, dict):
+        return ["skill.json must contain a JSON object"]
+    errors: list[str] = []
+    if payload.get("schema_version") != SKILL_MANIFEST_SCHEMA_VERSION:
+        errors.append(f"schema_version must be {SKILL_MANIFEST_SCHEMA_VERSION}")
+    skill_id = str(payload.get("id") or "")
+    if not skill_id or _sanitize_id(skill_id) != skill_id:
+        errors.append("id must be a lowercase safe slug")
+    name = str(payload.get("name") or "").strip()
+    if not name or len(name) > 120:
+        errors.append("name must contain 1-120 characters")
+    version = str(payload.get("version") or "").strip()
+    if not _VERSION_RE.fullmatch(version):
+        errors.append("version must be a pinned semantic version")
+    owner = str(payload.get("owner") or "").strip()
+    if not owner or len(owner) > 200:
+        errors.append("owner must contain 1-200 characters")
+
+    raw_capabilities = payload.get("capabilities")
+    capabilities = (
+        [str(value) for value in raw_capabilities]
+        if isinstance(raw_capabilities, list)
+        else []
+    )
+    if not capabilities:
+        errors.append("capabilities must be a non-empty list")
+    elif len(capabilities) != len(set(capabilities)):
+        errors.append("capabilities must not contain duplicates")
+    unknown = sorted(set(capabilities) - SKILL_CAPABILITIES)
+    if unknown:
+        errors.append("unknown capabilities: " + ", ".join(unknown))
+
+    network = payload.get("network")
+    if not isinstance(network, dict) or not isinstance(network.get("allowed"), bool):
+        errors.append("network must declare boolean allowed and a domains list")
+        network_allowed = False
+        domains: list[object] = []
+    else:
+        network_allowed = bool(network.get("allowed"))
+        raw_domains = network.get("domains")
+        domains = raw_domains if isinstance(raw_domains, list) else []
+        if not isinstance(raw_domains, list):
+            errors.append("network.domains must be a list")
+    for domain in domains:
+        if not isinstance(domain, str) or not _DOMAIN_RE.fullmatch(domain):
+            errors.append(f"invalid network domain: {domain}")
+    if not network_allowed and domains:
+        errors.append("network.domains must be empty when network is disabled")
+    if network_allowed and ("network" not in capabilities or not domains):
+        errors.append("network access requires the network capability and pinned domains")
+
+    raw_paths = payload.get("writable_paths")
+    paths = raw_paths if isinstance(raw_paths, list) else []
+    if not isinstance(raw_paths, list):
+        errors.append("writable_paths must be a list")
+    for path in paths:
+        if not isinstance(path, str) or not _safe_relative_path(path):
+            errors.append(f"invalid writable path: {path}")
+    if paths and "workspace-write" not in capabilities:
+        errors.append("writable_paths require the workspace-write capability")
+
+    raw_dependencies = payload.get("dependencies")
+    dependencies = raw_dependencies if isinstance(raw_dependencies, list) else []
+    if not isinstance(raw_dependencies, list):
+        errors.append("dependencies must be a list")
+    for dependency in dependencies:
+        if not isinstance(dependency, str) or not _DEPENDENCY_RE.fullmatch(dependency):
+            errors.append(f"dependency must pin an exact version with ==: {dependency}")
+    if dependencies and "subprocess" not in capabilities:
+        errors.append("executable dependencies require the subprocess capability")
+    return errors
+
+
+def validate_skill_directory(path: str | Path) -> dict[str, Any]:
+    """Validate one skill directory without executing or importing its contents."""
+    raw_candidate = Path(path).expanduser()
+    raw_directory = raw_candidate.parent if raw_candidate.name == "SKILL.md" else raw_candidate
+    if raw_candidate.is_symlink() or raw_directory.is_symlink():
+        return {
+            "valid": False,
+            "directory": raw_directory.absolute().as_posix(),
+            "errors": ["skill directory is missing or symlinked"],
+        }
+    candidate = raw_candidate.resolve()
+    directory = candidate.parent if candidate.is_file() and candidate.name == "SKILL.md" else candidate
+    errors: list[str] = []
+    if not directory.is_dir() or directory.is_symlink():
+        return {"valid": False, "directory": directory.as_posix(), "errors": ["skill directory is missing or symlinked"]}
+    skill_path = directory / "SKILL.md"
+    manifest_path = directory / SKILL_MANIFEST_NAME
+    if skill_path.is_symlink() or not skill_path.is_file():
+        errors.append("SKILL.md is missing or symlinked")
+        skill_bytes = b""
+    else:
+        skill_bytes = skill_path.read_bytes()
+        if len(skill_bytes) > MAX_SKILL_TEXT_BYTES:
+            errors.append("SKILL.md exceeds the size limit")
+    manifest: dict[str, Any] = {}
+    manifest_bytes = b""
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        errors.append("skill.json is missing or symlinked")
+    else:
+        manifest_bytes = manifest_path.read_bytes()
+        if len(manifest_bytes) > MAX_SKILL_MANIFEST_BYTES:
+            errors.append("skill.json exceeds the size limit")
+        else:
+            try:
+                loaded = json.loads(manifest_bytes.decode("utf-8"))
+                manifest = loaded if isinstance(loaded, dict) else {}
+                errors.extend(validate_skill_manifest(loaded))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                errors.append("skill.json is not valid UTF-8 JSON")
+    capabilities = set(manifest.get("capabilities", [])) if manifest else set()
+    network = manifest.get("network", {}) if manifest else {}
+    isolated_only = bool(
+        capabilities - SAFE_PROMPT_CAPABILITIES
+        or (isinstance(network, dict) and network.get("allowed"))
+        or manifest.get("writable_paths")
+        or manifest.get("dependencies")
+    )
+    instructions_sha256 = _sha256_bytes(skill_bytes)
+    manifest_sha256 = _sha256_bytes(manifest_bytes)
+    content_sha256 = _review_sha256(skill_bytes, manifest_bytes)
+    return {
+        "valid": not errors,
+        "directory": directory.as_posix(),
+        "skill_path": skill_path.as_posix(),
+        "manifest_path": manifest_path.as_posix(),
+        "manifest": manifest,
+        "content_sha256": content_sha256,
+        "instructions_sha256": instructions_sha256,
+        "manifest_sha256": manifest_sha256,
+        "activation_token": content_sha256[:12],
+        "isolated_only": isolated_only,
+        "errors": errors,
+    }
 
 
 def _first_non_empty(*values: str | None) -> str:
@@ -214,19 +424,85 @@ class SkillManager:
         self.hub_dir.mkdir(parents=True, exist_ok=True)
         self.local_dir.mkdir(parents=True, exist_ok=True)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._migrate_legacy_manifests()
+
+    def _migrate_legacy_manifests(self) -> None:
+        """Make old instruction-only skills explicit and prompt-only."""
+        for root, source_type in ((self.hub_dir, "hub"), (self.local_dir, "local")):
+            for directory in sorted(
+                path for path in root.iterdir() if path.is_dir() and not path.is_symlink()
+            ):
+                skill_path = directory / "SKILL.md"
+                manifest_path = directory / SKILL_MANIFEST_NAME
+                if not skill_path.is_file() or skill_path.is_symlink() or manifest_path.exists():
+                    continue
+                source_path = directory / "source.json"
+                source: dict[str, Any] = {}
+                if source_path.is_file() and not source_path.is_symlink():
+                    try:
+                        loaded = json.loads(source_path.read_text(encoding="utf-8"))
+                        source = loaded if isinstance(loaded, dict) else {}
+                    except (OSError, json.JSONDecodeError):
+                        source = {}
+                content = skill_path.read_text(encoding="utf-8", errors="replace")
+                frontmatter, body = _frontmatter(content)
+                name = _first_non_empty(
+                    str(frontmatter.get("name") or ""),
+                    str(source.get("display_name") or ""),
+                    directory.name,
+                )
+                version = str(source.get("version") or "").strip()
+                if not _VERSION_RE.fullmatch(version):
+                    version = "0.1.0" if source_type == "local" else "0.0.0-legacy"
+                owner = _first_non_empty(
+                    str(source.get("owner") or ""),
+                    "local-owner" if source_type == "local" else "legacy-hub-owner",
+                )
+                manifest = _default_manifest(
+                    skill_id=directory.name,
+                    name=name or _body_summary(body) or directory.name,
+                    version=version,
+                    owner=owner,
+                )
+                _atomic_write_json(manifest_path, manifest)
+                source.update(
+                    {
+                        "source": source_type,
+                        "slug": directory.name,
+                        "display_name": name,
+                        "owner": owner,
+                        "version": version,
+                        "instructions_sha256": _sha256_bytes(skill_path.read_bytes()),
+                        "content_sha256": _review_sha256(
+                            skill_path.read_bytes(),
+                            json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
+                        ),
+                        "manifest_sha256": _sha256_bytes(
+                            json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
+                        ),
+                        "manifest_migrated": True,
+                    }
+                )
+                _atomic_write_json(source_path, source)
 
     def _read_state(self) -> dict[str, Any]:
         if not self.state_path.exists():
-            return {"active_by_chat": {}}
+            return {"active_by_chat": {}, "approved_hashes_by_chat": {}}
 
         try:
             data = json.loads(self.state_path.read_text(encoding="utf-8"))
             active = data.get("active_by_chat")
             if not isinstance(active, dict):
-                return {"active_by_chat": {}}
-            return {"active_by_chat": active}
+                active = {}
+            approved = data.get("approved_hashes_by_chat")
+            if not isinstance(approved, dict):
+                approved = {}
+            return {
+                "active_by_chat": active,
+                "approved_hashes_by_chat": approved,
+            }
         except Exception:
-            return {"active_by_chat": {}}
+            return {"active_by_chat": {}, "approved_hashes_by_chat": {}}
 
     def _write_state(self, state: dict[str, Any]):
         _atomic_write_json(self.state_path, state)
@@ -281,23 +557,33 @@ class SkillManager:
         return data
 
     @staticmethod
-    def _extract_zip_bundle(zip_bytes: bytes) -> tuple[str, dict[str, Any] | None]:
+    def _extract_zip_bundle(
+        zip_bytes: bytes,
+    ) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
         try:
             zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
         except zipfile.BadZipFile as e:
             raise SkillError("download is not a valid zip bundle") from e
 
-        skill_member: zipfile.ZipInfo | None = None
-        meta_member: zipfile.ZipInfo | None = None
+        skill_members: list[zipfile.ZipInfo] = []
+        meta_members: list[zipfile.ZipInfo] = []
+        manifest_members: list[zipfile.ZipInfo] = []
         for info in zf.infolist():
             leaf = Path(info.filename).name.lower()
-            if leaf == "skill.md" and skill_member is None:
-                skill_member = info
-            elif leaf == "_meta.json" and meta_member is None:
-                meta_member = info
+            if leaf == "skill.md":
+                skill_members.append(info)
+            elif leaf == "_meta.json":
+                meta_members.append(info)
+            elif leaf == SKILL_MANIFEST_NAME:
+                manifest_members.append(info)
 
-        if not skill_member:
+        if not skill_members:
             raise SkillError("bundle missing SKILL.md")
+        if len(skill_members) != 1 or len(meta_members) > 1 or len(manifest_members) > 1:
+            raise SkillError("bundle contains ambiguous duplicate skill metadata")
+        skill_member = skill_members[0]
+        meta_member = meta_members[0] if meta_members else None
+        manifest_member = manifest_members[0] if manifest_members else None
 
         if skill_member.flag_bits & 0x1:
             raise SkillError("encrypted skill bundles are not supported")
@@ -315,7 +601,20 @@ class SkillManager:
                 meta = json.loads(zf.read(meta_member).decode("utf-8", errors="replace"))
             except Exception:
                 meta = None
-        return skill_text, meta
+        manifest = None
+        if manifest_member:
+            if manifest_member.flag_bits & 0x1:
+                raise SkillError("encrypted skill manifests are not supported")
+            if manifest_member.file_size > MAX_SKILL_MANIFEST_BYTES:
+                raise SkillError("skill.json exceeds the uncompressed size limit")
+            try:
+                loaded = json.loads(zf.read(manifest_member).decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise SkillError("skill.json is not valid UTF-8 JSON") from exc
+            if not isinstance(loaded, dict):
+                raise SkillError("skill.json must contain a JSON object")
+            manifest = loaded
+        return skill_text, meta, manifest
 
     @staticmethod
     def _parse_target(target: str) -> tuple[str, str | None]:
@@ -378,8 +677,10 @@ class SkillManager:
         return slug, version
 
     def _build_record(self, directory: Path, source: str, skill_id: str) -> SkillRecord | None:
+        if directory.is_symlink():
+            return None
         skill_path = directory / "SKILL.md"
-        if not skill_path.exists():
+        if not skill_path.exists() or skill_path.is_symlink():
             return None
 
         source_meta_path = directory / "source.json"
@@ -392,7 +693,14 @@ class SkillManager:
 
         content = skill_path.read_text(encoding="utf-8", errors="replace")
         fm, body = _frontmatter(content)
+        validation = validate_skill_directory(directory)
+        manifest = (
+            validation.get("manifest")
+            if isinstance(validation.get("manifest"), dict)
+            else {}
+        )
         name = _first_non_empty(
+            str(manifest.get("name") or ""),
             str(fm.get("name") if fm.get("name") is not None else ""),
             str(source_meta.get("display_name") if source_meta.get("display_name") is not None else ""),
             directory.name,
@@ -411,22 +719,27 @@ class SkillManager:
             directory=directory,
             skill_path=skill_path,
             slug=source_meta.get("slug"),
-            version=source_meta.get("version"),
-            owner=source_meta.get("owner"),
+            version=str(manifest.get("version") or source_meta.get("version") or "") or None,
+            owner=str(manifest.get("owner") or source_meta.get("owner") or "") or None,
+            manifest_path=directory / SKILL_MANIFEST_NAME,
+            manifest=manifest,
+            content_sha256=str(validation.get("content_sha256") or ""),
+            validation_errors=tuple(str(error) for error in validation.get("errors", [])),
+            isolated_only=bool(validation.get("isolated_only")),
         )
 
     def list_skills(self) -> list[SkillRecord]:
         records: list[SkillRecord] = []
 
         for path in sorted(self.hub_dir.iterdir() if self.hub_dir.exists() else []):
-            if not path.is_dir():
+            if not path.is_dir() or path.is_symlink():
                 continue
             rec = self._build_record(path, source="hub", skill_id=path.name)
             if rec:
                 records.append(rec)
 
         for path in sorted(self.local_dir.iterdir() if self.local_dir.exists() else []):
-            if not path.is_dir():
+            if not path.is_dir() or path.is_symlink():
                 continue
             rec = self._build_record(path, source="local", skill_id=f"local/{path.name}")
             if rec:
@@ -466,27 +779,115 @@ class SkillManager:
                 return []
             return [str(item) for item in active if isinstance(item, str) and item.strip()]
 
-    def _set_active(self, chat_id: str, skill_ids: list[str]):
+    def _set_active(
+        self,
+        chat_id: str,
+        skill_ids: list[str],
+        approved_hashes: dict[str, str] | None = None,
+    ):
         state = self._read_state()
         active_by_chat = state.setdefault("active_by_chat", {})
         active_by_chat[chat_id] = skill_ids
+        approvals_by_chat = state.setdefault("approved_hashes_by_chat", {})
+        current = approvals_by_chat.get(chat_id, {})
+        if not isinstance(current, dict):
+            current = {}
+        next_approvals = approved_hashes if approved_hashes is not None else current
+        approvals_by_chat[chat_id] = {
+            skill_id: str(content_hash)
+            for skill_id, content_hash in next_approvals.items()
+            if skill_id in skill_ids and str(content_hash)
+        }
         self._write_state(state)
 
-    def activate(self, chat_id: str, skill_id: str):
+    def preview_activation(self, ref: str) -> dict[str, Any]:
+        """Return the exact source, permissions, provenance, and hash before activation."""
+        record = self.resolve_skill(ref)
+        if not record:
+            raise SkillError(f"skill not found: {ref}")
+        report = validate_skill_directory(record.directory)
+        manifest = report.get("manifest") if isinstance(report.get("manifest"), dict) else {}
+        source: dict[str, Any] = {}
+        source_path = record.directory / "source.json"
+        if source_path.is_file() and not source_path.is_symlink():
+            try:
+                loaded = json.loads(source_path.read_text(encoding="utf-8"))
+                source = loaded if isinstance(loaded, dict) else {}
+            except (OSError, json.JSONDecodeError):
+                source = {}
+        try:
+            preview = record.skill_path.read_text(encoding="utf-8", errors="replace")[:1600]
+        except OSError:
+            preview = ""
+        return {
+            "skill_id": record.skill_id,
+            "name": record.name,
+            "source": record.source,
+            "source_preview": preview,
+            "owner": manifest.get("owner") or source.get("owner"),
+            "version": manifest.get("version") or source.get("version"),
+            "capabilities": manifest.get("capabilities", []),
+            "network": manifest.get("network", {}),
+            "writable_paths": manifest.get("writable_paths", []),
+            "dependencies": manifest.get("dependencies", []),
+            "content_sha256": report.get("content_sha256"),
+            "instructions_sha256": report.get("instructions_sha256"),
+            "manifest_sha256": report.get("manifest_sha256"),
+            "activation_token": report.get("activation_token"),
+            "provenance": source.get("provenance", source),
+            "valid": report.get("valid"),
+            "isolated_only": report.get("isolated_only"),
+            "errors": report.get("errors", []),
+        }
+
+    def activate(self, chat_id: str, skill_id: str, confirmation: str | None = None):
+        preview = self.preview_activation(skill_id)
+        if not preview["valid"]:
+            raise SkillError("skill validation failed: " + "; ".join(preview["errors"]))
+        if preview["isolated_only"]:
+            raise SkillError(
+                "networked, writable, subprocess, or high-authority skills require an "
+                "isolated external runner and cannot enter the core prompt"
+            )
+        expected = str(preview["activation_token"] or "")
+        if not expected or confirmation != expected:
+            raise SkillError(
+                f"activation requires the reviewed content-hash token: {expected or 'unavailable'}"
+            )
+        canonical_id = str(preview["skill_id"])
         with self._lock:
             active = self.list_active(chat_id)
-            if skill_id not in active:
-                active.append(skill_id)
-                self._set_active(chat_id, active)
+            state = self._read_state()
+            approvals_by_chat = state.get("approved_hashes_by_chat", {})
+            approvals = (
+                dict(approvals_by_chat.get(chat_id, {}))
+                if isinstance(approvals_by_chat, dict)
+                and isinstance(approvals_by_chat.get(chat_id), dict)
+                else {}
+            )
+            approvals[canonical_id] = str(preview["content_sha256"])
+            if canonical_id not in active:
+                active.append(canonical_id)
+            self._set_active(chat_id, active, approvals)
 
     def deactivate(self, chat_id: str, skill_id: str):
         with self._lock:
             active = [sid for sid in self.list_active(chat_id) if sid != skill_id]
-            self._set_active(chat_id, active)
+            state = self._read_state()
+            approvals_by_chat = state.get("approved_hashes_by_chat", {})
+            approvals = (
+                dict(approvals_by_chat.get(chat_id, {}))
+                if isinstance(approvals_by_chat, dict)
+                and isinstance(approvals_by_chat.get(chat_id), dict)
+                else {}
+            )
+            approvals.pop(skill_id, None)
+            self._set_active(chat_id, active, approvals)
 
     def _deactivate_everywhere(self, skill_id: str):
         state = self._read_state()
         active_by_chat = state.get("active_by_chat", {})
+        approvals_by_chat = state.get("approved_hashes_by_chat", {})
         changed = False
 
         for chat_id, active in list(active_by_chat.items()):
@@ -495,21 +896,39 @@ class SkillManager:
             filtered = [sid for sid in active if sid != skill_id]
             if len(filtered) != len(active):
                 active_by_chat[chat_id] = filtered
+                if isinstance(approvals_by_chat, dict):
+                    approvals = approvals_by_chat.get(chat_id)
+                    if isinstance(approvals, dict):
+                        approvals.pop(skill_id, None)
                 changed = True
 
         if changed:
             state["active_by_chat"] = active_by_chat
+            state["approved_hashes_by_chat"] = approvals_by_chat
             self._write_state(state)
 
     def active_records(self, chat_id: str) -> list[SkillRecord]:
         installed = {skill.skill_id: skill for skill in self.list_skills()}
         active_ids = self.list_active(chat_id)
+        state = self._read_state()
+        approvals_by_chat = state.get("approved_hashes_by_chat", {})
+        approvals = (
+            approvals_by_chat.get(chat_id, {})
+            if isinstance(approvals_by_chat, dict)
+            and isinstance(approvals_by_chat.get(chat_id), dict)
+            else {}
+        )
         active: list[SkillRecord] = []
         missing: list[str] = []
 
         for sid in active_ids:
             rec = installed.get(sid)
-            if rec:
+            if (
+                rec
+                and not rec.validation_errors
+                and not rec.isolated_only
+                and approvals.get(sid) == rec.content_sha256
+            ):
                 active.append(rec)
             else:
                 missing.append(sid)
@@ -517,7 +936,12 @@ class SkillManager:
         if missing:
             with self._lock:
                 cleaned = [sid for sid in active_ids if sid not in missing]
-                self._set_active(chat_id, cleaned)
+                cleaned_approvals = {
+                    sid: str(content_hash)
+                    for sid, content_hash in approvals.items()
+                    if sid in cleaned
+                }
+                self._set_active(chat_id, cleaned, cleaned_approvals)
 
         return active
 
@@ -555,21 +979,47 @@ class SkillManager:
             "- Step 2\n"
             "- Step 3\n"
         )
-        skill_path.write_text(template, encoding="utf-8")
+        _atomic_write_text(skill_path, template)
+        manifest = _default_manifest(
+            skill_id=slug,
+            name=skill_name,
+            version="0.1.0",
+            owner="local-owner",
+        )
+        _atomic_write_json(directory / SKILL_MANIFEST_NAME, manifest)
         source = {
             "source": "local",
             "slug": slug,
             "display_name": skill_name,
             "summary": desc,
-            "version": "local",
+            "owner": "local-owner",
+            "version": "0.1.0",
             "installed_at": int(time.time()),
+            "instructions_sha256": _sha256_bytes(skill_path.read_bytes()),
+            "content_sha256": _review_sha256(
+                skill_path.read_bytes(),
+                json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
+            ),
+            "manifest_sha256": _sha256_bytes(
+                json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
+            ),
+            "provenance": {
+                "kind": "local-create",
+                "created_at": int(time.time()),
+            },
         }
         _atomic_write_json(source_path, source)
 
         rec = self._build_record(directory, source="local", skill_id=f"local/{slug}")
         if not rec:
             raise SkillError("failed to create local skill")
+        if rec.validation_errors:
+            shutil.rmtree(directory, ignore_errors=True)
+            raise SkillError("created skill failed validation: " + "; ".join(rec.validation_errors))
         return rec
+
+    def validate_all(self) -> list[dict[str, Any]]:
+        return [validate_skill_directory(record.directory) for record in self.list_skills()]
 
     def remove_skill(self, ref: str) -> SkillRecord:
         rec = self.resolve_skill(ref)
@@ -598,31 +1048,87 @@ class SkillManager:
         zip_url = f"{self.api_base_url}/download?{urlencode(params)}"
         payload = self._http_get_bytes(zip_url, accept="application/zip")
 
-        skill_text, archive_meta = self._extract_zip_bundle(payload)
+        skill_text, archive_meta, archive_manifest = self._extract_zip_bundle(payload)
         if not skill_text.strip():
             raise SkillError("downloaded skill is empty")
-
-        directory = self.hub_dir / slug
-        replaced = directory.exists()
-        directory.mkdir(parents=True, exist_ok=True)
-
-        (directory / "SKILL.md").write_text(skill_text, encoding="utf-8")
-        if archive_meta is not None:
-            _atomic_write_json(directory / "_meta.json", archive_meta)
+        if not effective_version or not _VERSION_RE.fullmatch(effective_version):
+            raise SkillError("hub skill must resolve to a pinned semantic version")
+        display_name = str(skill_meta.get("displayName") or slug)
+        owner = str(owner_meta.get("handle") or owner_meta.get("userId") or "hub-owner")
+        requested_permissions = archive_manifest or _default_manifest(
+            skill_id=slug,
+            name=display_name,
+            version=effective_version,
+            owner=owner,
+        )
+        manifest = dict(requested_permissions)
+        manifest.update(
+            {
+                "schema_version": SKILL_MANIFEST_SCHEMA_VERSION,
+                "id": slug,
+                "name": display_name,
+                "version": effective_version,
+                "owner": owner,
+            }
+        )
+        manifest_errors = validate_skill_manifest(manifest)
+        if manifest_errors:
+            raise SkillError("hub skill manifest rejected: " + "; ".join(manifest_errors))
 
         source = {
             "source": "hub",
             "hub_base_url": self.hub_base_url,
             "slug": slug,
-            "display_name": skill_meta.get("displayName"),
+            "display_name": display_name,
             "summary": skill_meta.get("summary"),
-            "owner": owner_meta.get("handle"),
+            "owner": owner,
             "owner_id": owner_meta.get("userId"),
-            "version": effective_version or latest.get("version"),
+            "version": effective_version,
             "installed_at": int(time.time()),
+            "download_sha256": _sha256_bytes(payload),
+            "instructions_sha256": _sha256_bytes(skill_text.encode("utf-8")),
+            "content_sha256": _review_sha256(
+                skill_text.encode("utf-8"),
+                json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
+            ),
+            "manifest_sha256": _sha256_bytes(
+                json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
+            ),
+            "provenance": {
+                "kind": "clawhub",
+                "metadata_url": f"{self.api_base_url}/skills/{quote(slug)}",
+                "download_url": zip_url,
+                "slug": slug,
+                "owner": owner,
+                "version": effective_version,
+                "download_sha256": _sha256_bytes(payload),
+            },
         }
-        _atomic_write_json(directory / "source.json", source)
-
+        directory = self.hub_dir / slug
+        replaced = directory.exists()
+        staging = Path(tempfile.mkdtemp(prefix=f".{slug}.staging-", dir=self.hub_dir))
+        backup = self.hub_dir / f".{slug}.backup-{time.time_ns()}"
+        try:
+            _atomic_write_text(staging / "SKILL.md", skill_text)
+            _atomic_write_json(staging / SKILL_MANIFEST_NAME, manifest)
+            if archive_meta is not None:
+                _atomic_write_json(staging / "_meta.json", archive_meta)
+            _atomic_write_json(staging / "source.json", source)
+            report = validate_skill_directory(staging)
+            if not report["valid"]:
+                raise SkillError("staged skill validation failed: " + "; ".join(report["errors"]))
+            if directory.exists():
+                directory.rename(backup)
+            staging.rename(directory)
+            if backup.exists():
+                shutil.rmtree(backup)
+        except Exception:
+            if not directory.exists() and backup.exists():
+                backup.rename(directory)
+            raise
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+            shutil.rmtree(backup, ignore_errors=True)
         rec = self._build_record(directory, source="hub", skill_id=slug)
         if not rec:
             raise SkillError("skill installed but could not be loaded")
@@ -691,7 +1197,10 @@ class SkillManager:
                 clipped = True
 
             block = (
-                f"### {skill.skill_id} ({skill.source})\n"
+                f"### {skill.skill_id} ({skill.source}, version {skill.version}, "
+                f"sha256 {skill.content_sha256[:12]})\n"
+                "Permission boundary: prompt-guidance only; no network, subprocess, "
+                "credential, or workspace-write authority is granted by this skill.\n"
                 f"{text}"
             )
 

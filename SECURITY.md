@@ -28,11 +28,12 @@ Useful reports include the affected commit/version, the configured capability pr
 - Delegated agents receive a minimal environment that excludes provider keys, Telegram tokens, and unrelated host secrets.
 - The default delegation profile is `workspace-write`; `trusted-command` requires confirmation for each run.
 - Coding tasks run inside per-task directories recorded as LightClaw-owned.
+- Skills install inactive. Activation requires review of source, provenance, permissions, and a hash that binds `SKILL.md` to `skill.json`; only prompt-guidance skills enter the core prompt.
 - `lightclaw undo` and `lightclaw uninstall` are dry runs unless explicitly applied.
 - Logs and provider errors pass through credential redaction, but users must still avoid placing secrets in prompts or source files.
 
 ## Host boundary
 
-LightClaw cannot protect the host after a user explicitly grants trusted host execution, installs an untrusted skill, weakens external CLI sandbox settings, exposes the Telegram bot publicly, or runs the process with access to sensitive host files. Regex command blocks are defense in depth and are not a sandbox.
+LightClaw cannot protect the host after a user explicitly grants trusted host execution, activates malicious prompt guidance, weakens external CLI sandbox settings, exposes the Telegram bot publicly, or runs the process with access to sensitive host files. Skill manifests constrain LightClaw's extension loader; they do not make untrusted instructions trustworthy. Regex command blocks are defense in depth and are not a sandbox.
 
 See [the threat model](docs/THREAT_MODEL.md) for boundaries and assumptions.

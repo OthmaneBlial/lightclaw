@@ -1,0 +1,16 @@
+{
+  "capabilities": [
+    "prompt-guidance"
+  ],
+  "dependencies": [],
+  "id": "release-evidence-checklist",
+  "name": "Release Evidence Checklist",
+  "network": {
+    "allowed": false,
+    "domains": []
+  },
+  "owner": "OthmaneBlial/lightclaw",
+  "schema_version": 1,
+  "version": "1.0.0",
+  "writable_paths": []
+}

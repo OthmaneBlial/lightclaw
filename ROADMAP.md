@@ -272,12 +272,12 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P3.2 Turn skills into a permissioned extension layer
 
-- [ ] Add a minimal skill manifest: required capabilities, network access, writable paths, dependencies, and version.
-- [ ] Preview source, permissions, owner, version, and content hash before activation.
-- [ ] Pin installed versions and record provenance.
-- [ ] Add a validation command and CI contract for community skills.
-- [ ] Keep executable dependencies out of the core and isolate networked/high-authority skills.
-- [ ] Publish a “build a safe skill in 10 minutes” tutorial.
+- [x] Add a minimal skill manifest: required capabilities, network access, writable paths, dependencies, and version.
+- [x] Preview source, permissions, owner, version, and content hash before activation.
+- [x] Pin installed versions and record provenance.
+- [x] Add a validation command and CI contract for community skills.
+- [x] Keep executable dependencies out of the core and isolate networked/high-authority skills.
+- [x] Publish a “build a safe skill in 10 minutes” tutorial.
 
 ### P3.3 Stabilize providers without multiplying branches
 

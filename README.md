@@ -107,7 +107,7 @@ Current capabilities include:
 - Codex and Claude delegation profiles: `observe`, `workspace-write`, `trusted-command`;
 - DAG planning, owned paths, JSON handoffs, acceptance checks, and bounded repair;
 - namespaced SQLite FTS5 lexical recall with retention, export, and selective delete;
-- local and hub skills with archive/install boundaries;
+- permission-manifest skills with pinned provenance, hash review, and prompt-only activation;
 - voice transcription, scheduled jobs, heartbeat, Telegram, and terminal chat;
 - token-free fixture adapters used by the full CI matrix.
 
@@ -129,6 +129,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Telegram approvals and high-risk confirmation](docs/APPROVALS.md)
 - [Reviewable patches, selective apply, and optional PRs](docs/ARTIFACTS.md)
 - [Namespaced lexical memory, retention, export, and evaluation](docs/MEMORY.md)
+- [Build and validate a safe skill in 10 minutes](docs/SAFE_SKILLS.md)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)

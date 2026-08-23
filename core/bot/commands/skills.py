@@ -21,13 +21,12 @@ class CommandsSkillsMixin:
             "<code>/skills</code> - list installed + active skills\n"
             "<code>/skills search &lt;query&gt;</code> - search ClawHub\n"
             "<code>/skills add &lt;slug|owner/slug|url|slug@version&gt;</code> - install from ClawHub\n"
-            "<code>/skills use &lt;id&gt;</code> - activate skill in this chat\n"
+            "<code>/skills use &lt;id&gt; [hash-token]</code> - preview, then activate\n"
             "<code>/skills off &lt;id&gt;</code> - deactivate skill in this chat\n"
             "<code>/skills create &lt;name&gt; [description]</code> - create local skill\n"
             "<code>/skills show &lt;id&gt;</code> - preview SKILL.md\n"
             "<code>/skills remove &lt;id&gt;</code> - uninstall skill"
         )
-
 
     def _render_skills_overview(self, session_id: str) -> str:
         installed = self.skills.list_skills()
@@ -54,9 +53,12 @@ class CommandsSkillsMixin:
                 if len(desc) > 90:
                     desc = desc[:87] + "..."
                 version = f" v{_escape_html(skill.version)}" if skill.version else ""
+                safety = "invalid" if skill.validation_errors else (
+                    "isolated-only" if skill.isolated_only else "prompt-only"
+                )
                 lines.append(
                     f"• {marker}<code>{_escape_html(skill.skill_id)}</code> "
-                    f"({skill.source}{version}) - {_escape_html(skill.name)}"
+                    f"({skill.source}{version}; {safety}) - {_escape_html(skill.name)}"
                 )
                 if desc:
                     lines.append(f"  {desc}")
@@ -67,6 +69,38 @@ class CommandsSkillsMixin:
         lines.append(self._skills_usage_text())
         return "\n".join(lines)
 
+    @staticmethod
+    def _render_skill_activation_preview(preview: dict[str, object]) -> str:
+        source = str(preview.get("source_preview") or "").strip()[:800]
+        capabilities = ", ".join(str(value) for value in preview.get("capabilities", []))
+        network = preview.get("network") if isinstance(preview.get("network"), dict) else {}
+        lines = [
+            f"🧩 <b>Review skill:</b> <code>{_escape_html(str(preview.get('skill_id')))}</code>",
+            f"Owner: <code>{_escape_html(str(preview.get('owner') or 'unknown'))}</code>",
+            f"Version: <code>{_escape_html(str(preview.get('version') or 'unknown'))}</code>",
+            f"Content SHA-256: <code>{_escape_html(str(preview.get('content_sha256')))}</code>",
+            f"Capabilities: <code>{_escape_html(capabilities or 'none')}</code>",
+            f"Network: <code>{'allowed' if network.get('allowed') else 'disabled'}</code>",
+            f"Writable paths: <code>{_escape_html(str(preview.get('writable_paths') or []))}</code>",
+            f"Dependencies: <code>{_escape_html(str(preview.get('dependencies') or []))}</code>",
+        ]
+        errors = preview.get("errors") if isinstance(preview.get("errors"), list) else []
+        if errors:
+            lines.append(f"Validation errors: {_escape_html('; '.join(str(item) for item in errors))}")
+        if preview.get("isolated_only"):
+            lines.append("⚠️ This skill is isolated-only and cannot enter the core prompt.")
+        if source:
+            lines.extend(["", "<b>Source preview</b>", f"<pre>{_escape_html(source)}</pre>"])
+        if preview.get("valid") and not preview.get("isolated_only"):
+            lines.extend(
+                [
+                    "",
+                    "Activate only after review:",
+                    f"<code>/skills use {_escape_html(str(preview.get('skill_id')))} "
+                    f"{_escape_html(str(preview.get('activation_token')))}</code>",
+                ]
+            )
+        return "\n".join(lines)
 
     async def cmd_skills(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
@@ -154,7 +188,10 @@ class CommandsSkillsMixin:
                 skill, replaced = await asyncio.to_thread(
                     self.skills.install_from_hub, target, version
                 )
-                await asyncio.to_thread(self.skills.activate, session_id, skill.skill_id)
+                preview = await asyncio.to_thread(
+                    self.skills.preview_activation,
+                    skill.skill_id,
+                )
             except SkillError as e:
                 fail_text = f"⚠️ Install failed: {_escape_html(str(e))}"
                 self._log_bot_message(session_id, self._strip_html_for_log(fail_text))
@@ -174,8 +211,8 @@ class CommandsSkillsMixin:
             lines.extend(
                 [
                     "",
-                    "Auto-activated for this chat.",
-                    "List skills: <code>/skills</code>",
+                    "Installed inactive. Review permissions and source before activation.",
+                    self._render_skill_activation_preview(preview),
                 ]
             )
             success_text = "\n".join(lines)
@@ -187,7 +224,7 @@ class CommandsSkillsMixin:
             if len(args) < 2:
                 await self._reply_logged(
                     update,
-                    "Usage: <code>/skills use &lt;id&gt;</code>",
+                    "Usage: <code>/skills use &lt;id&gt; [hash-token]</code>",
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -202,7 +239,29 @@ class CommandsSkillsMixin:
                 )
                 return
 
-            await asyncio.to_thread(self.skills.activate, session_id, skill.skill_id)
+            preview = await asyncio.to_thread(self.skills.preview_activation, skill.skill_id)
+            confirmation = args[2].strip() if len(args) > 2 else ""
+            if not confirmation:
+                await self._reply_logged(
+                    update,
+                    self._render_skill_activation_preview(preview),
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+            try:
+                await asyncio.to_thread(
+                    self.skills.activate,
+                    session_id,
+                    skill.skill_id,
+                    confirmation,
+                )
+            except SkillError as e:
+                await self._reply_logged(
+                    update,
+                    f"⚠️ Activation refused: {_escape_html(str(e))}",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
             await self._reply_logged(
                 update,
                 f"✅ Activated <code>{_escape_html(skill.skill_id)}</code> for this chat.",
@@ -250,7 +309,10 @@ class CommandsSkillsMixin:
             description = " ".join(args[2:]).strip() if len(args) > 2 else ""
             try:
                 skill = await asyncio.to_thread(self.skills.create_local_skill, name, description)
-                await asyncio.to_thread(self.skills.activate, session_id, skill.skill_id)
+                preview = await asyncio.to_thread(
+                    self.skills.preview_activation,
+                    skill.skill_id,
+                )
             except SkillError as e:
                 await self._reply_logged(
                     update,
@@ -266,7 +328,8 @@ class CommandsSkillsMixin:
                     [
                         f"✅ Created local skill <code>{_escape_html(skill.skill_id)}</code>",
                         f"File: <code>{_escape_html(rel_path)}</code>",
-                        "Auto-activated for this chat.",
+                        "Created inactive with a prompt-only permission manifest.",
+                        self._render_skill_activation_preview(preview),
                     ]
                 ),
                 parse_mode=ParseMode.HTML,

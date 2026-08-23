@@ -25,7 +25,7 @@ LightClaw memory and task workspaces are local by default. Model inference is no
 | Workspace escape | Resolved non-symlink root, per-task direct child directory, external ownership record, external CLI sandbox flags | Trusted host execution intentionally removes this protection |
 | Destructive rollback | Undo requires an ownership record, refuses symlinks/traversal, previews by default, and deletes only one task directory | Files copied elsewhere by trusted execution are outside the undo boundary |
 | Orphan child process | New process group/session plus TERM/KILL tree handling on timeout/cancellation | OS or external CLI defects can still leave processes behind |
-| Malicious skill archive | Archive size limits, encrypted-bundle rejection, normalized install boundary | Skill instructions are untrusted content and require review |
+| Malicious skill archive | Bounded archive parsing, encrypted/ambiguous bundle rejection, permission-manifest validation, inactive install, pinned provenance, and source-plus-manifest hash approval | Reviewed prompt guidance can still be malicious; manifests are not a security audit |
 | Credential leakage in errors | Known-value, assignment, bearer, and Telegram-token redaction | Novel secret formats or secrets shorter than four characters may evade redaction |
 | Dependency compromise | Pinned GitHub Actions, dependency audit, Dependabot, CodeQL, dependency review, Scorecard | Registry and maintainer compromise cannot be eliminated |
 | Log or receipt disclosure | Local storage and redaction are defaults | Anyone with access to the host account can read local state |
@@ -46,8 +46,9 @@ External agent CLIs remain separate security products. Their own version, authen
 - Existing configuration is backed up before a reset.
 - Global Python and generic `~/.env` are not modified by the supported installer.
 - CI fixtures require no paid API key and no Telegram account.
+- Active skills are valid prompt-guidance-only bundles whose reviewed instruction-and-manifest hash still matches; networked, writable, subprocess, or trusted-command declarations remain isolated from the core prompt.
 
-Regression tests cover authorization, environment isolation/redaction, provider routing, traversal and symlink escape, skill archive boundaries, process-tree termination, memory persistence, DAG dependency contracts, and scoped undo.
+Regression tests cover authorization, environment isolation/redaction, provider routing, traversal and symlink escape, skill archive and permission boundaries, stale hash approval, process-tree termination, memory persistence, DAG dependency contracts, and scoped undo.
 
 ## Out of scope
 

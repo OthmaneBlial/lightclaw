@@ -1438,6 +1438,71 @@ def cmd_memory_data(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_skills_admin(args: argparse.Namespace) -> int:
+    """Validate or preview installed/community skills without executing them."""
+    from skills import SkillError, SkillManager, validate_skill_directory
+
+    if args.skills_action == "validate" and args.path:
+        report = validate_skill_directory(args.path)
+        print(json.dumps({"skills": [report], "valid": report["valid"]}, indent=2, sort_keys=True))
+        return 0 if report["valid"] else 1
+
+    home = _resolve_home(args.home)
+    env_path = app_config_path(home)
+    os.environ["LIGHTCLAW_HOME"] = home.as_posix()
+    os.environ["LIGHTCLAW_CONFIG"] = env_path.as_posix()
+    if env_path.is_file():
+        load_dotenv(env_path, override=False)
+
+    from config import load_config
+    from core.personality import resolve_runtime_path
+    config = load_config()
+    config.workspace_path = str(resolve_runtime_path(config.workspace_path))
+    config.skills_state_path = str(resolve_runtime_path(config.skills_state_path))
+    manager = SkillManager(
+        workspace_path=config.workspace_path,
+        skills_state_path=config.skills_state_path,
+        hub_base_url=config.skills_hub_base_url,
+    )
+    try:
+        action = args.skills_action
+        if action == "list":
+            payload: object = [
+                {
+                    "skill_id": record.skill_id,
+                    "name": record.name,
+                    "owner": record.owner,
+                    "version": record.version,
+                    "content_sha256": record.content_sha256,
+                    "valid": not record.validation_errors,
+                    "isolated_only": record.isolated_only,
+                    "errors": list(record.validation_errors),
+                }
+                for record in manager.list_skills()
+            ]
+            exit_code = 0
+        elif action == "validate":
+            reports = (
+                [validate_skill_directory(args.path)]
+                if args.path
+                else manager.validate_all()
+            )
+            payload = {"skills": reports, "valid": all(report["valid"] for report in reports)}
+            exit_code = 0 if payload["valid"] else 1
+        elif action == "preview":
+            if not args.ref:
+                raise SkillError("skills preview requires a skill id")
+            payload = manager.preview_activation(args.ref)
+            exit_code = 0 if payload["valid"] else 1
+        else:
+            raise SkillError(f"unknown skills action: {action}")
+    except (OSError, SkillError, ValueError) as exc:
+        print(f"Skill operation refused: {exc}")
+        return 2
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    return exit_code
+
+
 def cmd_artifact(args: argparse.Namespace) -> int:
     """Preview or apply a local run-artifact decision."""
     home = _resolve_home(args.home)
@@ -1721,6 +1786,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Apply the displayed export/deletion/prune action",
     )
     memory.set_defaults(func=cmd_memory_data)
+
+    skills_admin = sub.add_parser(
+        "skills",
+        help="List, validate, or preview permissioned skills without executing them",
+    )
+    skills_admin.add_argument(
+        "skills_action",
+        nargs="?",
+        choices=("list", "validate", "preview"),
+        default="list",
+    )
+    skills_admin.add_argument("ref", nargs="?", help="Installed skill id for preview")
+    skills_admin.add_argument("--path", help="Community skill directory or SKILL.md to validate")
+    skills_admin.add_argument("--home", help="Runtime home directory (default: user home)")
+    skills_admin.set_defaults(func=cmd_skills_admin)
 
     artifact = sub.add_parser(
         "artifact",

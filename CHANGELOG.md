@@ -10,6 +10,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Private JSON/Markdown run receipts with checks, file hashes, artifacts, commands, and recovery context.
 - Reproducible raw benchmark JSON/CSV output.
 - Namespaced SQLite FTS5 lexical memory with bounded retention, private export, selective delete, and an optional embedding-rerank protocol.
+- Permission-manifest skills with inactive-by-default installation, owner/version provenance, source-and-manifest hash review, isolated high-authority declarations, and a non-executing validator.
 
 ## [0.1.0] - Unreleased
 
