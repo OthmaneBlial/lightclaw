@@ -637,9 +637,7 @@ class DelegationExecutionMixin:
                     )
                     if stream_name not in parse_warning_emitted:
                         parse_warning_emitted.add(stream_name)
-                        log.warning(
-                            f"Delegation progress parse warning for {agent} {stream_name}: {e}"
-                        )
+                        log.warning("Delegation progress event could not be parsed")
 
         async def heartbeat_loop():
             while not heartbeat_stop.is_set():
@@ -855,10 +853,7 @@ class DelegationExecutionMixin:
 
         blocked_by = self._delegation_safety_block_reason(task)
         if blocked_by:
-            log.warning(
-                f"[{session_id}] Blocked delegated task by safety policy "
-                f"(agent={agent}, pattern={blocked_by})"
-            )
+            log.warning("Delegated task blocked by safety policy")
             return (
                 "🛑 Delegation blocked by local safety policy.\n"
                 "Reason: potentially destructive task pattern detected.\n"
@@ -935,9 +930,5 @@ class DelegationExecutionMixin:
             lines.append("")
             lines.append(f"stderr: {stderr_excerpt[:700]}")
 
-        log.info(
-            f"[{session_id}] Local agent {agent} finished "
-            f"(ok={result.get('ok')}, exit={result.get('exit_code')}, "
-            f"elapsed={float(result.get('elapsed', 0.0)):.1f}s)"
-        )
+        log.info("Local agent run finished")
         return "\n".join(lines).strip()

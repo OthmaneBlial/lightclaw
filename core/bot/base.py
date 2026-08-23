@@ -19,7 +19,7 @@ from skills import SkillManager
 from ..constants import STRICT_LOCAL_AGENT_DENY_PATTERNS
 from ..logging_setup import log
 from ..personality import load_personality
-from ..security import access_policy_label, redact_text
+from ..security import access_policy_label
 
 
 class BotBaseMixin:
@@ -128,12 +128,12 @@ class BotBaseMixin:
         return re.sub(r"<[^>]+>", "", text)
 
     def _log_user_message(self, session_id: str, text: str):
-        safe = redact_text(self._trim_for_log(text), os.environ)
-        log.info(f"[{session_id}] User: {safe}")
+        # Prompt content and Telegram identifiers are private by default. Detailed
+        # run evidence belongs in local receipts, not the process log.
+        log.info("User message received")
 
     def _log_bot_message(self, session_id: str, text: str):
-        safe = redact_text(self._trim_for_log(text), os.environ)
-        log.info(f"[{session_id}] Bot: {safe}")
+        log.info("Bot response emitted")
 
     @staticmethod
     def _extract_file_mentions(text: str) -> list[str]:

@@ -10,12 +10,14 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 jobs:
   analyze:
     name: Analyze Python
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
