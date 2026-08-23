@@ -9,6 +9,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - A privacy-safe private-alpha evidence contract, structured external tester issue form,
   aggregate generator, and derived release gates that reject identities, free text, stale
   counts, and manually inflated readiness.
+- Versioned `v0.1.0` draft notes covering the full release contract, with CI enforcement
+  that the eventual GitHub Release body is identical and contains no draft placeholders.
 - Structured contribution forms, predictable support/security routes, an evidence-led PR
   standard, and one canonical local quality command.
 - A privacy-gated public showcase with three token-free recipes, sanitized Run Cards,

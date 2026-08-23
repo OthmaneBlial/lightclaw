@@ -12,10 +12,13 @@ Releases are built from GitHub-hosted clean environments. The release workflow v
 ## Release checklist
 
 1. Ensure every Phase 0 gate and deterministic demo is green.
-2. Set the exact version in `pyproject.toml`; update date and links in `CHANGELOG.md`.
+2. Set the exact version in `pyproject.toml`; update date and links in `CHANGELOG.md`, then
+   finalize `docs/releases/vX.Y.Z.md`. The workflow requires the published GitHub body to
+   match that file exactly and refuses draft markers.
 3. Build locally and inspect `twine check dist/*`.
 4. Push the release commit and wait for all required checks.
-5. Create the signed Git tag and GitHub release with the matching `vX.Y.Z` name.
+5. Create the signed Git tag and GitHub release with the matching `vX.Y.Z` name and the
+   committed notes file (`gh release create ... --notes-file docs/releases/vX.Y.Z.md`).
 6. Approve the protected `pypi` environment only after inspecting the workflow's built artifacts.
 7. Verify PyPI metadata/attestations, GitHub assets/attestation, GHCR digest, clean pipx/uv install, deterministic demo, and rollback instructions.
 

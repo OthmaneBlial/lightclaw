@@ -61,6 +61,10 @@ def main() -> int:
         )
         _run("showcase privacy and replay", [PYTHON, "scripts/validate_showcase.py", "--execute"])
         _run("private alpha evidence", [PYTHON, "scripts/aggregate_alpha_reports.py"])
+        _run(
+            "versioned release notes",
+            [PYTHON, "scripts/check_release_notes.py", "docs/releases/v0.1.0.md", "--version", "0.1.0"],
+        )
         _run("launch evidence pack", [PYTHON, "scripts/check_launch_pack.py"])
         _run("tests", [PYTHON, "-m", "pytest", "-q"])
         _run("package build", [PYTHON, "-m", "build"])
