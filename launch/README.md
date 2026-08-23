@@ -20,6 +20,10 @@ privacy-safe aggregate.
 The machine-readable [manifest](manifest.json) and `python scripts/check_launch_pack.py`
 prevent missing assets or silently inflated readiness claims.
 
+Private reports remain outside Git. The [alpha evidence contract](alpha/) validates a
+privacy-safe public aggregate and derives each numerical release gate from its counts and
+timings instead of trusting hand-edited status text.
+
 ## Stage gates
 
 1. **Private alpha (10–20 self-hosters).** Invite people individually. Collect the
@@ -38,4 +42,3 @@ prevent missing assets or silently inflated readiness claims.
 No script in this repository posts to a community, uploads a receipt, recruits users, or
 changes launch status automatically. Those are deliberate maintainer actions that require
 current evidence and channel-specific judgment.
-

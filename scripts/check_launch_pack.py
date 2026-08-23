@@ -8,6 +8,11 @@ import json
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+if __package__:
+    from scripts.aggregate_alpha_reports import validate_aggregate
+else:
+    from aggregate_alpha_reports import validate_aggregate
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 LAUNCH_ROOT = PROJECT_ROOT / "launch"
 MANIFEST_PATH = LAUNCH_ROOT / "manifest.json"
@@ -144,9 +149,28 @@ def validate_launch_pack() -> list[str]:
         if "Claims LightClaw does not make" not in text or text.count("|---") < 1:
             errors.append("launch comparisons need a fit table and explicit non-claims")
 
+    alpha = _resolve(manifest.get("private_alpha_aggregate"), "private_alpha_aggregate", errors)
+    if alpha:
+        aggregate = _load_object(alpha, errors)
+        errors.extend(validate_aggregate(aggregate))
+
     status = _resolve(manifest.get("status"), "status", errors)
     if status:
         _validate_status(status, errors)
+        if alpha:
+            status_value = _load_object(status, errors)
+            alpha_status = status_value.get("stages", {}).get("private_alpha", {})
+            report_count = aggregate.get("collection", {}).get("report_count")
+            if alpha_status.get("completed_reports") != report_count:
+                errors.append("launch status: private alpha count must match the validated aggregate")
+            if alpha_status.get("target_reports_min") != 10 or alpha_status.get("target_reports_max") != 20:
+                errors.append("launch status: private alpha target must remain 10-20 reports")
+            alpha_gate = aggregate.get("gates", {}).get("release_ready")
+            expected_alpha_status = (
+                "completed" if alpha_gate == "met" else "not_started" if report_count == 0 else "in_progress"
+            )
+            if alpha_status.get("status") != expected_alpha_status:
+                errors.append("launch status: private alpha stage must match its evidence-derived gate")
     return errors
 
 
@@ -157,10 +181,12 @@ def main() -> int:
         for error in errors:
             print(f"- {error}")
         return 1
-    print("Launch pack validation passed: 1 headline, 24s clip, 5-minute quickstart, 3 recipes, diagram, raw data, and comparisons.")
+    print(
+        "Launch pack validation passed: 1 headline, 24s clip, 5-minute quickstart, "
+        "3 recipes, diagram, raw data, comparisons, and alpha evidence contract."
+    )
     return 0
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

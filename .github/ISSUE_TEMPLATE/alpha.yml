@@ -1,0 +1,100 @@
+name: Alpha installation report
+description: Submit bounded, sanitized installation and time-to-success evidence.
+title: "[Alpha]: "
+labels: ["alpha-report", "needs-review"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing LightClaw as an external self-hoster. This issue is public.
+        Never include prompts, receipts, repository names/content, local paths, Telegram
+        identities, tokens, request IDs, screenshots, or other private data.
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Privacy and aggregate consent
+      options:
+        - label: I am not the LightClaw maintainer and attempted this on my own environment.
+          required: true
+        - label: This report contains only synthetic or explicitly publishable information.
+          required: true
+        - label: The maintainer may include these bounded values in an anonymous aggregate.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: LightClaw version or commit
+      placeholder: v0.1.0 or 0123abc
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS family
+      options: [Linux, macOS, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: python
+    attributes:
+      label: Python version
+      options: ["3.10", "3.11", "3.12", "3.13"]
+    validations:
+      required: true
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Isolated install method
+      options: [pipx, uv tool, virtual environment, container, other]
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Did the fresh install complete?
+      options: ["Yes", "No"]
+    validations:
+      required: true
+  - type: dropdown
+    id: demo
+    attributes:
+      label: Did the deterministic demo complete?
+      options: ["Yes", "No", "Not attempted because install failed"]
+    validations:
+      required: true
+  - type: input
+    id: demo_seconds
+    attributes:
+      label: Deterministic time-to-success in seconds
+      description: Enter a whole number, or `not completed`. Do not estimate an omitted value.
+      placeholder: "145"
+    validations:
+      required: true
+  - type: dropdown
+    id: telegram
+    attributes:
+      label: Did a real Telegram task with disposable data complete?
+      options: ["Yes", "No", "Not attempted"]
+    validations:
+      required: true
+  - type: input
+    id: telegram_seconds
+    attributes:
+      label: Telegram time-to-first-result in seconds
+      description: Enter a whole number, or `not completed` / `not attempted`.
+      placeholder: "420"
+    validations:
+      required: true
+  - type: dropdown
+    id: artifact
+    attributes:
+      label: Was the expected artifact or receipt produced?
+      options: ["Yes", "No", "Not attempted"]
+    validations:
+      required: true
+  - type: textarea
+    id: failure
+    attributes:
+      label: Optional smallest sanitized failure
+      description: Keep this empty when it would reveal any private data.
+      placeholder: One bounded reproduction using only disposable data.

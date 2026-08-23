@@ -13,6 +13,7 @@ lightclaw.db
 *.db
 .lightclaw/
 workspace/
+evidence/private-alpha/
 
 # IDE
 .vscode/

@@ -1,0 +1,51 @@
+{
+  "collection": {
+    "ended_at": null,
+    "report_count": 0,
+    "started_at": null,
+    "unique_external_testers": 0
+  },
+  "gates": {
+    "cohort_10_to_20": "not_met",
+    "deterministic_median_under_180_seconds": "not_met",
+    "nine_demo_successes": "not_met",
+    "release_ready": "not_met",
+    "telegram_median_under_600_seconds": "not_met"
+  },
+  "outcomes": {
+    "artifact_receipt_failures": 0,
+    "artifact_receipt_missing": 0,
+    "artifact_receipt_successes": 0,
+    "deterministic_demo_attempts": 0,
+    "deterministic_demo_failures": 0,
+    "deterministic_demo_successes": 0,
+    "deterministic_time_seconds": {
+      "median": null,
+      "missing_count": 0,
+      "sample_count": 0
+    },
+    "install_attempts": 0,
+    "install_failures": 0,
+    "install_successes": 0,
+    "telegram_attempts": 0,
+    "telegram_failures": 0,
+    "telegram_successes": 0,
+    "telegram_time_seconds": {
+      "median": null,
+      "missing_count": 0,
+      "sample_count": 0
+    }
+  },
+  "privacy": {
+    "contains_free_text": false,
+    "contains_identifiers": false,
+    "raw_reports_committed": false
+  },
+  "schema_version": 1,
+  "tested": {
+    "install_methods": {},
+    "lightclaw_versions": {},
+    "os_families": {},
+    "python_versions": {}
+  }
+}
