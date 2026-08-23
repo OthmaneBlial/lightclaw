@@ -1,7 +1,7 @@
 # LightClaw - Minimal AI Agent
 # Core dependencies only
 
-python-telegram-bot~=21.0
+python-telegram-bot>=21,<23
 openai>=2,<4
 anthropic>=1,<2
 google-genai>=2,<3
