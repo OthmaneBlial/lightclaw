@@ -1258,6 +1258,37 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 1 if report["overall"] == "error" else 0
 
 
+def cmd_demo(args: argparse.Namespace) -> int:
+    """Run a deterministic, token-free product story."""
+    from core.demo import run_demo
+
+    scenario = args.scenario
+    if args.output:
+        output = Path(args.output).expanduser().resolve()
+    else:
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
+        output = Path.home() / RUNTIME_DIRNAME / "demo" / f"{stamp}-{scenario}"
+    try:
+        result = run_demo(scenario, output)
+    except ValueError as exc:
+        print(f"Demo refused: {exc}")
+        return 2
+
+    if args.json:
+        print(json.dumps(result, indent=2, sort_keys=True))
+    else:
+        print("LightClaw deterministic demo")
+        print(f"- Scenario: {scenario}")
+        for check in result["checks"]:
+            marker = "PASS" if check["passed"] else "FAIL"
+            print(f"- [{marker}] {check['name']}: {check['evidence']}")
+        print(f"- Artifact root: {result['output_dir']}")
+        print(f"- JSON receipt: {result['receipt_json']}")
+        print(f"- Markdown receipt: {result['receipt_markdown']}")
+        print("- Provider tokens used: 0")
+    return 0 if result["ok"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="lightclaw", description="LightClaw CLI")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1339,6 +1370,27 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit a stable JSON report for support and CI",
     )
     doctor.set_defaults(func=cmd_doctor)
+
+    demo = sub.add_parser(
+        "demo",
+        help="Run a deterministic success story without Telegram or API keys",
+    )
+    demo.add_argument(
+        "--scenario",
+        choices=("memory", "repo-task", "multi-agent"),
+        default="repo-task",
+        help="Fixture story to run (default: repo-task)",
+    )
+    demo.add_argument(
+        "--output",
+        help="Empty output directory (default: ~/.lightclaw/demo/<timestamp>-<scenario>)",
+    )
+    demo.add_argument(
+        "--json",
+        action="store_true",
+        help="Print a machine-readable result",
+    )
+    demo.set_defaults(func=cmd_demo)
 
     uninstall = sub.add_parser(
         "uninstall",

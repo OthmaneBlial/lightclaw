@@ -24,7 +24,7 @@ class CommandsBasicMixin:
         await self._reply_logged(
             update,
             "🦞 <b>LightClaw</b> is ready!\n\n"
-            "I'm your AI assistant with infinite memory. "
+            "I'm your AI assistant with persistent local memory. "
             "I remember everything we've talked about, even across sessions.\n\n"
             "<b>Commands:</b>\n"
             "/help - Show this message\n"

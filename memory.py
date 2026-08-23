@@ -1,7 +1,6 @@
 """
-LightClaw — Infinite Memory
-SQLite-backed persistent memory with TF-IDF vector similarity for RAG recall.
-SQLite-based infinite memory with vector-based RAG.
+LightClaw — Persistent Local Memory
+SQLite-backed memory with local lexical-vector similarity for bounded recall.
 """
 
 import logging
@@ -102,11 +101,12 @@ class MemoryRecord:
 
 class MemoryStore:
     """
-    Persistent memory with semantic recall.
+    Persistent memory with local lexical-vector recall.
 
     Uses SQLite for storage and TF-IDF vectors for similarity search.
-    Each interaction is stored and can be recalled based on semantic
-    similarity to a query — enabling "infinite memory" across sessions.
+    Each interaction is stored and can be recalled based on token overlap and
+    vector similarity. Retrieval performs a full SQLite scan and is intended
+    for small-to-medium local stores.
     """
 
     def __init__(self, db_path: str = "lightclaw.db"):

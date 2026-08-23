@@ -54,6 +54,17 @@ Configuration files are written with mode `0600`. An existing config is kept unl
 
 At least one numeric `TELEGRAM_ALLOWED_USERS` ID is required. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and should still be isolated from sensitive host data.
 
+## Optional container
+
+Build the pinned Python 3.13 image locally:
+
+```bash
+docker build -t lightclaw:local .
+docker run --rm lightclaw:local --help
+```
+
+Mount app config read-only and runtime data read/write when running the bot. The image uses an unprivileged `lightclaw` user. Container isolation is an additional boundary, not permission to expose a public high-authority bot.
+
 ## Upgrade
 
 With pipx:

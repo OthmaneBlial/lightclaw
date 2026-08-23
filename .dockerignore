@@ -1,0 +1,12 @@
+.git
+.github
+.venv
+build
+dist
+*.egg-info
+__pycache__
+*.pyc
+.env
+.lightclaw
+workspace
+bench/results

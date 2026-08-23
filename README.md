@@ -1,271 +1,154 @@
 # LightClaw
 
-LightClaw is a **self-hosted Telegram AI agent** inspired by OpenClaw: a Python codebase with persistent local memory, multi-provider LLM routing, skills, and local multi-agent delegation.
+**Turn a Telegram request into reviewed, verified work on your local projects.**
 
-If you are searching for an **OpenClaw alternative**, **OpenClaw in Python**, or a **Telegram AI bot with memory**, this project is built for that workflow.
+[![CI](https://github.com/OthmaneBlial/lightclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/OthmaneBlial/lightclaw/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/OthmaneBlial/lightclaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/OthmaneBlial/lightclaw/actions/workflows/codeql.yml)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-58c7ff)](pyproject.toml)
+[![MIT](https://img.shields.io/badge/license-MIT-72f1b8)](LICENSE)
 
-<div align="center">
-  <img src="logo.png" alt="LightClaw logo" width="420">
-</div>
+LightClaw is an auditable Telegram mission control for local Codex and Claude coding agents. You send a goal, review the scoped DAG, watch bounded workers, and receive the diff, checks, artifacts, cost/time evidence, and recovery instructions.
 
-## Security Disclaimer
+![Silent 24-second LightClaw walkthrough: request, plan, workers, tests, and run receipt](assets/demo.svg)
 
-LightClaw can execute impactful actions (file edits and delegated local agent runs). It fails closed unless numeric `TELEGRAM_ALLOWED_USERS` are configured; public access requires the explicit `LIGHTCLAW_PUBLIC_BOT_ACK=yes` override. Use least-privilege credentials and review installed skills.
+[Watch the demo](#see-it-work-without-a-token) · [Install safely](docs/INSTALL.md) · [Read the security boundary](docs/THREAT_MODEL.md)
 
-Read the [security policy](SECURITY.md) and [threat model](docs/THREAT_MODEL.md) before exposing a bot.
+> Alpha software with meaningful host access. Telegram access fails closed, delegated workers do not inherit provider secrets, and trusted host execution always requires per-run confirmation.
 
-## Why LightClaw
+## One complete story
 
-- Lightweight and forkable: understand the core quickly and customize without framework overhead.
-- Practical for solo builders: run on small VPS machines with minimal setup.
-- Built for real usage: memory recall, file operations, skills, and delegated coding agents.
+1. From Telegram: “Add a health check, test it, and return only verified work.”
+2. LightClaw shows `builder → verifier`, requested paths, risk, and capability before execution.
+3. You approve, edit, or cancel the plan.
+4. Workers run in a dedicated task directory with a minimal environment.
+5. LightClaw returns actual test evidence, file hashes, artifacts, a private JSON/Markdown receipt, and a scoped undo path.
 
-## Core Features
+That loop—not a long channel list—is the product.
 
-- Persistent SQLite memory with local lexical recall.
-- 6 LLM providers: OpenAI, xAI, Anthropic, Gemini, DeepSeek, Z-AI.
-- Telegram-first experience with command-driven workflow.
-- Local terminal chat mode (`lightclaw chat`) using the same runtime stack.
-- Skills system (hub + local skills).
-- Local agent delegation (`codex`, `claude`) for large coding tasks.
-- Smart multi-agent orchestration with auto-planning, dependencies, and confirmation flow.
-- Workspace-native code generation/editing with compact delta reports.
-- Optional voice transcription with Groq Whisper.
+## See it work without a token
 
-## Quick Start
-
-### 1) One-command setup (recommended)
-
-```bash
-git clone https://github.com/OthmaneBlial/lightclaw.git && cd lightclaw && bash setup.sh
-```
-
-`setup.sh` does everything automatically:
-
-- Installs the `lightclaw` command at `~/.local/bin/lightclaw`
-- Writes private app config to `~/.config/lightclaw/config.env`
-- Creates runtime files in `~/.lightclaw`
-
-Then run:
-
-```bash
-lightclaw run
-```
-
-If your shell has not reloaded `PATH` yet, use:
-
-```bash
-~/.local/bin/lightclaw run
-```
-
-### 2) Manual setup
+The deterministic demo contacts no model and needs no Telegram account:
 
 ```bash
 git clone https://github.com/OthmaneBlial/lightclaw.git
 cd lightclaw
-python3 -m venv .venv
-. .venv/bin/activate
+python3 -m venv .venv && . .venv/bin/activate
 python -m pip install -e .
-lightclaw onboard
+lightclaw demo
 ```
 
-Then edit `~/.config/lightclaw/config.env` and start:
+It creates a tiny Python service, runs a real unit test, and finishes with observable artifacts plus `receipt.json` and `receipt.md`. Try every product story:
 
 ```bash
-lightclaw run
+lightclaw demo --scenario memory
+lightclaw demo --scenario repo-task
+lightclaw demo --scenario multi-agent
 ```
 
-## Minimal App Config Example
+The exact prompts, outputs, cost boundaries, cleanup, and limitations live in:
 
-```env
-# Provider selection
-LLM_PROVIDER=openai
-LLM_MODEL=latest
+- [Telegram memory](examples/telegram-memory/README.md)
+- [Telegram repository task](examples/telegram-repo-task/README.md)
+- [Telegram multi-agent plan](examples/telegram-multi-agent/README.md)
 
-# Provider keys (fill what you use)
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-ANTHROPIC_AUTH_TOKEN=
-ANTHROPIC_BASE_URL=
-DEEPSEEK_API_KEY=
+## LightClaw is / is not
 
-# Telegram
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_ALLOWED_USERS=123456789
-LIGHTCLAW_PUBLIC_BOT_ACK=no
+| LightClaw is | LightClaw is not |
+|---|---|
+| A Telegram-first review and control surface for local coding agents | A hosted multi-tenant agent service |
+| Local SQLite memory, task workspaces, receipts, and skills | Fully local inference when a hosted model is configured |
+| Human approval around plans and trusted execution | A guarantee that model-generated changes are correct |
+| A small Python product with optional edges | A feature-for-feature OpenClaw clone |
+| Auditable fixture stories that run for $0 | Proof of real-provider latency, cost, or availability |
 
-# Optional generation tuning
-MAX_OUTPUT_TOKENS=12000
+## Safe installation
 
-# Local delegated agents
-LOCAL_AGENT_TIMEOUT_SEC=1800
-LOCAL_AGENT_PROGRESS_INTERVAL_SEC=30
-LOCAL_AGENT_MULTI_DEFAULT_AGENTS=claude,codex
-LOCAL_AGENT_MULTI_AUTO_CONTINUE=no
-LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS=1
-LOCAL_AGENT_SAFETY_MODE=strict
-LOCAL_AGENT_CAPABILITY_PROFILE=workspace-write
-LOCAL_AGENT_DENY_PATTERNS=
-
-# Skills
-SKILLS_HUB_BASE_URL=https://clawhub.ai
-SKILLS_STATE_PATH=.lightclaw/skills_state.json
-```
-
-## CLI Commands
+Use an isolated tool environment:
 
 ```bash
-lightclaw onboard
-lightclaw onboard --reset-env
+pipx install 'git+https://github.com/OthmaneBlial/lightclaw.git'
+# or
+uv tool install 'git+https://github.com/OthmaneBlial/lightclaw.git'
+```
+
+Then:
+
+```bash
+lightclaw demo
 lightclaw onboard --configure
 lightclaw doctor
-lightclaw doctor --json
 lightclaw run
-lightclaw run --provider deepseek --model deepseek-chat
-lightclaw chat
-lightclaw undo <task-workspace-label>
-lightclaw uninstall --dry-run
 ```
 
-See the complete [install, upgrade, undo, and uninstall guide](docs/INSTALL.md).
+The supported paths are app-specific:
 
-## Telegram / Chat Commands
+- config: `~/.config/lightclaw/config.env` (mode `0600`);
+- memory, skills, logs, and receipts: `~/.lightclaw/`;
+- owned task workspaces: `~/.lightclaw/workspace/`.
 
-| Command | Purpose |
-|---|---|
-| `/help` | Show command help |
-| `/memory` | Memory stats |
-| `/recall <query>` | Semantic memory search |
-| `/skills ...` | Search/install/activate skills |
-| `/agent` | Local agent delegation controls |
-| `/agent doctor` | Agent install/auth diagnostics |
-| `/agent multi <goal>` | Auto-plan multi-agent run |
-| `/agent multi @claude @codex <goal>` | Prefer specific agents |
-| `/agent multi --agent backend=codex --agent qa=claude <goal>` | Explicit worker roster |
-| `/agent multi confirm` | Execute pending plan |
-| `/agent multi edit <feedback>` | Regenerate pending plan |
-| `/agent multi cancel` | Cancel pending plan |
-| `/show` | Current runtime/provider/model status |
-| `/clear` | Reset current chat history |
-| `/wipe_memory` | Wipe all saved memory (confirmation required) |
+Existing configuration is backed up before reset. The compatibility installer uses its own virtual environment and never installs into global Python. See [install, upgrade, undo, and uninstall](docs/INSTALL.md).
 
-## Smart Multi-Agent Mode
-
-Full guide with many usage examples: [MULTI_AGENT.md](MULTI_AGENT.md)
-
-`/agent multi` supports three ways to define worker assignment:
-
-1. Auto mode:
+## Signature workflow
 
 ```text
-/agent multi build a full stack todo app
+Telegram text or voice goal
+  -> scoped DAG with risk, paths, and expected outputs
+  -> approve / edit / deny
+  -> isolated Codex or Claude workers
+  -> compact live progress
+  -> tests + artifacts + file evidence + receipt
+  -> accept / undo / export
 ```
 
-2. Preferred agents (no labels):
+Current capabilities include:
 
-```text
-/agent multi @claude @codex build a full stack todo app
-```
+- fail-closed Telegram allowlisting and privileged-command rate limits;
+- OpenAI, xAI, Anthropic, Gemini, DeepSeek, and Z-AI routing;
+- Codex and Claude delegation profiles: `observe`, `workspace-write`, `trusted-command`;
+- DAG planning, owned paths, JSON handoffs, acceptance checks, and bounded repair;
+- persistent SQLite memory with local lexical-vector recall;
+- local and hub skills with archive/install boundaries;
+- voice transcription, scheduled jobs, heartbeat, Telegram, and terminal chat;
+- token-free fixture adapters used by the full CI matrix.
 
-3. Explicit roster override (backward compatible):
+## Security model
 
-```text
-/agent multi --agent backend=codex --agent frontend=claude --agent docs=codex build a full stack todo app
-```
+An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes`. Delegated processes get a minimal environment that excludes Telegram/provider keys. `lightclaw undo` refuses paths that lack a LightClaw ownership record.
 
-You can also declare explicit dependencies in the DAG:
+These controls do not protect the host after you explicitly enable `trusted-command`, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
 
-```text
-/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude --depends-on integration=backend,frontend build the app
-```
+Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Report vulnerabilities through [private vulnerability reporting](https://github.com/OthmaneBlial/lightclaw/security/advisories/new), never a public issue.
 
-With explicit rosters, dependency hints in the goal are still respected when you do not pass `--depends-on`. Example:
+## Documentation
 
-```text
-/agent multi --agent backend=codex --agent frontend=claude --agent integration=claude build the app, keep backend and frontend parallel, and make integration wait for backend and frontend
-```
+- [Install, upgrade, undo, uninstall](docs/INSTALL.md)
+- [Threat model](docs/THREAT_MODEL.md)
+- [Upgrade and rollback policy](docs/UPGRADING.md)
+- [Optional systemd service](docs/SYSTEMD.md)
+- [Reproducible benchmarks](bench/README.md)
+- [Multi-agent guide](MULTI_AGENT.md)
+- [Roadmap](ROADMAP.md)
+- [Security policy](SECURITY.md)
 
-How it runs:
+## Honest alpha limits
 
-- Plan is generated and shown first.
-- Confirmation is required by default (`confirm`, `yes`) unless `LOCAL_AGENT_MULTI_AUTO_CONTINUE=yes`.
-- `edit` lets you iterate the plan before execution.
-- `cancel` or `no` clears the pending plan.
-- Execution now follows true DAG scheduling, so downstream lanes can start as soon as their own dependencies finish.
-- Each worker gets owned paths, must write `handoff/<lane>.md` plus `handoff/<lane>.json`, and is checked against lightweight acceptance rules.
-- The same contract system now handles non-coding lanes too, including research, analysis, authoring, and review/validation roles.
-- Acceptance can now run small bounded repo-local commands when a lane declares `command_succeeds`.
-- Backend/frontend lanes also get automatic handoff JSON field checks, so `outputs.endpoints` and `outputs.api_calls` must actually be populated.
-- Docs/authoring lanes now get the same treatment via `outputs.deliverables`, so non-code artifacts are tracked in a machine-readable way too.
-- Research/review and docs/authoring runs now also get lightweight cross-lane findings/deliverables audits in the final report.
-- Backend/frontend runs also get a lightweight cross-lane API audit from handoff JSON, so method/path mismatches are surfaced in the final report.
-- Failed lanes can get a small self-repair pass controlled by `LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS` (clamped to `0..2`).
+- Memory retrieval currently scans SQLite records and uses in-process lexical vectors; it is not an external embedding/vector database.
+- Fixture demos prove LightClaw contracts, not external model quality.
+- External coding-agent CLIs remain separate security boundaries with their own versions and settings.
+- The package is installable from Git today; the first stable PyPI release follows the release gate in the roadmap.
 
-## Supported Providers
-
-| Provider | Set `LLM_PROVIDER` | Example Models |
-|---|---|---|
-| OpenAI | `openai` | `gpt-5.2`, `gpt-5.2-mini` |
-| xAI | `xai` | `grok-4-latest` |
-| Claude | `claude` | `claude-opus-4-5`, `claude-sonnet-4-5` |
-| Gemini | `gemini` | `gemini-3-flash-preview`, `gemini-2.5-flash` |
-| DeepSeek | `deepseek` | `deepseek-chat`, `deepseek-reasoner` |
-| Z-AI | `zai` | `glm-5`, `glm-4.7` |
-
-Quick provider check:
+## Development
 
 ```bash
-python scripts/provider_smoke_test.py
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev]'
+ruff check config.py lightclaw_cli.py main.py memory.py providers.py skills.py core tests
+pytest -q
+python -m build
+pip-audit --skip-editable
 ```
 
-## Skills (Hub + Local)
+CI runs the key-free suite on Python 3.10–3.13 across Ubuntu and macOS, builds and installs the wheel, audits dependencies, and runs all three deterministic product stories.
 
-Examples:
-
-```text
-/skills search sonos
-/skills add sonoscli
-/skills use sonoscli
-/skills off sonoscli
-/skills create my_custom_skill "My private workflow"
-```
-
-Paths:
-
-- Hub skills: `~/.lightclaw/skills/hub/<slug>/SKILL.md`
-- Local skills: `~/.lightclaw/skills/local/<name>/SKILL.md`
-
-## Architecture (Short)
-
-```text
-Telegram or terminal chat
-  -> memory recall (SQLite + semantic search)
-  -> provider routing (OpenAI/xAI/Claude/Gemini/DeepSeek/Z-AI)
-  -> response + optional file operations in ~/.lightclaw/workspace
-  -> optional delegated local agents (single or multi-worker)
-```
-
-## OpenClaw and LightClaw
-
-- OpenClaw: larger TypeScript platform for broad, multi-app orchestration.
-- LightClaw: focused Python core for fast local customization and Telegram-first workflows.
-
-OpenClaw links:
-
-- https://github.com/openclaw/openclaw
-- https://docs.openclaw.ai/
-
-## Requirements
-
-- Python 3.10+
-- Telegram bot token from [@BotFather](https://t.me/BotFather)
-- API credentials for at least one supported LLM provider
-- Optional: Groq API key for voice transcription
-
-## License
-
-MIT
-
----
-
-LightClaw is intentionally small: easy to read, easy to fork, and fast to ship.
+Licensed under [MIT](LICENSE).

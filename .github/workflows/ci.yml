@@ -48,6 +48,20 @@ jobs:
         run: ruff check config.py lightclaw_cli.py main.py memory.py providers.py skills.py core tests
       - name: Test with coverage evidence
         run: python -m pytest --cov=core --cov=config --cov=lightclaw_cli --cov=memory --cov=providers --cov=skills --cov-report=term-missing --cov-report=xml
+      - name: Run all token-free product stories
+        run: |
+          demo_root="$(mktemp -d)"
+          lightclaw demo --scenario memory --output "$demo_root/memory" --json
+          lightclaw demo --scenario repo-task --output "$demo_root/repo-task" --json
+          lightclaw demo --scenario multi-agent --output "$demo_root/multi-agent" --json
+          test -s "$demo_root/memory/receipt.json"
+          test -s "$demo_root/repo-task/artifact/test-output.txt"
+          test -s "$demo_root/multi-agent/artifact/final-audit.json"
+      - name: Run reproducible fixture benchmark
+        run: |
+          python -m bench.run --mode fixture --runs 3 --output /tmp/lightclaw-bench
+          test -s /tmp/lightclaw-bench.json
+          test -s /tmp/lightclaw-bench.csv
       - name: Audit Python dependencies
         run: pip-audit --skip-editable
       - name: Build wheel and source distribution

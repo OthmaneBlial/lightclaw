@@ -152,41 +152,41 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 
 ### P1.1 Rebuild the README around one result
 
-- [ ] Lead with: **“Turn a Telegram request into reviewed, verified work on your local projects.”**
-- [ ] Put a silent, captioned 20–30 second Telegram demo directly below the headline.
-- [ ] Show one complete story: request, DAG plan, approval, parallel work, checks, and final diff/artifact.
-- [ ] Put `Watch the demo` and `Install safely` before the feature inventory.
-- [ ] Add a concise “LightClaw is / is not” table.
-- [ ] Move provider matrices, command catalogs, and deep orchestration details into docs.
+- [x] Lead with: **“Turn a Telegram request into reviewed, verified work on your local projects.”**
+- [x] Put a silent, captioned 20–30 second Telegram demo directly below the headline.
+- [x] Show one complete story: request, DAG plan, approval, parallel work, checks, and final diff/artifact.
+- [x] Put `Watch the demo` and `Install safely` before the feature inventory.
+- [x] Add a concise “LightClaw is / is not” table.
+- [x] Move provider matrices, command catalogs, and deep orchestration details into docs.
 
 ### P1.2 Make success deterministic
 
-- [ ] Add `lightclaw demo` using recorded/fake adapters, with no token, paid API, or Telegram account required.
-- [ ] Finish with an observable artifact and receipt, not merely “process started.”
-- [ ] Add `lightclaw doctor --json` for support and CI, with aggressive secret redaction.
-- [ ] Keep the first-run happy path to five commands or fewer.
+- [x] Add `lightclaw demo` using recorded/fake adapters, with no token, paid API, or Telegram account required.
+- [x] Finish with an observable artifact and receipt, not merely “process started.”
+- [x] Add `lightclaw doctor --json` for support and CI, with aggressive secret redaction.
+- [x] Keep the first-run happy path to five commands or fewer.
 
 ### P1.3 Ship three reproducible stories
 
-- [ ] `examples/telegram-memory`: store, restart, and recall a known fact.
-- [ ] `examples/telegram-repo-task`: modify a bounded fixture repo and return a diff plus tests.
-- [ ] `examples/telegram-multi-agent`: approve a two-lane plan and produce handoffs plus a final audit.
-- [ ] Include prerequisites, exact prompt, expected output, duration/cost range, cleanup, and security limits in each example.
+- [x] `examples/telegram-memory`: store, restart, and recall a known fact.
+- [x] `examples/telegram-repo-task`: modify a bounded fixture repo and return a diff plus tests.
+- [x] `examples/telegram-multi-agent`: approve a two-lane plan and produce handoffs plus a final audit.
+- [x] Include prerequisites, exact prompt, expected output, duration/cost range, cleanup, and security limits in each example.
 - [ ] Run fixture mode for every example in CI; document a separate real-device/manual verification.
 
 ### P1.4 Measure “lightweight” honestly
 
-- [ ] Add a reproducible `bench/` suite with raw JSON/CSV output.
+- [x] Add a reproducible `bench/` suite with raw JSON/CSV output.
 - [ ] Measure clean install time, dependency count, idle RAM, startup time, routing overhead, core LOC, and minimum tested VPS/container size.
-- [ ] Add memory retrieval quality on a versioned fixture corpus.
-- [ ] Add a deterministic orchestration scenario measuring dependency order, handoff completion, failure reporting, and repair behavior.
+- [x] Add memory retrieval quality on a versioned fixture corpus.
+- [x] Add a deterministic orchestration scenario measuring dependency order, handoff completion, failure reporting, and repair behavior.
 - [ ] Publish commit, OS, Python, hardware, run count, and whether each result is mocked or live.
-- [ ] Replace “tiny” and “infinite” with precise numbers until the stronger claims are earned.
+- [x] Replace “tiny” and “infinite” with precise numbers until the stronger claims are earned.
 
 ### P1.5 Cut the first credible release
 
-- [ ] Add `CHANGELOG.md` and an upgrade/migration policy.
-- [ ] Build and verify wheel and sdist in clean environments.
+- [x] Add `CHANGELOG.md` and an upgrade/migration policy.
+- [x] Build and verify wheel and sdist in clean environments.
 - [ ] Publish the distinct package distribution through PyPI Trusted Publishing with attestations.
 - [ ] Release `v0.1.0` only when Phase 0 and the deterministic demo are green.
 - [ ] Include install, upgrade, uninstall, compatibility, known limitations, and security boundaries in release notes.
