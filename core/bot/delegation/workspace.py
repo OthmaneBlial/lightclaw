@@ -65,6 +65,12 @@ class DelegationWorkspaceMixin:
         workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
         snapshot: dict[str, tuple[int, int]] = {}
         for path in workspace.rglob("*"):
+            try:
+                relative_parts = path.relative_to(workspace).parts
+            except ValueError:
+                continue
+            if ".git" in relative_parts or ".lightclaw-meta" in relative_parts:
+                continue
             if not path.is_file():
                 continue
             try:

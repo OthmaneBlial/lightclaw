@@ -21,7 +21,7 @@ LightClaw is an auditable Telegram mission control for local Codex and Claude co
 2. LightClaw shows `builder → verifier`, requested paths, risk, and capability before execution.
 3. You approve, edit, or cancel the plan.
 4. Workers run in a dedicated task directory with a minimal environment.
-5. LightClaw returns actual test evidence, file hashes, artifacts, a private JSON/Markdown receipt, and a scoped undo path.
+5. LightClaw returns actual test evidence, a reviewable Git patch/branch, file hashes, a private JSON/Markdown receipt, and a scoped undo path.
 
 That loop—not a long channel list—is the product.
 
@@ -37,7 +37,7 @@ python -m pip install -e .
 lightclaw demo
 ```
 
-It creates a tiny Python service, runs a real unit test, and finishes with observable artifacts plus `receipt.json` and `receipt.md`. Try every product story:
+It creates a tiny Git-backed Python service, runs a real unit test, and finishes with `changes.patch`, `artifact.json`, `receipt.json`, and `receipt.md`. Nothing is pushed. Try every product story:
 
 ```bash
 lightclaw demo --scenario memory
@@ -96,8 +96,8 @@ Telegram text or voice goal
   -> approve / edit / deny
   -> isolated Codex or Claude workers
   -> compact live progress
-  -> tests + artifacts + file evidence + receipt
-  -> accept / undo / export
+  -> tests + Git patch + file evidence + receipt
+  -> accept / reject / selective apply / optional PR preview
 ```
 
 Current capabilities include:
@@ -127,6 +127,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Run receipts and sanitized Run Cards](docs/RUN_RECEIPTS.md)
 - [Durable queues, cancellation, and recovery](docs/JOB_CONTROL.md)
 - [Telegram approvals and high-risk confirmation](docs/APPROVALS.md)
+- [Reviewable patches, selective apply, and optional PRs](docs/ARTIFACTS.md)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)

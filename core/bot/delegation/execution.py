@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ...artifacts import ArtifactError, create_patch_bundle, initialize_artifact_repository
 from ...jobs import JobStateError
 from ...logging_setup import log
 from ...receipts import write_receipt
@@ -894,6 +895,7 @@ class DelegationExecutionMixin:
         emit_receipt: bool = True,
         evidence_sink: dict[str, object] | None = None,
         manage_job: bool = True,
+        initialize_artifact: bool = True,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -928,8 +930,18 @@ class DelegationExecutionMixin:
             target_workspace.mkdir(parents=True, exist_ok=True)
         workspace_label = self._workspace_rel_label(target_workspace)
         started_at = self._utc_now()
-        checkpoint = await asyncio.to_thread(capture_git_checkpoint, target_workspace)
         run_id = f"run-{int(time.time())}-{secrets.token_hex(4)}"
+        if initialize_artifact:
+            try:
+                checkpoint = await asyncio.to_thread(
+                    initialize_artifact_repository,
+                    target_workspace,
+                    run_id,
+                )
+            except ArtifactError as exc:
+                return f"⚠️ Could not create the isolated Git checkpoint: {exc}"
+        else:
+            checkpoint = await asyncio.to_thread(capture_git_checkpoint, target_workspace)
         for attribute in (
             "_active_run_ids_by_session",
             "_active_run_tasks_by_session",
@@ -1107,6 +1119,42 @@ class DelegationExecutionMixin:
                 f"elapsed {float(result.get('elapsed', 0.0)):.3f}s"
             ),
         }
+        receipt_output = self._receipt_output_dir(run_id)
+        artifact_bundle: dict[str, object] | None = None
+        if initialize_artifact:
+            try:
+                artifact_bundle = await asyncio.to_thread(
+                    create_patch_bundle,
+                    target_workspace,
+                    receipt_output,
+                    run_id=run_id,
+                )
+            except ArtifactError as exc:
+                artifact_bundle = {"error": str(exc), "diff_stat": "patch generation failed"}
+        artifact_ok = bool(artifact_bundle is None or not artifact_bundle.get("error"))
+        checks = [check]
+        if initialize_artifact:
+            checks.append(
+                {
+                    "name": "review patch generated",
+                    "passed": artifact_ok,
+                    "evidence": (
+                        "private Git patch and manifest recorded"
+                        if artifact_ok
+                        else str(artifact_bundle.get("error") or "patch generation failed")
+                    ),
+                }
+            )
+        run_ok = bool(result.get("ok")) and artifact_ok
+        artifact_paths = [
+            item["path"] for item in file_changes if item.get("change") != "deleted"
+        ]
+        if artifact_bundle:
+            for key in ("patch", "manifest"):
+                value = artifact_bundle.get(key)
+                if value:
+                    artifact_paths.append(str(value))
+
         receipt = {
             "run_id": run_id,
             "original_goal": task,
@@ -1133,15 +1181,25 @@ class DelegationExecutionMixin:
             },
             "commands": commands,
             "file_changes": file_changes,
-            "diff_summary": self._compact_diff_summary(file_changes),
-            "checks": [check],
+            "diff_summary": (
+                str(artifact_bundle.get("diff_stat") or "").strip()
+                if artifact_bundle
+                else self._compact_diff_summary(file_changes)
+            ),
+            "checks": checks,
             "handoffs": [],
-            "artifacts": [
-                item["path"] for item in file_changes if item.get("change") != "deleted"
-            ],
-            "failures": [] if result.get("ok") else [stderr_excerpt or "delegated process failed"],
+            "artifacts": artifact_paths,
+            "failures": (
+                []
+                if run_ok
+                else [
+                    str(artifact_bundle.get("error") or "patch generation failed")
+                    if not artifact_ok and artifact_bundle
+                    else stderr_excerpt or "delegated process failed"
+                ]
+            ),
             "retries": 0,
-            "disposition": "ready_for_review" if result.get("ok") else "failed",
+            "disposition": "ready_for_review" if run_ok else "failed",
             "checkpoint": checkpoint,
             "undo": f"lightclaw undo {target_workspace.name} --apply",
             "workspace": target_workspace.as_posix(),
@@ -1152,7 +1210,7 @@ class DelegationExecutionMixin:
             receipt_json, receipt_markdown, safe_receipt = await asyncio.to_thread(
                 write_receipt,
                 receipt,
-                self._receipt_output_dir(run_id),
+                receipt_output,
             )
             receipt_paths = (receipt_json, receipt_markdown)
             receipt = safe_receipt
@@ -1165,6 +1223,24 @@ class DelegationExecutionMixin:
             if receipt_paths:
                 evidence_sink["receipt_json"] = receipt_paths[0].as_posix()
                 evidence_sink["receipt_markdown"] = receipt_paths[1].as_posix()
+
+        if durable_store is not None:
+            try:
+                await asyncio.to_thread(
+                    durable_store.update_lane,
+                    run_id,
+                    "delegation",
+                    "succeeded" if run_ok else "failed",
+                    error="" if run_ok else str(receipt["failures"][0]),
+                )
+                await asyncio.to_thread(
+                    durable_store.finish,
+                    run_id,
+                    succeeded=run_ok,
+                    error="" if run_ok else str(receipt["failures"][0]),
+                )
+            except JobStateError as exc:
+                log.warning("Could not finalize durable run %s: %s", run_id, exc)
 
         lines = [f"🤖 Delegated to `{agent}`"]
         lines.append(f"📁 Task workspace: `{workspace_label}`")

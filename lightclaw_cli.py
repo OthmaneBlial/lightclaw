@@ -1300,6 +1300,7 @@ def cmd_jobs(args: argparse.Namespace) -> int:
 
     config = load_config()
     config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
+    config.workspace_path = str(resolve_runtime_path(config.workspace_path))
     store = JobStore(Path(config.memory_db_path).resolve().with_name("jobs.db"))
     try:
         action = args.jobs_action
@@ -1353,6 +1354,122 @@ def cmd_jobs(args: argparse.Namespace) -> int:
                     f"- lane {lane.get('label')}: {lane.get('status')} "
                     f"attempt={lane.get('attempt')}/{lane.get('max_attempts')}"
                 )
+    return 0
+
+
+def cmd_artifact(args: argparse.Namespace) -> int:
+    """Preview or apply a local run-artifact decision."""
+    home = _resolve_home(args.home)
+    env_path = app_config_path(home)
+    os.environ["LIGHTCLAW_HOME"] = home.as_posix()
+    os.environ["LIGHTCLAW_CONFIG"] = env_path.as_posix()
+    if env_path.is_file():
+        load_dotenv(env_path, override=False)
+
+    from config import load_config
+    from core.artifacts import (
+        ArtifactError,
+        accept_artifact,
+        apply_selected_files,
+        build_pull_request_preview,
+        publish_pull_request,
+        reject_artifact,
+    )
+    from core.jobs import JobStateError, JobStore
+    from core.personality import resolve_runtime_path
+
+    config = load_config()
+    config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
+    config.workspace_path = str(resolve_runtime_path(config.workspace_path))
+    store = JobStore(Path(config.memory_db_path).resolve().with_name("jobs.db"))
+    try:
+        job = store.get_job(args.run_id)
+        workspace = Path(str(job["workspace"])).resolve()
+        receipt = (
+            Path(args.receipt).expanduser().resolve()
+            if args.receipt
+            else Path(config.workspace_path).expanduser().resolve()
+            / ".lightclaw-meta"
+            / "receipts"
+            / args.run_id
+            / "receipt.json"
+        )
+        action = args.artifact_action
+        if action == "status":
+            manifest = receipt.with_name("artifact.json")
+            payload = {
+                "run": job,
+                "receipt": receipt.as_posix(),
+                "manifest": (
+                    json.loads(manifest.read_text(encoding="utf-8"))
+                    if manifest.is_file()
+                    else None
+                ),
+            }
+        elif action == "accept":
+            if job["status"] != "succeeded":
+                raise JobStateError(f"run is {job['status']}, not succeeded")
+            if not args.apply:
+                payload = {
+                    "applied": False,
+                    "action": "accept",
+                    "run_id": args.run_id,
+                    "workspace": workspace.as_posix(),
+                    "effect": "commit staged changes on the local LightClaw branch only",
+                }
+            else:
+                payload = accept_artifact(workspace, args.run_id)
+                store.accept(args.run_id)
+                payload["applied"] = True
+        elif action == "reject":
+            if job["status"] not in {"succeeded", "failed"}:
+                raise JobStateError(f"run is {job['status']}, not finished")
+            if not args.apply:
+                payload = {
+                    "applied": False,
+                    "action": "reject",
+                    "run_id": args.run_id,
+                    "workspace": workspace.as_posix(),
+                    "effect": "unstage while preserving workspace files",
+                }
+            else:
+                payload = reject_artifact(workspace, args.run_id)
+                store.reject(args.run_id)
+                payload["applied"] = True
+        elif action == "apply":
+            if not args.target or not args.paths:
+                raise ArtifactError("artifact apply requires --target and one or more --paths")
+            payload = apply_selected_files(
+                workspace,
+                args.target,
+                args.paths,
+                run_id=args.run_id,
+                apply=bool(args.apply),
+            )
+        elif action == "pr":
+            preview = build_pull_request_preview(
+                workspace,
+                receipt,
+                run_id=args.run_id,
+                title=args.title or f"LightClaw result {args.run_id}",
+                base=args.base,
+            )
+            payload = (
+                publish_pull_request(preview, confirmation=args.confirm_publish or "")
+                if args.apply
+                else preview
+            )
+        else:
+            raise ArtifactError(f"unknown artifact action: {action}")
+    except (ArtifactError, JobStateError, OSError, json.JSONDecodeError) as exc:
+        print(f"Artifact operation refused: {exc}")
+        return 2
+    finally:
+        store.close()
+
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    if not args.apply and action != "status":
+        print("Preview only; no files, Git refs, or remote services were changed.")
     return 0
 
 
@@ -1500,6 +1617,32 @@ def build_parser() -> argparse.ArgumentParser:
     jobs.add_argument("--home", help="Runtime home directory (default: user home)")
     jobs.add_argument("--json", action="store_true", help="Emit stable JSON")
     jobs.set_defaults(func=cmd_jobs)
+
+    artifact = sub.add_parser(
+        "artifact",
+        help="Preview or apply a reviewed run patch/branch decision",
+    )
+    artifact.add_argument(
+        "artifact_action",
+        choices=("status", "accept", "reject", "apply", "pr"),
+    )
+    artifact.add_argument("run_id", help="Durable run id")
+    artifact.add_argument("--home", help="Runtime home directory (default: user home)")
+    artifact.add_argument("--receipt", help="Private receipt path override")
+    artifact.add_argument("--target", help="Target local repository for selected-file apply")
+    artifact.add_argument("--paths", nargs="+", help="Exact relative files to apply")
+    artifact.add_argument("--title", help="Pull request title")
+    artifact.add_argument("--base", default="main", help="Pull request base branch")
+    artifact.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the displayed local action; PR also requires --confirm-publish",
+    )
+    artifact.add_argument(
+        "--confirm-publish",
+        help="Exact run id required before push and PR creation",
+    )
+    artifact.set_defaults(func=cmd_artifact)
 
     demo = sub.add_parser(
         "demo",

@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from core.bot import LightClawBot
+from core.jobs import JobStore
 
 
 def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeypatch):
@@ -19,6 +20,7 @@ def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeyp
     )
     bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
     bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
 
     async def fake_invoke(**kwargs):
         workspace = Path(kwargs["workspace"])
@@ -35,14 +37,18 @@ def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeyp
 
     bot._invoke_local_agent_streaming = fake_invoke
     evidence: dict[str, object] = {}
-    result = asyncio.run(
-        bot._run_local_agent_task(
-            session_id="fixture-session",
-            agent="codex",
-            task="Create result.txt; credential=sk-receipt-fixture",
-            evidence_sink=evidence,
+    try:
+        result = asyncio.run(
+            bot._run_local_agent_task(
+                session_id="fixture-session",
+                agent="codex",
+                task="Create result.txt; credential=sk-receipt-fixture",
+                evidence_sink=evidence,
+            )
         )
-    )
+        durable_job = bot.jobs.get_job(str(evidence["run_id"]))
+    finally:
+        bot.jobs.close()
 
     receipt_path = Path(str(evidence["receipt_json"]))
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -52,7 +58,11 @@ def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeyp
     assert receipt["file_changes"][0]["path"] == "result.txt"
     assert receipt["file_changes"][0]["change"] == "created"
     assert receipt["checks"][0]["passed"] is True
-    assert receipt["checkpoint"]["is_git"] is False
+    assert receipt["checkpoint"]["type"] == "git-checkpoint"
+    assert receipt["checkpoint"]["branch"].startswith("lightclaw/run-")
+    assert any(str(path).endswith("changes.patch") for path in receipt["artifacts"])
+    assert durable_job["status"] == "succeeded"
+    assert durable_job["lanes"][0]["status"] == "succeeded"
     assert "[REDACTED]" in receipt["original_goal"]
     assert "sk-receipt-fixture" not in receipt_path.read_text(encoding="utf-8")
     assert "Receipt:" in result

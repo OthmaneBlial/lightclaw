@@ -16,6 +16,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from ...artifacts import ArtifactError, create_patch_bundle, initialize_artifact_repository
 from ...jobs import JobConflictError, JobStateError
 from ...markdown import _escape_html
 from ...receipts import write_receipt
@@ -1196,6 +1197,7 @@ class CommandsAgentMixin:
         run_started_at = self._utc_now()
         multi_workspace = await asyncio.to_thread(self._create_task_workspace, goal)
         multi_workspace_label = self._workspace_rel_label(multi_workspace)
+        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
         agents_path = await asyncio.to_thread(
             self._write_agents_plan_file, multi_workspace, plan_payload
         )
@@ -1207,14 +1209,22 @@ class CommandsAgentMixin:
 
         handoff_dir = multi_workspace / "handoff"
         handoff_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            checkpoint = await asyncio.to_thread(
+                initialize_artifact_repository,
+                multi_workspace,
+                run_id,
+            )
+        except ArtifactError as exc:
+            await self._reply_logged(
+                update,
+                f"🛑 Could not create the isolated Git checkpoint: {_escape_html(str(exc))}",
+                parse_mode=ParseMode.HTML,
+            )
+            return
         before_multi = await asyncio.to_thread(
             self._snapshot_workspace_state, multi_workspace
         )
-        checkpoint = {
-            "type": "new-owned-directory",
-            "pre_existing_files": len(before_multi),
-            "workspace": multi_workspace_label,
-        }
 
         plan_lines = ["🤖 <b>Multi-Agent Execution</b>", ""]
         plan_lines.append(f"<b>Goal:</b> {_escape_html(goal)}")
@@ -1282,7 +1292,6 @@ class CommandsAgentMixin:
             0,
             min(2, int(getattr(self.config, "local_agent_multi_repair_attempts", 1))),
         )
-        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
         durable_plan: list[dict[str, object]] = []
         for label, agent in workers:
             contract = worker_contract_by_label.get(label, {})
@@ -1416,6 +1425,7 @@ class CommandsAgentMixin:
                         emit_receipt=False,
                         evidence_sink=worker_evidence,
                         manage_job=False,
+                        initialize_artifact=False,
                     )
                     attempt_evidence.append(worker_evidence)
                 except Exception as e:
@@ -1768,6 +1778,25 @@ class CommandsAgentMixin:
                     "owned_paths": contract.get("owned_paths", []),
                 }
             )
+        receipt_output = self._receipt_output_dir(run_id)
+        try:
+            artifact_bundle = await asyncio.to_thread(
+                create_patch_bundle,
+                multi_workspace,
+                receipt_output,
+                run_id=run_id,
+            )
+        except ArtifactError as exc:
+            artifact_bundle = {"error": str(exc), "diff_stat": "patch generation failed"}
+            failures.append(f"patch generation failed: {exc}")
+        artifact_paths = [
+            item["path"] for item in file_changes if item.get("change") != "deleted"
+        ]
+        for key in ("patch", "manifest"):
+            value = artifact_bundle.get(key)
+            if value:
+                artifact_paths.append(str(value))
+
         receipt = {
             "run_id": run_id,
             "original_goal": goal,
@@ -1786,12 +1815,11 @@ class CommandsAgentMixin:
             },
             "commands": commands,
             "file_changes": file_changes,
-            "diff_summary": self._compact_diff_summary(file_changes),
+            "diff_summary": str(artifact_bundle.get("diff_stat") or "").strip()
+            or self._compact_diff_summary(file_changes),
             "checks": receipt_checks,
             "handoffs": handoffs,
-            "artifacts": [
-                item["path"] for item in file_changes if item.get("change") != "deleted"
-            ],
+            "artifacts": artifact_paths,
             "failures": failures,
             "retries": retries,
             "disposition": "ready_for_review" if not failures else "failed",
@@ -1801,7 +1829,7 @@ class CommandsAgentMixin:
         receipt_json, receipt_markdown, _ = await asyncio.to_thread(
             write_receipt,
             receipt,
-            self._receipt_output_dir(run_id),
+            receipt_output,
         )
         final_lines.append("")
         final_lines.append(f"🧾 Receipt: `{receipt_markdown.as_posix()}`")

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from memory import MemoryStore
 
+from .artifacts import create_patch_bundle, initialize_artifact_repository
 from .receipts import write_receipt
 from .security import delegated_process_env, redact_text
 
@@ -27,10 +28,10 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _file_change(path: Path, root: Path) -> dict[str, object]:
+def _file_change(path: Path, root: Path, change: str = "created") -> dict[str, object]:
     return {
         "path": path.relative_to(root).as_posix(),
-        "change": "created",
+        "change": change,
         "bytes": path.stat().st_size,
         "sha256": _sha256(path),
     }
@@ -42,7 +43,7 @@ def _write(path: Path, content: str) -> Path:
     return path
 
 
-def _run_memory_scenario(artifact: Path) -> dict[str, object]:
+def _run_memory_scenario(artifact: Path, _run_id: str) -> dict[str, object]:
     db_path = artifact / "memory.db"
     first = MemoryStore(str(db_path))
     first.ingest("user", "The project launch code is Orchid-47.", "telegram-fixture")
@@ -81,10 +82,15 @@ def _run_memory_scenario(artifact: Path) -> dict[str, object]:
     }
 
 
-def _run_repo_scenario(artifact: Path) -> dict[str, object]:
+def _run_repo_scenario(artifact: Path, run_id: str) -> dict[str, object]:
     service = _write(
         artifact / "service.py",
-        '"""Tiny deterministic service fixture."""\n\n\ndef health() -> dict[str, str]:\n    return {"status": "ok"}\n',
+        '"""Tiny deterministic service fixture."""\n\n\ndef version() -> str:\n    return "1.0"\n',
+    )
+    checkpoint = initialize_artifact_repository(artifact, run_id)
+    service = _write(
+        artifact / "service.py",
+        '"""Tiny deterministic service fixture."""\n\n\ndef version() -> str:\n    return "1.0"\n\n\ndef health() -> dict[str, str]:\n    return {"status": "ok"}\n',
     )
     test_file = _write(
         artifact / "test_service.py",
@@ -104,6 +110,11 @@ def _run_repo_scenario(artifact: Path) -> dict[str, object]:
     )
     test_output = redact_text((completed.stdout + "\n" + completed.stderr).strip(), os.environ)
     evidence = _write(artifact / "test-output.txt", test_output + "\n")
+    bundle = create_patch_bundle(
+        artifact,
+        artifact.parent / "review",
+        run_id=run_id,
+    )
     return {
         "plan": [
             {"label": "builder", "worker": "fixture-builder", "task": "Add a bounded health function", "depends_on": []},
@@ -124,12 +135,23 @@ def _run_repo_scenario(artifact: Path) -> dict[str, object]:
             }
         ],
         "files": [service, test_file, evidence],
-        "artifacts": [evidence.relative_to(artifact.parent).as_posix()],
+        "file_change_types": {
+            service.as_posix(): "modified",
+            test_file.as_posix(): "created",
+            evidence.as_posix(): "created",
+        },
+        "artifacts": [
+            evidence.relative_to(artifact.parent).as_posix(),
+            Path(str(bundle["patch"])).relative_to(artifact.parent).as_posix(),
+            Path(str(bundle["manifest"])).relative_to(artifact.parent).as_posix(),
+        ],
         "handoffs": [],
+        "checkpoint": checkpoint,
+        "diff_summary": bundle["diff_stat"],
     }
 
 
-def _run_multi_scenario(artifact: Path) -> dict[str, object]:
+def _run_multi_scenario(artifact: Path, _run_id: str) -> dict[str, object]:
     agents = _write(
         artifact / "AGENTS.md",
         "# Deterministic two-lane plan\n\n- research: collect release risks\n- builder: depends on research; write checklist\n",
@@ -241,15 +263,16 @@ def run_demo(scenario: str, output_dir: str | Path) -> dict[str, object]:
 
     started_wall = _utc_now()
     started = time.monotonic()
+    run_id = f"demo-{scenario}-{int(time.time())}"
     runners = {
         "memory": _run_memory_scenario,
         "repo-task": _run_repo_scenario,
         "multi-agent": _run_multi_scenario,
     }
-    scenario_result = runners[scenario](artifact)
+    scenario_result = runners[scenario](artifact, run_id)
     duration = round(time.monotonic() - started, 3)
     passed = all(bool(item.get("passed")) for item in scenario_result["checks"])
-    run_id = f"demo-{scenario}-{int(time.time())}"
+    file_change_types = scenario_result.get("file_change_types", {})
     receipt = {
         "run_id": run_id,
         "original_goal": {
@@ -267,7 +290,17 @@ def run_demo(scenario: str, output_dir: str | Path) -> dict[str, object]:
         "duration_seconds": duration,
         "usage": {"provider": "fixture", "tokens": 0, "estimated_cost_usd": 0},
         "commands": scenario_result["commands"],
-        "file_changes": [_file_change(path, output) for path in scenario_result["files"]],
+        "file_changes": [
+            _file_change(
+                path,
+                output,
+                str(file_change_types.get(path.as_posix(), "created"))
+                if isinstance(file_change_types, dict)
+                else "created",
+            )
+            for path in scenario_result["files"]
+        ],
+        "diff_summary": scenario_result.get("diff_summary", ""),
         "checks": scenario_result["checks"],
         "handoffs": scenario_result["handoffs"],
         "artifacts": scenario_result["artifacts"],
@@ -276,7 +309,10 @@ def run_demo(scenario: str, output_dir: str | Path) -> dict[str, object]:
         else ["one or more fixture acceptance checks failed"],
         "retries": scenario_result.get("retries", 0),
         "disposition": "accepted" if passed else "failed",
-        "checkpoint": {"type": "new-owned-directory", "pre_existing_files": 0},
+        "checkpoint": scenario_result.get(
+            "checkpoint",
+            {"type": "new-owned-directory", "pre_existing_files": 0},
+        ),
         "undo": f"Remove only this demo directory: {output}",
         "fixture": True,
     }

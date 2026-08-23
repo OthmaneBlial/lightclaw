@@ -33,3 +33,21 @@ def test_demo_refuses_nonempty_output_directory(tmp_path):
         run_demo("repo-task", output)
 
     assert (output / "user-file.txt").read_text(encoding="utf-8") == "preserve me"
+
+
+def test_repo_demo_finishes_with_a_reviewable_git_patch(tmp_path):
+    output = tmp_path / "repo-task"
+
+    result = run_demo("repo-task", output)
+    receipt = json.loads((output / "receipt.json").read_text(encoding="utf-8"))
+    patch = output / "review" / "changes.patch"
+    manifest = json.loads((output / "review" / "artifact.json").read_text(encoding="utf-8"))
+
+    assert result["ok"] is True
+    assert patch.is_file()
+    assert "def health()" in patch.read_text(encoding="utf-8")
+    assert manifest["published"] is False
+    assert manifest["branch"].startswith("lightclaw/demo-repo-task-")
+    assert "review/changes.patch" in receipt["artifacts"]
+    assert receipt["checkpoint"]["type"] == "git-checkpoint"
+    assert receipt["file_changes"][0]["change"] == "modified"

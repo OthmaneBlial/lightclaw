@@ -13,6 +13,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from ..artifacts import ArtifactError, accept_artifact, reject_artifact
 from ..jobs import JobStateError
 from ..markdown import _escape_html
 
@@ -65,7 +66,10 @@ class BotApprovalsMixin:
                 InlineKeyboardButton("View diff", callback_data="lc:run:diff"),
                 InlineKeyboardButton("Accept result", callback_data="lc:run:accept"),
             ],
-            [InlineKeyboardButton("Cancel", callback_data="lc:run:cancel")],
+            [
+                InlineKeyboardButton("Reject result", callback_data="lc:run:reject"),
+                InlineKeyboardButton("Cancel", callback_data="lc:run:cancel"),
+            ],
         ]
         if failed_lanes:
             safe_label = re.sub(r"[^a-z0-9_-]", "", failed_lanes[0].lower())[:24]
@@ -275,6 +279,9 @@ class BotApprovalsMixin:
         if action == "lc:run:accept":
             await self._accept_last_run_result(proxy, session_id)
             return
+        if action == "lc:run:reject":
+            await self._reject_last_run_result(proxy, session_id)
+            return
 
         await self._reply_logged(proxy, "Unknown or expired LightClaw action.")
 
@@ -289,6 +296,22 @@ class BotApprovalsMixin:
             await self._reply_logged(update, "The local run receipt is unavailable.")
             return
         changes = receipt.get("file_changes") if isinstance(receipt.get("file_changes"), list) else []
+        artifacts = receipt.get("artifacts") if isinstance(receipt.get("artifacts"), list) else []
+        patch_path = next(
+            (Path(str(path)) for path in artifacts if str(path).endswith("changes.patch")),
+            None,
+        )
+        if patch_path and patch_path.is_file() and update.message:
+            try:
+                with patch_path.open("rb") as handle:
+                    await update.message.reply_document(
+                        document=handle,
+                        filename=f"{receipt.get('run_id', 'lightclaw')}.patch",
+                        caption="Private review patch — nothing has been pushed.",
+                    )
+                return
+            except Exception:
+                pass
         lines = [f"Diff summary: {receipt.get('diff_summary', 'not available')}"]
         for item in changes[:40]:
             if isinstance(item, dict):
@@ -302,11 +325,36 @@ class BotApprovalsMixin:
             await self._reply_logged(update, "No completed run is available to accept.")
             return
         try:
+            job = await asyncio.to_thread(self.jobs.get_job, run_id)
+            if job["status"] != "succeeded":
+                raise JobStateError(f"run is {job['status']}, not succeeded")
+            workspace = self._last_run_workspaces_by_session.get(session_id) or str(job["workspace"])
+            artifact = await asyncio.to_thread(accept_artifact, workspace, run_id)
             job = await asyncio.to_thread(self.jobs.accept, run_id)
-        except JobStateError as exc:
+        except (ArtifactError, JobStateError) as exc:
             await self._reply_logged(update, f"Accept refused: {_escape_html(str(exc))}")
             return
         await self._reply_logged(
             update,
-            f"Accepted local result `{job['run_id']}`. Nothing was pushed or published.",
+            f"Accepted local result `{job['run_id']}` at commit `{artifact['commit']}`. Nothing was pushed or published.",
+        )
+
+    async def _reject_last_run_result(self, update, session_id: str) -> None:
+        run_id = self._last_run_ids_by_session.get(session_id)
+        if not run_id:
+            await self._reply_logged(update, "No completed run is available to reject.")
+            return
+        try:
+            job = await asyncio.to_thread(self.jobs.get_job, run_id)
+            if job["status"] not in {"succeeded", "failed"}:
+                raise JobStateError(f"run is {job['status']}, not finished")
+            workspace = self._last_run_workspaces_by_session.get(session_id) or str(job["workspace"])
+            await asyncio.to_thread(reject_artifact, workspace, run_id)
+            job = await asyncio.to_thread(self.jobs.reject, run_id)
+        except (ArtifactError, JobStateError) as exc:
+            await self._reply_logged(update, f"Reject refused: {_escape_html(str(exc))}")
+            return
+        await self._reply_logged(
+            update,
+            f"Rejected `{job['run_id']}`. Workspace files were preserved for review; nothing was published.",
         )

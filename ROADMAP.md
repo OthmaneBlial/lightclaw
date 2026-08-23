@@ -241,11 +241,11 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P2.4 Deliver a real code artifact
 
-- [ ] Produce a clean patch or branch from the isolated worktree.
-- [ ] Support `accept`, `reject`, and `apply selected files` locally.
-- [ ] Add optional pull-request creation through the authenticated `gh` CLI, with a full preview and explicit confirmation.
-- [ ] Never push, open a PR, or publish externally by default.
-- [ ] Attach the run receipt and test evidence to the proposed PR body.
+- [x] Produce a clean patch or branch from the isolated worktree.
+- [x] Support `accept`, `reject`, and `apply selected files` locally.
+- [x] Add optional pull-request creation through the authenticated `gh` CLI, with a full preview and explicit confirmation.
+- [x] Never push, open a PR, or publish externally by default.
+- [x] Attach the run receipt and test evidence to the proposed PR body.
 
 ### Phase 2 exit criteria
 
