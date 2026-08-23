@@ -28,9 +28,10 @@ classifiers = [
   "Topic :: Software Development",
 ]
 dependencies = [
-  "anthropic>=0.40,<1",
-  "google-generativeai>=0.8,<1",
-  "openai>=1,<3",
+  "anthropic>=1,<2",
+  "google-genai>=2,<3",
+  "httpx>=0.27,<1",
+  "openai>=2,<4",
   "python-dotenv==1.2.3",
   "python-telegram-bot>=21,<23",
 ]

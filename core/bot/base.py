@@ -98,6 +98,7 @@ class BotBaseMixin:
 
     def close(self) -> None:
         """Close durable stores during a clean application shutdown."""
+        self.llm.close()
         self.jobs.close()
         self.memory.db.close()
 

@@ -1,0 +1,8 @@
+{
+  "provider": "deepseek",
+  "response": {
+    "choices": [{"message": {"content": "fixture-deepseek"}}],
+    "usage": {"prompt_tokens": 13, "completion_tokens": 6, "total_tokens": 19}
+  },
+  "expected": {"text": "fixture-deepseek", "input_tokens": 13, "output_tokens": 6, "total_tokens": 19}
+}

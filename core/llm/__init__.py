@@ -1,17 +1,14 @@
-"""Compatibility facade for LightClaw's typed provider layer."""
+"""Typed provider protocol and vendor adapters."""
 
-from core.llm import (
-    PROVIDER_SPECS,
-    LLMClient,
+from .client import PROVIDER_SPECS, LLMClient, ProviderSpec, validate_provider_registry
+from .contract import (
     ProviderAdapter,
     ProviderError,
     ProviderErrorKind,
     ProviderRequest,
     ProviderResponse,
-    ProviderSpec,
     ProviderUsage,
     RetryPolicy,
-    validate_provider_registry,
 )
 
 __all__ = [

@@ -887,6 +887,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
         return 2
 
     bot = LightClawBot(config)
+
+    def _close_chat() -> int:
+        bot.close()
+        return 0
+
     session_id = (args.session or "cli").strip() or "cli"
     cli_user_id = (
         (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
@@ -1128,7 +1133,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             user_text = input("you> ").strip()
         except (EOFError, KeyboardInterrupt):
             print("\nbye.")
-            return 0
+            return _close_chat()
 
         if not user_text:
             continue
@@ -1143,7 +1148,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     print(f"bot> ⚠️ Command failed: {e}\n")
                     should_exit = False
                 if should_exit:
-                    return 0
+                    return _close_chat()
                 continue
             if decision == "cancel":
                 try:
@@ -1152,7 +1157,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     print(f"bot> ⚠️ Command failed: {e}\n")
                     should_exit = False
                 if should_exit:
-                    return 0
+                    return _close_chat()
                 continue
             reminder = bot._render_pending_multi_reminder(session_id)
             print(f"bot> {bot._strip_html_for_log(reminder)}\n")
@@ -1165,7 +1170,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 print(f"bot> ⚠️ Command failed: {e}\n")
                 should_exit = False
             if should_exit:
-                return 0
+                return _close_chat()
             continue
 
         try:

@@ -1,0 +1,8 @@
+{
+  "provider": "zai",
+  "response": {
+    "choices": [{"message": {"content": "fixture-zai"}}],
+    "usage": {"prompt_tokens": 14, "completion_tokens": 7, "total_tokens": 21}
+  },
+  "expected": {"text": "fixture-zai", "input_tokens": 14, "output_tokens": 7, "total_tokens": 21}
+}

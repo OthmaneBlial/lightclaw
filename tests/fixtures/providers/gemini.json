@@ -1,0 +1,15 @@
+{
+  "provider": "gemini",
+  "response": {
+    "text": "fixture-gemini",
+    "usage_metadata": {
+      "prompt_token_count": 15,
+      "candidates_token_count": 8,
+      "total_token_count": 25,
+      "cached_content_token_count": 3,
+      "thoughts_token_count": 2,
+      "tool_use_prompt_token_count": 1
+    }
+  },
+  "expected": {"text": "fixture-gemini", "input_tokens": 15, "output_tokens": 8, "total_tokens": 25, "cache_input_tokens": 3, "reasoning_tokens": 2, "tool_tokens": 1}
+}

@@ -11,6 +11,11 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Reproducible raw benchmark JSON/CSV output.
 - Namespaced SQLite FTS5 lexical memory with bounded retention, private export, selective delete, and an optional embedding-rerank protocol.
 - Permission-manifest skills with inactive-by-default installation, owner/version provenance, source-and-manifest hash review, isolated high-authority declarations, and a non-executing validator.
+- One typed six-provider contract with normalized nullable usage, errors, bounded timeout/retry policy, explicit SDK close, recorded fixtures, and a generated compatibility matrix.
+
+### Changed
+
+- Migrated Gemini from deprecated `google-generativeai` to `google-genai`; updated supported OpenAI and Anthropic SDK major ranges behind the provider protocol.
 
 ## [0.1.0] - Unreleased
 

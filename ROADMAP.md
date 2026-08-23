@@ -281,11 +281,11 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P3.3 Stabilize providers without multiplying branches
 
-- [ ] Define one typed provider protocol with normalized text, usage, retry, timeout, and error behavior.
-- [ ] Contract-test all six adapters with recorded fixtures.
-- [ ] Publish a CI-generated compatibility matrix rather than a manually asserted support table.
-- [ ] Audit provider SDK lifecycle and migrate deprecated libraries behind the protocol.
-- [ ] Allow new providers only when a maintainer and contract tests exist.
+- [x] Define one typed provider protocol with normalized text, usage, retry, timeout, and error behavior.
+- [x] Contract-test all six adapters with recorded fixtures.
+- [x] Publish a CI-generated compatibility matrix rather than a manually asserted support table.
+- [x] Audit provider SDK lifecycle and migrate deprecated libraries behind the protocol.
+- [x] Allow new providers only when a maintainer and contract tests exist.
 
 ### P3.4 Pay down orchestration complexity
 
@@ -297,9 +297,9 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### Phase 3 exit criteria
 
-- [ ] Memory claims are backed by a public versioned evaluation.
-- [ ] Every active hub skill has recorded provenance and declared permissions.
-- [ ] Six provider adapters pass the same contract suite.
+- [x] Memory claims are backed by a public versioned evaluation.
+- [x] Every active hub skill has recorded provenance and declared permissions.
+- [x] Six provider adapters pass the same contract suite.
 - [ ] No single module owns planning, execution, persistence, rendering, and acceptance at once.
 - [ ] Runtime footprint remains within an explicitly published budget.
 

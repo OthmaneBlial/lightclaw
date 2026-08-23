@@ -18,8 +18,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from config import Config, LATEST_MODEL_DEFAULTS, load_config
-from providers import LLMClient
+from config import LATEST_MODEL_DEFAULTS, Config, load_config  # noqa: E402
+from providers import LLMClient  # noqa: E402
 
 PROVIDER_AUTH_ATTRS = {
     "openai": ("openai_api_key",),
@@ -70,19 +70,20 @@ async def _check_provider(
     cfg = _build_provider_config(root_cfg, provider, model)
     client = LLMClient(cfg)
     try:
-        response = await asyncio.wait_for(
-            client.chat([{"role": "user", "content": prompt}]),
-            timeout=timeout_seconds,
+        result = await client.complete(
+            [{"role": "user", "content": prompt}],
+            timeout_seconds=timeout_seconds,
         )
     except Exception as exc:
         return "FAIL", str(exc)
+    finally:
+        client.close()
 
-    text = (response or "").strip().replace("\n", " ")
+    text = (result.text or "").strip().replace("\n", " ")
     if not text:
         return "FAIL", "empty response"
-    if text.lower().startswith("⚠️ error communicating with") or text.lower().startswith("error communicating with"):
-        return "FAIL", text[:160]
-    return "OK", text[:120]
+    usage = result.usage.as_dict()
+    return "OK", f"{text[:100]} usage={usage} attempts={result.attempts}"
 
 
 async def _run(args: argparse.Namespace) -> int:

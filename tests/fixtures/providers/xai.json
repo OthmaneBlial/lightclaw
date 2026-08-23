@@ -1,0 +1,8 @@
+{
+  "provider": "xai",
+  "response": {
+    "choices": [{"message": {"content": "fixture-xai"}}],
+    "usage": {"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17}
+  },
+  "expected": {"text": "fixture-xai", "input_tokens": 12, "output_tokens": 5, "total_tokens": 17}
+}

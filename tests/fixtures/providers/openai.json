@@ -1,0 +1,8 @@
+{
+  "provider": "openai",
+  "response": {
+    "choices": [{"message": {"content": "fixture-openai"}}],
+    "usage": {"prompt_tokens": 11, "completion_tokens": 4, "total_tokens": 15}
+  },
+  "expected": {"text": "fixture-openai", "input_tokens": 11, "output_tokens": 4, "total_tokens": 15}
+}

@@ -146,6 +146,8 @@ class Config:
     gemini_api_key: str = ""
     deepseek_api_key: str = ""
     zai_api_key: str = ""
+    provider_timeout_sec: int = 60
+    provider_max_retries: int = 2
 
     # Telegram
     telegram_bot_token: str = ""
@@ -214,6 +216,8 @@ def load_config() -> Config:
         gemini_api_key=_strip_inline_comment(os.getenv("GEMINI_API_KEY", "")),
         deepseek_api_key=_strip_inline_comment(os.getenv("DEEPSEEK_API_KEY", "")),
         zai_api_key=_strip_inline_comment(os.getenv("ZAI_API_KEY", "")),
+        provider_timeout_sec=int(os.getenv("PROVIDER_TIMEOUT_SEC", "60")),
+        provider_max_retries=int(os.getenv("PROVIDER_MAX_RETRIES", "2")),
         telegram_bot_token=_strip_inline_comment(os.getenv("TELEGRAM_BOT_TOKEN", "")),
         telegram_allowed_users=allowed,
         telegram_public_bot_ack=_parse_bool(
@@ -274,6 +278,8 @@ def load_config() -> Config:
     cfg.llm_provider = cfg.llm_provider.strip().lower()
     cfg.llm_model = _resolve_model(cfg.llm_provider, cfg.llm_model)
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
+    cfg.provider_timeout_sec = max(1, min(600, int(cfg.provider_timeout_sec)))
+    cfg.provider_max_retries = max(0, min(4, int(cfg.provider_max_retries)))
     cfg.memory_top_k = max(1, min(50, int(cfg.memory_top_k)))
     cfg.memory_retention_days = max(1, min(3_650, int(cfg.memory_retention_days)))
     cfg.memory_max_interactions = max(100, min(1_000_000, int(cfg.memory_max_interactions)))
