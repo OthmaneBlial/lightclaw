@@ -64,6 +64,16 @@ jobs:
           python -m bench.run --mode fixture --runs 3 --output /tmp/lightclaw-bench
           test -s /tmp/lightclaw-bench.json
           test -s /tmp/lightclaw-bench.csv
+      - name: Evaluate namespaced lexical memory
+        run: |
+          python -m bench.memory_eval --output /tmp/lightclaw-memory-eval.json
+          python - <<'PY'
+          import json
+          report = json.load(open('/tmp/lightclaw-memory-eval.json', encoding='utf-8'))
+          assert report['lexical']['mean_recall_at_k'] >= 0.8
+          assert report['lexical']['cross_namespace_results'] == 0
+          assert report['fixture_hybrid']['cross_namespace_results'] == 0
+          PY
       - name: Audit Python dependencies
         run: pip-audit --skip-editable
       - name: Build wheel and source distribution

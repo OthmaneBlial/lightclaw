@@ -121,11 +121,22 @@ def _memory_quality_fixture(temp_root: Path) -> dict[str, object]:
     ]
     store = MemoryStore(str(temp_root / "quality.db"))
     for label, fact in facts:
-        store.ingest("user", fact, f"fixture-{label}")
+        store.ingest(
+            "user",
+            fact,
+            f"fixture-{label}",
+            user_namespace="fixture-user",
+            workspace_namespace="fixture-workspace",
+        )
     hits = 0
     details: list[dict[str, object]] = []
     for label, fact in facts:
-        result = store.recall(f"What is the {label} deployment code?", top_k=1)
+        result = store.recall(
+            f"What is the {label} deployment code?",
+            top_k=1,
+            user_namespace="fixture-user",
+            workspace_namespace="fixture-workspace",
+        )
         passed = bool(result and result[0].content == fact)
         hits += int(passed)
         details.append({"query_label": label, "top1_passed": passed})

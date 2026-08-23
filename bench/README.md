@@ -25,6 +25,16 @@ Full mode creates a new virtual environment, resolves the wheel and runtime depe
 
 Every result includes commit, timestamp, OS, Python, architecture, processor, CPU count, memory, run count, and evidence mode. Raw JSON is canonical; CSV is a flattened convenience export.
 
+## Versioned memory evaluation
+
+Run the FTS5 lexical baseline and the explicitly fixture-only hybrid reranker against the public corpus:
+
+```bash
+python -m bench.memory_eval --output bench/results/memory-eval-v1.json
+```
+
+The report publishes precision@k, recall@k, mean reciprocal rank, query latency, database size, per-query results, and cross-namespace leakage count. The synonym-group hybrid adapter is deterministic test machinery, not evidence of semantic understanding on arbitrary text. See [the memory contract](../docs/MEMORY.md).
+
 ## Published evidence
 
 The first full run is tied to commit `be5a71d30cd7a2bea5119d2624fdeff275c5c8da`:

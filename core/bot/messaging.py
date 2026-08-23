@@ -97,8 +97,7 @@ class BotMessagingMixin:
 
         # First chunk the markdown (before HTML conversion which expands entities)
         markdown_chunks = self._chunk_message(markdown_response, max_len=3000)
-        chat_id = update.effective_chat.id if update.effective_chat else 0
-        session_id = str(chat_id)
+        session_id = self._session_id_from_update(update)
 
         for i, markdown_chunk in enumerate(markdown_chunks):
             self._log_bot_message(session_id, markdown_chunk)

@@ -37,7 +37,7 @@ def test_memory_persists_and_recalls_lexical_matches(tmp_path):
     first.db.close()
 
     second = MemoryStore(str(database))
-    records = second.recall("amberfalcon deployment", top_k=3)
+    records = second.recall("amberfalcon deployment", top_k=3, session_id="session-a")
 
     assert records
     assert records[0].session_id == "session-a"

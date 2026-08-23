@@ -80,7 +80,7 @@ class CommandsSkillsMixin:
             )
             return
 
-        session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        session_id = self._session_id_from_update(update)
         args = context.args or []
         self._log_user_message(session_id, f"/skills {' '.join(args)}".strip())
         sub = args[0].lower() if args else "list"

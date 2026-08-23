@@ -24,8 +24,8 @@ class CommandsBasicMixin:
         await self._reply_logged(
             update,
             "🦞 <b>LightClaw</b> is ready!\n\n"
-            "I'm your AI assistant with persistent local memory. "
-            "I remember everything we've talked about, even across sessions.\n\n"
+            "I'm your AI assistant with bounded, local lexical memory. "
+            "Recall is isolated by user and workspace and follows configured retention.\n\n"
             "<b>Commands:</b>\n"
             "/help - Show this message\n"
             "/clear - Reset our conversation\n"
@@ -85,7 +85,7 @@ class CommandsBasicMixin:
             )
             return
 
-        session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/clear")
         self.memory.clear_session(session_id)
         self._session_summaries.pop(session_id, None)
@@ -103,7 +103,7 @@ class CommandsBasicMixin:
         if not self.is_allowed(update.effective_user.id):
             return
 
-        session_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+        session_id = self._session_id_from_update(update)
         args = [a.strip().lower() for a in (context.args or []) if a.strip()]
         self._log_user_message(session_id, f"/wipe_memory {' '.join(args)}".strip())
 
@@ -151,13 +151,15 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/memory")
-        stats = self.memory.stats()
+        stats = self.memory.stats(session_id=session_id)
         await self._reply_logged(
             update,
             f"🧠 <b>Memory Stats</b>\n\n"
             f"📝 Total interactions: {stats['total_interactions']}\n"
             f"💬 Unique sessions: {stats['unique_sessions']}\n"
-            f"📚 Vocabulary size: {stats['vocabulary_size']}",
+            f"🔎 Retrieval: {stats['retrieval']}\n"
+            f"💾 Database: {stats['database_bytes']} / {stats['max_database_bytes']} bytes\n"
+            f"⏱️ Last query: {stats['last_query_ms']} ms (limit {stats['query_timeout_ms']} ms)",
             parse_mode=ParseMode.HTML,
         )
 
@@ -179,7 +181,7 @@ class CommandsBasicMixin:
             )
             return
 
-        memories = self.memory.recall(query, top_k=5)
+        memories = self.memory.recall(query, top_k=5, session_id=session_id)
         if not memories:
             await self._reply_logged(update, "🔍 No matching memories found.")
             return

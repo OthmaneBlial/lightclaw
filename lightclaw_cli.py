@@ -891,6 +891,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
     cli_user_id = (
         (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
     )
+    bot.memory.bind_session(
+        session_id,
+        user_namespace=f"cli-user:{cli_user_id}",
+        workspace_namespace=Path(config.workspace_path).resolve().as_posix(),
+    )
     bot._set_file_mode(session_id, "chat")
 
     print("")
@@ -912,7 +917,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
                 f"Please retry in about {wait_hint}, or top up your provider balance."
             )
 
-        memories = bot.memory.recall(user_text, top_k=config.memory_top_k)
+        memories = bot.memory.recall(
+            user_text,
+            top_k=config.memory_top_k,
+            session_id=session_id,
+        )
         memories = bot._filter_recalled_memories(memories)
         memories_text = bot.memory.format_memories_for_prompt(memories)
 
@@ -1357,6 +1366,78 @@ def cmd_jobs(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_memory_data(args: argparse.Namespace) -> int:
+    """Inspect, export, or delete one exact local memory scope."""
+    home = _resolve_home(args.home)
+    env_path = app_config_path(home)
+    os.environ["LIGHTCLAW_HOME"] = home.as_posix()
+    os.environ["LIGHTCLAW_CONFIG"] = env_path.as_posix()
+    if env_path.is_file():
+        load_dotenv(env_path, override=False)
+
+    from config import load_config
+    from core.personality import resolve_runtime_path
+    from memory import MemoryStore
+
+    config = load_config()
+    config.memory_db_path = str(resolve_runtime_path(config.memory_db_path))
+    config.workspace_path = str(resolve_runtime_path(config.workspace_path))
+    store = MemoryStore(
+        config.memory_db_path,
+        retention_days=config.memory_retention_days,
+        max_interactions=config.memory_max_interactions,
+        max_db_bytes=config.memory_max_db_mb * 1024 * 1024,
+        query_timeout_ms=config.memory_query_timeout_ms,
+        candidate_limit=config.memory_candidate_limit,
+    )
+    try:
+        action = args.memory_action
+        scope_kwargs: dict[str, str] = {}
+        if args.user or args.workspace:
+            if not args.user or not args.workspace:
+                raise ValueError("--user and --workspace must be provided together")
+            scope_kwargs = {
+                "user_namespace": str(args.user),
+                "workspace_namespace": str(Path(args.workspace).expanduser().resolve()),
+            }
+        else:
+            session_id = str(args.session or "cli")
+            cli_user = config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user"
+            store.bind_session(
+                session_id,
+                user_namespace=f"cli-user:{cli_user}",
+                workspace_namespace=Path(config.workspace_path).resolve().as_posix(),
+            )
+            scope_kwargs = {"session_id": session_id}
+
+        if action == "status":
+            payload = store.stats(**scope_kwargs)
+        elif action == "export":
+            if not args.output:
+                raise ValueError("memory export requires --output")
+            payload = store.export_scope(args.output, apply=bool(args.apply), **scope_kwargs)
+        elif action == "delete":
+            if not args.ids:
+                raise ValueError("memory delete requires --ids")
+            payload = store.delete_records(args.ids, apply=bool(args.apply), **scope_kwargs)
+        elif action == "clear":
+            payload = store.clear_scope(apply=bool(args.apply), **scope_kwargs)
+        elif action == "prune":
+            payload = store.prune(apply=bool(args.apply))
+        else:
+            raise ValueError(f"unknown memory action: {action}")
+    except (OSError, ValueError) as exc:
+        print(f"Memory operation refused: {exc}")
+        return 2
+    finally:
+        store.db.close()
+
+    print(json.dumps(payload, indent=2, sort_keys=True))
+    if action in {"export", "delete", "clear", "prune"} and not args.apply:
+        print("Preview only; re-run with --apply after reviewing the exact scope and count.")
+    return 0
+
+
 def cmd_artifact(args: argparse.Namespace) -> int:
     """Preview or apply a local run-artifact decision."""
     home = _resolve_home(args.home)
@@ -1617,6 +1698,29 @@ def build_parser() -> argparse.ArgumentParser:
     jobs.add_argument("--home", help="Runtime home directory (default: user home)")
     jobs.add_argument("--json", action="store_true", help="Emit stable JSON")
     jobs.set_defaults(func=cmd_jobs)
+
+    memory = sub.add_parser(
+        "memory",
+        help="Inspect, export, selectively delete, or prune local lexical memory",
+    )
+    memory.add_argument(
+        "memory_action",
+        nargs="?",
+        choices=("status", "export", "delete", "clear", "prune"),
+        default="status",
+    )
+    memory.add_argument("--session", default="cli", help="Bound local session (default: cli)")
+    memory.add_argument("--user", help="Exact user namespace; requires --workspace")
+    memory.add_argument("--workspace", help="Exact workspace namespace; requires --user")
+    memory.add_argument("--output", help="Private JSON destination for export")
+    memory.add_argument("--ids", type=int, nargs="+", help="Exact record IDs for selective delete")
+    memory.add_argument("--home", help="Runtime home directory (default: user home)")
+    memory.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply the displayed export/deletion/prune action",
+    )
+    memory.set_defaults(func=cmd_memory_data)
 
     artifact = sub.add_parser(
         "artifact",

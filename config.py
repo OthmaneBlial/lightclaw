@@ -155,6 +155,11 @@ class Config:
     # Memory
     memory_db_path: str = ".lightclaw/lightclaw.db"
     memory_top_k: int = 5
+    memory_retention_days: int = 90
+    memory_max_interactions: int = 10_000
+    memory_max_db_mb: int = 64
+    memory_query_timeout_ms: int = 100
+    memory_candidate_limit: int = 200
 
     # Workspace & Context
     workspace_path: str = ".lightclaw/workspace"
@@ -217,6 +222,11 @@ def load_config() -> Config:
         ),
         memory_db_path=os.getenv("MEMORY_DB_PATH", ".lightclaw/lightclaw.db"),
         memory_top_k=int(os.getenv("MEMORY_TOP_K", "5")),
+        memory_retention_days=int(os.getenv("MEMORY_RETENTION_DAYS", "90")),
+        memory_max_interactions=int(os.getenv("MEMORY_MAX_INTERACTIONS", "10000")),
+        memory_max_db_mb=int(os.getenv("MEMORY_MAX_DB_MB", "64")),
+        memory_query_timeout_ms=int(os.getenv("MEMORY_QUERY_TIMEOUT_MS", "100")),
+        memory_candidate_limit=int(os.getenv("MEMORY_CANDIDATE_LIMIT", "200")),
         workspace_path=os.getenv("WORKSPACE_PATH", ".lightclaw/workspace"),
         context_window=int(os.getenv("CONTEXT_WINDOW", "128000")),
         max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "12000")),
@@ -264,6 +274,12 @@ def load_config() -> Config:
     cfg.llm_provider = cfg.llm_provider.strip().lower()
     cfg.llm_model = _resolve_model(cfg.llm_provider, cfg.llm_model)
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
+    cfg.memory_top_k = max(1, min(50, int(cfg.memory_top_k)))
+    cfg.memory_retention_days = max(1, min(3_650, int(cfg.memory_retention_days)))
+    cfg.memory_max_interactions = max(100, min(1_000_000, int(cfg.memory_max_interactions)))
+    cfg.memory_max_db_mb = max(1, min(4_096, int(cfg.memory_max_db_mb)))
+    cfg.memory_query_timeout_ms = max(10, min(5_000, int(cfg.memory_query_timeout_ms)))
+    cfg.memory_candidate_limit = max(10, min(2_000, int(cfg.memory_candidate_limit)))
     cfg.local_agent_timeout_sec = max(60, int(cfg.local_agent_timeout_sec))
     cfg.local_agent_progress_interval_sec = max(
         10, int(cfg.local_agent_progress_interval_sec)

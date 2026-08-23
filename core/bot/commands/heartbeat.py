@@ -126,6 +126,7 @@ class CommandsHeartbeatMixin:
         memories = self.memory.recall(
             "heartbeat automation",
             top_k=max(1, min(self.config.memory_top_k, 4)),
+            session_id=session_id,
         )
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)

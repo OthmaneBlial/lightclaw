@@ -9,6 +9,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Token-free `lightclaw demo` stories for memory, repository work, and multi-agent orchestration.
 - Private JSON/Markdown run receipts with checks, file hashes, artifacts, commands, and recovery context.
 - Reproducible raw benchmark JSON/CSV output.
+- Namespaced SQLite FTS5 lexical memory with bounded retention, private export, selective delete, and an optional embedding-rerank protocol.
 
 ## [0.1.0] - Unreleased
 
@@ -29,7 +30,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Known limitations
 
-- Memory is local lexical-vector retrieval with a full SQLite scan, not an embedding service or vector database.
+- Memory is bounded lexical FTS5 retrieval by default, not a claim of semantic understanding.
 - External agent sandboxes, hosted providers, and trusted host execution remain separate trust boundaries.
 - Fixture demos do not prove real model quality or Telegram delivery.
 

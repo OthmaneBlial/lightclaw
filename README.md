@@ -106,7 +106,7 @@ Current capabilities include:
 - OpenAI, xAI, Anthropic, Gemini, DeepSeek, and Z-AI routing;
 - Codex and Claude delegation profiles: `observe`, `workspace-write`, `trusted-command`;
 - DAG planning, owned paths, JSON handoffs, acceptance checks, and bounded repair;
-- persistent SQLite memory with local lexical-vector recall;
+- namespaced SQLite FTS5 lexical recall with retention, export, and selective delete;
 - local and hub skills with archive/install boundaries;
 - voice transcription, scheduled jobs, heartbeat, Telegram, and terminal chat;
 - token-free fixture adapters used by the full CI matrix.
@@ -128,6 +128,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Durable queues, cancellation, and recovery](docs/JOB_CONTROL.md)
 - [Telegram approvals and high-risk confirmation](docs/APPROVALS.md)
 - [Reviewable patches, selective apply, and optional PRs](docs/ARTIFACTS.md)
+- [Namespaced lexical memory, retention, export, and evaluation](docs/MEMORY.md)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)
@@ -137,7 +138,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 
 ## Honest alpha limits
 
-- Memory retrieval currently scans SQLite records and uses in-process lexical vectors; it is not an external embedding/vector database.
+- Memory retrieval is bounded SQLite FTS5 lexical search, not semantic understanding. Embeddings are an optional adapter and are never required.
 - Fixture demos prove LightClaw contracts, not external model quality.
 - External coding-agent CLIs remain separate security boundaries with their own versions and settings.
 - The package is installable from Git today; the first stable PyPI release follows the release gate in the roadmap.

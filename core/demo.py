@@ -50,7 +50,11 @@ def _run_memory_scenario(artifact: Path, _run_id: str) -> dict[str, object]:
     first.db.close()
 
     restarted = MemoryStore(str(db_path))
-    recalled = restarted.recall("What is the project launch code?", top_k=3)
+    recalled = restarted.recall(
+        "What is the project launch code?",
+        top_k=3,
+        session_id="telegram-fixture",
+    )
     restarted.db.close()
     recall_payload = {
         "query": "What is the project launch code?",

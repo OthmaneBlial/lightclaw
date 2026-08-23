@@ -22,14 +22,14 @@ class BotHandlersMixin:
         if not self.is_allowed(update.effective_user.id):
             return
 
-        session_id = str(update.effective_chat.id) if update.effective_chat else "?"
+        session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/show")
 
         uptime = int(time.time() - self.start_time)
         hours, remainder = divmod(uptime, 3600)
         minutes, seconds = divmod(remainder, 60)
 
-        stats = self.memory.stats()
+        stats = self.memory.stats(session_id=session_id)
         summary_status = "✅" if session_id in self._session_summaries else "—"
         active_skills = self.skills.active_records(session_id)
         installed_skills = self.skills.list_skills()
@@ -108,7 +108,7 @@ class BotHandlersMixin:
             if caption:
                 user_text = f"{caption}\n{user_text}"
             log.info("Voice message transcribed and awaiting approval")
-            session_id = str(chat_id)
+            session_id = self._session_id_from_update(update)
             self._pending_voice_goal_by_session[session_id] = {
                 "text": user_text,
                 "transcription": text,
@@ -189,7 +189,7 @@ class BotHandlersMixin:
         10. Trigger async summarization if needed
         """
         chat_id = update.effective_chat.id if update.effective_chat else 0
-        session_id = str(chat_id)
+        session_id = self._session_id_from_update(update)
         self._heartbeat_last_chat_id = session_id
 
         self._log_user_message(session_id, user_text)
@@ -289,7 +289,11 @@ class BotHandlersMixin:
             return
 
         # 2. Recall relevant memories
-        memories = self.memory.recall(user_text, top_k=self.config.memory_top_k)
+        memories = self.memory.recall(
+            user_text,
+            top_k=self.config.memory_top_k,
+            session_id=session_id,
+        )
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)
 

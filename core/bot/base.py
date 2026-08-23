@@ -26,7 +26,14 @@ from ..security import access_policy_label
 class BotBaseMixin:
     def __init__(self, config: Config):
         self.config = config
-        self.memory = MemoryStore(config.memory_db_path)
+        self.memory = MemoryStore(
+            config.memory_db_path,
+            retention_days=config.memory_retention_days,
+            max_interactions=config.memory_max_interactions,
+            max_db_bytes=config.memory_max_db_mb * 1024 * 1024,
+            query_timeout_ms=config.memory_query_timeout_ms,
+            candidate_limit=config.memory_candidate_limit,
+        )
         self.jobs = JobStore(Path(config.memory_db_path).expanduser().resolve().with_name("jobs.db"))
         self.jobs.recover_stalled()
         self.llm = LLMClient(config)
@@ -126,10 +133,17 @@ class BotBaseMixin:
         self._privileged_request_times[key] = recent
         return False
 
-    @staticmethod
-    def _session_id_from_update(update: Update | None) -> str:
+    def _session_id_from_update(self, update: Update | None) -> str:
         if update and update.effective_chat:
-            return str(update.effective_chat.id)
+            session_id = str(update.effective_chat.id)
+            if update.effective_user and hasattr(self, "memory") and hasattr(self, "config"):
+                workspace = Path(str(self.config.workspace_path)).expanduser().resolve().as_posix()
+                self.memory.bind_session(
+                    session_id,
+                    user_namespace=f"telegram-user:{update.effective_user.id}",
+                    workspace_namespace=workspace,
+                )
+            return session_id
         return "unknown"
 
     @staticmethod

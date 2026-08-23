@@ -192,7 +192,7 @@ class BotApprovalsMixin:
             await query.answer("Not authorized", show_alert=True)
             return
         await query.answer()
-        session_id = str(update.effective_chat.id)
+        session_id = self._session_id_from_update(update)
         action = str(query.data or "")
         proxy = self._callback_proxy(update)
 

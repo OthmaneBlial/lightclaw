@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "name": "lightclaw-memory-lexical-hybrid-v1",
+  "description": "Deterministic local retrieval corpus. Hybrid vectors are a fixture synonym map, not a semantic-model claim.",
+  "embedding_groups": [
+    ["deploy", "deployment", "release"],
+    ["rollback", "revert", "restore"],
+    ["credential", "token", "secret"],
+    ["database", "sqlite", "storage"],
+    ["telegram", "phone", "message"],
+    ["health", "status", "readiness"]
+  ],
+  "documents": [
+    {"id": "harbor-key", "scope": "main", "content": "Harbor project deployment key is Cobalt-19 and release owner is Mira."},
+    {"id": "harbor-rollback", "scope": "main", "content": "Harbor project rollback restores database snapshot Anchor-7."},
+    {"id": "orchard-key", "scope": "main", "content": "Orchard project deployment key is Saffron-28 and release owner is Noor."},
+    {"id": "orchard-health", "scope": "main", "content": "Orchard service health endpoint returns green readiness status."},
+    {"id": "summit-token", "scope": "main", "content": "Summit project credential rotation uses token label Glacier-4; never store the secret value."},
+    {"id": "summit-storage", "scope": "main", "content": "Summit project database is SQLite and local storage retention is thirty days."},
+    {"id": "telegram-review", "scope": "main", "content": "Telegram phone message review requires approval before publishing a branch."},
+    {"id": "meadow-status", "scope": "main", "content": "Meadow release status is paused while health checks are repaired."},
+    {"id": "distractor-colors", "scope": "main", "content": "Cobalt Saffron Glacier and Anchor are fixture labels for unrelated examples."},
+    {"id": "distractor-release", "scope": "main", "content": "A generic project release checklist mentions deployment rollback storage and status."},
+    {"id": "private-other-workspace", "scope": "other", "content": "Harbor project deployment key is LEAK-ME-NOT from another workspace."},
+    {"id": "private-other-user", "scope": "other-user", "content": "Orchard project deployment key is LEAK-ME-NOT from another user."}
+  ],
+  "queries": [
+    {"id": "q1", "text": "What is the Harbor deployment key?", "relevant": ["harbor-key"]},
+    {"id": "q2", "text": "How does Harbor rollback restore storage?", "relevant": ["harbor-rollback"]},
+    {"id": "q3", "text": "Who owns the Orchard release project?", "relevant": ["orchard-key"]},
+    {"id": "q4", "text": "What readiness status does Orchard health return?", "relevant": ["orchard-health"]},
+    {"id": "q5", "text": "Which Summit token label is used for credential rotation?", "relevant": ["summit-token"]},
+    {"id": "q6", "text": "What local database storage does Summit use?", "relevant": ["summit-storage"]},
+    {"id": "q7", "text": "Does the Telegram phone message need approval?", "relevant": ["telegram-review"]},
+    {"id": "q8", "text": "Why is the Meadow release status paused?", "relevant": ["meadow-status"]}
+  ]
+}
