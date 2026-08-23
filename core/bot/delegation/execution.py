@@ -6,17 +6,32 @@ import asyncio
 import json
 import os
 import re
+import secrets
 import signal
 import subprocess
 import time
 from collections.abc import Awaitable, Callable
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ...logging_setup import log
+from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
+from ...workspaces import capture_git_checkpoint, validate_workspace_root
 
 
 class DelegationExecutionMixin:
+    @staticmethod
+    def _utc_now() -> str:
+        return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+    def _receipt_output_dir(self, run_id: str) -> Path:
+        root = validate_workspace_root(self.config.workspace_path)
+        output = root / ".lightclaw-meta" / "receipts" / run_id
+        output.mkdir(parents=True, exist_ok=True, mode=0o700)
+        output.chmod(0o700)
+        return output
+
     @staticmethod
     def _strip_ansi(text: str) -> str:
         return re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text or "")
@@ -289,6 +304,7 @@ class DelegationExecutionMixin:
             "tool_calls": 0,
             "commands_total": 0,
             "commands_failed": 0,
+            "command_records": [],
             "errors": 0,
             "last_reasoning": "",
             "last_activity": "starting delegated run",
@@ -334,6 +350,19 @@ class DelegationExecutionMixin:
                     state["last_activity"] = (
                         f"command finished: {cmd}" if cmd else "command finished"
                     )
+                records = state.get("command_records")
+                if isinstance(records, list) and len(records) < 200:
+                    output = self._short_progress_text(
+                        str(item.get("aggregated_output") or item.get("output") or ""),
+                        max_chars=500,
+                    )
+                    records.append(
+                        {
+                            "command": cmd or "codex command",
+                            "exit_code": exit_code,
+                            "summary": output or ("passed" if exit_code == 0 else "failed"),
+                        }
+                    )
                 return
 
             if item_type == "agent_message":
@@ -366,6 +395,15 @@ class DelegationExecutionMixin:
                         state["tool_calls"] = int(state.get("tool_calls", 0)) + 1
                         tool_name = self._short_progress_text(str(block.get("name") or "tool"))
                         state["last_activity"] = f"using tool: {tool_name}"
+                        records = state.get("command_records")
+                        if isinstance(records, list) and len(records) < 200:
+                            records.append(
+                                {
+                                    "command": f"claude tool: {tool_name}",
+                                    "exit_code": None,
+                                    "summary": "tool invocation reported; exit status unavailable",
+                                }
+                            )
                     elif block_type == "text":
                         state["last_activity"] = "drafting response"
                 return
@@ -402,6 +440,15 @@ class DelegationExecutionMixin:
                     state["tool_calls"] = int(state.get("tool_calls", 0)) + 1
                     tool_name = self._short_progress_text(str(block.get("name") or "tool"))
                     state["last_activity"] = f"using tool: {tool_name}"
+                    records = state.get("command_records")
+                    if isinstance(records, list) and len(records) < 200:
+                        records.append(
+                            {
+                                "command": f"claude tool: {tool_name}",
+                                "exit_code": None,
+                                "summary": "tool invocation reported; exit status unavailable",
+                            }
+                        )
                 elif block_type == "text":
                     text = self._short_progress_text(str(block.get("text") or ""), max_chars=220)
                     if text:
@@ -724,6 +771,7 @@ class DelegationExecutionMixin:
             "summary": summary,
             "elapsed": elapsed,
             "timed_out": timed_out,
+            "commands": list(state.get("command_records", [])),
         }
 
     def _invoke_local_agent_sync(
@@ -842,6 +890,8 @@ class DelegationExecutionMixin:
         include_workspace_delta: bool = True,
         workspace_dir: Path | str | None = None,
         capability_profile: str | None = None,
+        emit_receipt: bool = True,
+        evidence_sink: dict[str, object] | None = None,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -875,6 +925,8 @@ class DelegationExecutionMixin:
             target_workspace = Path(workspace_dir).expanduser().resolve()
             target_workspace.mkdir(parents=True, exist_ok=True)
         workspace_label = self._workspace_rel_label(target_workspace)
+        started_at = self._utc_now()
+        checkpoint = await asyncio.to_thread(capture_git_checkpoint, target_workspace)
 
         if progress_cb:
             try:
@@ -904,6 +956,91 @@ class DelegationExecutionMixin:
         stderr_excerpt = self._compact_external_agent_summary(
             self._strip_ansi(str(result.get("stderr") or ""))
         )
+        file_changes = await asyncio.to_thread(
+            self._workspace_file_changes,
+            target_workspace,
+            before,
+            after,
+        )
+        run_id = f"run-{int(time.time())}-{secrets.token_hex(4)}"
+        command_name = f"{agent} delegated invocation; prompt passed through stdin"
+        reported_commands = result.get("commands")
+        commands = (
+            [dict(item) for item in reported_commands if isinstance(item, dict)]
+            if isinstance(reported_commands, list)
+            else []
+        )
+        commands.insert(
+            0,
+            {
+                "command": command_name,
+                "exit_code": int(result.get("exit_code", 1)),
+                "summary": summary or stderr_excerpt or "no summary reported",
+            },
+        )
+        check = {
+            "name": "delegated process exit status",
+            "passed": bool(result.get("ok")),
+            "evidence": (
+                f"exit {int(result.get('exit_code', 1))}; "
+                f"elapsed {float(result.get('elapsed', 0.0)):.3f}s"
+            ),
+        }
+        receipt = {
+            "run_id": run_id,
+            "original_goal": task,
+            "approved_scope": f"LightClaw-owned task workspace: {workspace_label}",
+            "risk_level": "high" if profile == "trusted-command" else "medium",
+            "capability_profile": profile,
+            "plan": [
+                {
+                    "label": "delegation",
+                    "worker": agent,
+                    "model": "local CLI account routing",
+                    "depends_on": [],
+                    "task": task,
+                }
+            ],
+            "started_at": started_at,
+            "finished_at": self._utc_now(),
+            "duration_seconds": round(float(result.get("elapsed", 0.0)), 3),
+            "usage": {
+                "provider": agent,
+                "tokens": None,
+                "estimated_cost_usd": None,
+                "note": "local CLI did not expose bounded usage to LightClaw",
+            },
+            "commands": commands,
+            "file_changes": file_changes,
+            "diff_summary": self._compact_diff_summary(file_changes),
+            "checks": [check],
+            "handoffs": [],
+            "artifacts": [
+                item["path"] for item in file_changes if item.get("change") != "deleted"
+            ],
+            "failures": [] if result.get("ok") else [stderr_excerpt or "delegated process failed"],
+            "retries": 0,
+            "disposition": "ready_for_review" if result.get("ok") else "failed",
+            "checkpoint": checkpoint,
+            "undo": f"lightclaw undo {target_workspace.name} --apply",
+            "workspace": target_workspace.as_posix(),
+            "session": session_id,
+        }
+        receipt_paths: tuple[Path, Path] | None = None
+        if emit_receipt:
+            receipt_json, receipt_markdown, safe_receipt = await asyncio.to_thread(
+                write_receipt,
+                receipt,
+                self._receipt_output_dir(run_id),
+            )
+            receipt_paths = (receipt_json, receipt_markdown)
+            receipt = safe_receipt
+        if evidence_sink is not None:
+            evidence_sink.clear()
+            evidence_sink.update(receipt)
+            if receipt_paths:
+                evidence_sink["receipt_json"] = receipt_paths[0].as_posix()
+                evidence_sink["receipt_markdown"] = receipt_paths[1].as_posix()
 
         lines = [f"🤖 Delegated to `{agent}`"]
         lines.append(f"📁 Task workspace: `{workspace_label}`")
@@ -929,6 +1066,10 @@ class DelegationExecutionMixin:
         if not result.get("ok") and stderr_excerpt:
             lines.append("")
             lines.append(f"stderr: {stderr_excerpt[:700]}")
+
+        if receipt_paths:
+            lines.append("")
+            lines.append(f"🧾 Receipt: `{receipt_paths[1].as_posix()}`")
 
         log.info("Local agent run finished")
         return "\n".join(lines).strip()

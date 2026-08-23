@@ -804,6 +804,33 @@ def _prepare_runtime_environment(
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    if args.run_action == "export":
+        from core.receipts import export_share_card
+
+        if not args.receipt:
+            print("Receipt export requires --receipt <receipt.json>.")
+            return 2
+        source = Path(args.receipt).expanduser().resolve()
+        output = (
+            Path(args.output).expanduser().resolve()
+            if args.output
+            else source.with_name(f"{source.stem}.share-card.json")
+        )
+        try:
+            result = export_share_card(source, output, apply=bool(args.apply))
+        except ValueError as exc:
+            print(f"Refusing receipt export: {exc}")
+            return 2
+        print("LightClaw sanitized Run Card")
+        print("- Included fields: " + ", ".join(result["included_fields"]))
+        print("- Excluded private fields: " + ", ".join(result["excluded_private_fields"]))
+        print(f"- Destination: {result['output']}")
+        if result["applied"]:
+            print("Run Card written with private file permissions. Review it before sharing.")
+        else:
+            print("Preview only; no file written. Re-run with --apply after reviewing this list.")
+        return 0
+
     home = _resolve_home(args.home)
     prep_code = _prepare_runtime_environment(
         home,
@@ -1324,6 +1351,13 @@ def build_parser() -> argparse.ArgumentParser:
             "you can choose provider/model interactively from configured credentials."
         ),
     )
+    run.add_argument(
+        "run_action",
+        nargs="?",
+        choices=("serve", "export"),
+        default="serve",
+        help="Serve the bot (default) or preview/export a sanitized Run Card",
+    )
     run.add_argument("--home", help="Runtime home directory (default: user home)")
     run.add_argument(
         "--provider",
@@ -1332,6 +1366,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--model",
         help="Override model for this run (used with current/overridden provider)",
+    )
+    run.add_argument("--receipt", help="Private receipt.json source for `run export`")
+    run.add_argument("--output", help="Run Card destination for `run export`")
+    run.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write the previewed sanitized Run Card",
     )
     run.set_defaults(func=cmd_run)
 

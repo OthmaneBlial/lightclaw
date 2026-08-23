@@ -17,6 +17,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ...markdown import _escape_html
+from ...receipts import write_receipt
 
 
 class CommandsAgentMixin:
@@ -1174,6 +1175,8 @@ class CommandsAgentMixin:
         workers: list[tuple[str, str]],
         plan_payload: dict[str, object],
     ):
+        run_started_clock = time.monotonic()
+        run_started_at = self._utc_now()
         multi_workspace = await asyncio.to_thread(self._create_task_workspace, goal)
         multi_workspace_label = self._workspace_rel_label(multi_workspace)
         agents_path = await asyncio.to_thread(
@@ -1190,6 +1193,11 @@ class CommandsAgentMixin:
         before_multi = await asyncio.to_thread(
             self._snapshot_workspace_state, multi_workspace
         )
+        checkpoint = {
+            "type": "new-owned-directory",
+            "pre_existing_files": len(before_multi),
+            "workspace": multi_workspace_label,
+        }
 
         plan_lines = ["🤖 <b>Multi-Agent Execution</b>", ""]
         plan_lines.append(f"<b>Goal:</b> {_escape_html(goal)}")
@@ -1277,6 +1285,7 @@ class CommandsAgentMixin:
 
             last_result = ""
             last_failures: list[str] = []
+            attempt_evidence: list[dict[str, object]] = []
 
             for attempt in range(repair_attempts + 1):
                 task_prompt = worker_task
@@ -1292,6 +1301,7 @@ class CommandsAgentMixin:
                     )
 
                 try:
+                    worker_evidence: dict[str, object] = {}
                     result = await self._run_local_agent_task(
                         session_id=session_id,
                         agent=agent,
@@ -1299,9 +1309,25 @@ class CommandsAgentMixin:
                         progress_cb=_worker_progress_update,
                         include_workspace_delta=False,
                         workspace_dir=multi_workspace,
+                        emit_receipt=False,
+                        evidence_sink=worker_evidence,
                     )
+                    attempt_evidence.append(worker_evidence)
                 except Exception as e:
                     result = f"⚠️ Worker failed: {e}"
+                    attempt_evidence.append(
+                        {
+                            "commands": [],
+                            "checks": [
+                                {
+                                    "name": f"{label} execution",
+                                    "passed": False,
+                                    "evidence": "worker raised an exception",
+                                }
+                            ],
+                            "failures": [str(e)],
+                        }
+                    )
 
                 runtime_ok = _is_success_result(result)
                 handoff_data: dict[str, Any] = {}
@@ -1326,7 +1352,7 @@ class CommandsAgentMixin:
                         await progress_msg.edit_text(f"{tag}\n✅ Worker completed.")
                     except Exception:
                         pass
-                    return (label, agent, enriched_result, True)
+                    return (label, agent, enriched_result, True, attempt_evidence)
 
                 last_result = enriched_result
                 last_failures = acceptance_failures or ["worker execution failed"]
@@ -1335,7 +1361,7 @@ class CommandsAgentMixin:
                         await progress_msg.edit_text(f"{tag}\n⚠️ Worker finished with issues.")
                     except Exception:
                         pass
-                    return (label, agent, last_result, False)
+                    return (label, agent, last_result, False, attempt_evidence)
 
                 reason = self._short_progress_text("; ".join(last_failures), max_chars=180)
                 try:
@@ -1345,12 +1371,13 @@ class CommandsAgentMixin:
                 except Exception:
                     pass
 
-            return (label, agent, last_result or "⚠️ Worker failed.", False)
+            return (label, agent, last_result or "⚠️ Worker failed.", False, attempt_evidence)
 
         remaining = set(workers_by_label.keys())
         completed_ok: set[str] = set()
         failed: set[str] = set()
         results_by_label: dict[str, object] = {}
+        evidence_by_label: dict[str, list[dict[str, object]]] = {}
         index_by_label = {label: idx for idx, (label, _) in enumerate(workers)}
         wait_status_by_label: dict[str, str] = {}
         running: dict[asyncio.Task[Any], str] = {}
@@ -1446,8 +1473,9 @@ class CommandsAgentMixin:
                 if label:
                     remaining.discard(label)
                 result = task.result()
-                label, _agent, worker_result, ok = result
+                label, _agent, worker_result, ok, attempt_evidence = result
                 results_by_label[label] = worker_result
+                evidence_by_label[label] = attempt_evidence
                 if ok:
                     completed_ok.add(label)
                 else:
@@ -1518,6 +1546,128 @@ class CommandsAgentMixin:
             final_lines.append("")
 
         final_lines.append(multi_delta)
+
+        file_changes = await asyncio.to_thread(
+            self._workspace_file_changes,
+            multi_workspace,
+            before_multi,
+            after_multi,
+        )
+        receipt_checks: list[dict[str, object]] = []
+        for label, _agent in workers:
+            ok = label in completed_ok
+            receipt_checks.append(
+                {
+                    "name": f"lane {label} acceptance",
+                    "passed": ok,
+                    "evidence": "worker contract passed" if ok else "worker contract failed or was skipped",
+                }
+            )
+        for name, applicable, findings in (
+            ("cross-lane API audit", api_audit_applicable, api_audit_findings),
+            ("cross-lane findings audit", findings_audit_applicable, findings_audit_findings),
+            ("deliverables audit", deliverables_audit_applicable, deliverables_audit_findings),
+        ):
+            if applicable:
+                receipt_checks.append(
+                    {
+                        "name": name,
+                        "passed": not findings,
+                        "evidence": "; ".join(findings[:6]) if findings else "passed",
+                    }
+                )
+
+        commands: list[dict[str, object]] = []
+        failures: list[str] = []
+        retries = 0
+        for label, attempts in evidence_by_label.items():
+            retries += max(0, len(attempts) - 1)
+            for attempt in attempts:
+                attempt_commands = attempt.get("commands")
+                if isinstance(attempt_commands, list):
+                    for command in attempt_commands:
+                        if isinstance(command, dict):
+                            commands.append({"lane": label, **command})
+                attempt_failures = attempt.get("failures")
+                if isinstance(attempt_failures, list):
+                    failures.extend(f"{label}: {item}" for item in attempt_failures if str(item))
+        failures.extend(f"{label}: lane did not complete" for label in sorted(failed))
+        failures.extend(api_audit_findings)
+        failures.extend(findings_audit_findings)
+        failures.extend(deliverables_audit_findings)
+        failures = list(dict.fromkeys(failures))
+
+        handoffs: list[dict[str, object]] = []
+        for label, _agent in workers:
+            handoff_data, handoff_error = await asyncio.to_thread(
+                self._load_multi_worker_handoff,
+                multi_workspace,
+                label,
+            )
+            if handoff_error:
+                continue
+            handoff_to = handoff_data.get("handoff")
+            handoffs.append(
+                {
+                    "from": label,
+                    "to": handoff_to if handoff_to else "final audit",
+                    "status": handoff_data.get("status", "recorded"),
+                    "path": self._multi_handoff_json_path(label),
+                }
+            )
+
+        receipt_plan: list[dict[str, object]] = []
+        for label, agent in workers:
+            contract = worker_contract_by_label.get(label, {})
+            receipt_plan.append(
+                {
+                    "label": label,
+                    "worker": agent,
+                    "model": "local CLI account routing",
+                    "depends_on": list(dependency_map.get(label, [])),
+                    "task": str(contract.get("role") or "implementation"),
+                    "owned_paths": contract.get("owned_paths", []),
+                }
+            )
+        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
+        receipt = {
+            "run_id": run_id,
+            "original_goal": goal,
+            "approved_scope": f"LightClaw-owned task workspace: {multi_workspace_label}",
+            "risk_level": "medium",
+            "capability_profile": self.config.local_agent_capability_profile,
+            "plan": receipt_plan,
+            "started_at": run_started_at,
+            "finished_at": self._utc_now(),
+            "duration_seconds": round(time.monotonic() - run_started_clock, 3),
+            "usage": {
+                "provider": "local coding-agent CLIs",
+                "tokens": None,
+                "estimated_cost_usd": None,
+                "note": "workers did not expose bounded usage to LightClaw",
+            },
+            "commands": commands,
+            "file_changes": file_changes,
+            "diff_summary": self._compact_diff_summary(file_changes),
+            "checks": receipt_checks,
+            "handoffs": handoffs,
+            "artifacts": [
+                item["path"] for item in file_changes if item.get("change") != "deleted"
+            ],
+            "failures": failures,
+            "retries": retries,
+            "disposition": "ready_for_review" if not failures else "failed",
+            "checkpoint": checkpoint,
+            "undo": f"lightclaw undo {multi_workspace.name} --apply",
+        }
+        receipt_json, receipt_markdown, _ = await asyncio.to_thread(
+            write_receipt,
+            receipt,
+            self._receipt_output_dir(run_id),
+        )
+        final_lines.append("")
+        final_lines.append(f"🧾 Receipt: `{receipt_markdown.as_posix()}`")
+        final_lines.append(f"JSON: `{receipt_json.as_posix()}`")
 
         request_entry = (
             "[delegation-request]\n"

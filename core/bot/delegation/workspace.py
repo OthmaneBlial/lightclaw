@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import time
 from pathlib import Path
@@ -110,3 +111,53 @@ class DelegationWorkspaceMixin:
                 lines.append(f"- {label}: ... and {remaining} more")
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _workspace_file_changes(
+        workspace: Path,
+        before: dict[str, tuple[int, int]],
+        after: dict[str, tuple[int, int]],
+    ) -> list[dict[str, object]]:
+        """Return bounded, content-addressed file evidence for a receipt."""
+        before_paths = set(before)
+        after_paths = set(after)
+        changes: list[dict[str, object]] = []
+        groups = (
+            ("created", sorted(after_paths - before_paths)),
+            (
+                "updated",
+                sorted(path for path in before_paths & after_paths if before[path] != after[path]),
+            ),
+            ("deleted", sorted(before_paths - after_paths)),
+        )
+        for change, paths in groups:
+            for relative in paths[:500]:
+                current = workspace / relative
+                size = after.get(relative, before.get(relative, (0, 0)))[0]
+                digest = ""
+                if change != "deleted" and current.is_file() and not current.is_symlink():
+                    try:
+                        digest = hashlib.sha256(current.read_bytes()).hexdigest()
+                    except OSError:
+                        digest = "unavailable"
+                changes.append(
+                    {
+                        "path": relative,
+                        "change": change,
+                        "bytes": int(size),
+                        "sha256": digest,
+                    }
+                )
+        return changes
+
+    @staticmethod
+    def _compact_diff_summary(file_changes: list[dict[str, object]]) -> str:
+        counts = {"created": 0, "updated": 0, "deleted": 0}
+        for item in file_changes:
+            change = str(item.get("change") or "")
+            if change in counts:
+                counts[change] += 1
+        return (
+            f"{counts['created']} created, {counts['updated']} updated, "
+            f"{counts['deleted']} deleted"
+        )

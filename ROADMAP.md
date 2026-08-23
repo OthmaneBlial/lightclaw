@@ -172,7 +172,7 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 - [x] `examples/telegram-repo-task`: modify a bounded fixture repo and return a diff plus tests.
 - [x] `examples/telegram-multi-agent`: approve a two-lane plan and produce handoffs plus a final audit.
 - [x] Include prerequisites, exact prompt, expected output, duration/cost range, cleanup, and security limits in each example.
-- [ ] Run fixture mode for every example in CI; document a separate real-device/manual verification.
+- [x] Run fixture mode for every example in CI; document a separate real-device/manual verification.
 
 ### P1.4 Measure “lightweight” honestly
 
@@ -197,7 +197,7 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 - [ ] At least 10 external testers attempt a fresh install; at least 9 complete the deterministic demo.
 - [ ] Median deterministic time-to-first-success is under 3 minutes.
 - [ ] Median real Telegram time-to-first-task is under 10 minutes.
-- [ ] Three examples pass in CI and match their documented outputs.
+- [x] Three examples pass in CI and match their documented outputs.
 - [x] Every performance claim links to raw reproducible evidence.
 - [ ] `v0.1.0` has verified artifacts, provenance, release notes, and rollback instructions.
 
@@ -211,15 +211,15 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 
 Every run should produce a local Markdown and JSON receipt containing:
 
-- [ ] original goal and approved scope;
-- [ ] risk level and granted capability profile;
-- [ ] plan/DAG and worker/model assignment;
-- [ ] start/end times and bounded token/cost estimate where providers expose usage;
-- [ ] commands run, exit status, and redacted output summary;
-- [ ] files created/changed/deleted and a compact diff summary;
-- [ ] tests/checks requested and actual evidence;
-- [ ] handoffs, artifacts, failures, retries, and final disposition;
-- [ ] starting checkpoint and safe undo instructions.
+- [x] original goal and approved scope;
+- [x] risk level and granted capability profile;
+- [x] plan/DAG and worker/model assignment;
+- [x] start/end times and bounded token/cost estimate where providers expose usage;
+- [x] commands run, exit status, and redacted output summary;
+- [x] files created/changed/deleted and a compact diff summary;
+- [x] tests/checks requested and actual evidence;
+- [x] handoffs, artifacts, failures, retries, and final disposition;
+- [x] starting checkpoint and safe undo instructions.
 
 Receipts must be local and private by default. `lightclaw run export` may generate a sanitized share card only after showing exactly what will be included.
 
