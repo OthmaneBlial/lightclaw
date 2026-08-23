@@ -177,10 +177,10 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 ### P1.4 Measure “lightweight” honestly
 
 - [x] Add a reproducible `bench/` suite with raw JSON/CSV output.
-- [ ] Measure clean install time, dependency count, idle RAM, startup time, routing overhead, core LOC, and minimum tested VPS/container size.
+- [x] Measure clean install time, dependency count, idle RAM, startup time, routing overhead, core LOC, and minimum tested VPS/container size.
 - [x] Add memory retrieval quality on a versioned fixture corpus.
 - [x] Add a deterministic orchestration scenario measuring dependency order, handoff completion, failure reporting, and repair behavior.
-- [ ] Publish commit, OS, Python, hardware, run count, and whether each result is mocked or live.
+- [x] Publish commit, OS, Python, hardware, run count, and whether each result is mocked or live.
 - [x] Replace “tiny” and “infinite” with precise numbers until the stronger claims are earned.
 
 ### P1.5 Cut the first credible release
@@ -198,7 +198,7 @@ This is a launch blocker. Do not run a major promotion before the exit criteria 
 - [ ] Median deterministic time-to-first-success is under 3 minutes.
 - [ ] Median real Telegram time-to-first-task is under 10 minutes.
 - [ ] Three examples pass in CI and match their documented outputs.
-- [ ] Every performance claim links to raw reproducible evidence.
+- [x] Every performance claim links to raw reproducible evidence.
 - [ ] `v0.1.0` has verified artifacts, provenance, release notes, and rollback instructions.
 
 ## Phase 2 — Build the signature product loop

@@ -1,0 +1,39 @@
+metric,value
+schema_version,1
+recorded_at,2026-08-23T20:44:01Z
+commit,be5a71d30cd7a2bea5119d2624fdeff275c5c8da
+evidence_mode,full
+run_count,5
+environment.os,macOS-26.6-arm64-arm-64bit-Mach-O
+environment.python,3.13.1
+environment.machine,arm64
+environment.processor,arm
+environment.cpu_count,8
+environment.total_memory_bytes,17179869184
+runtime.startup_median_ms,100.19
+runtime.idle_import_process_rss_bytes,26148864
+runtime.config_routing_overhead_us_per_call,1.6367
+runtime.runtime_python_loc,13291
+runtime.direct_runtime_dependency_count,6
+memory_retrieval.fixture_version,1
+memory_retrieval.queries,8
+memory_retrieval.top1_hits,8
+memory_retrieval.top1_accuracy,1.0
+memory_retrieval.mode,deterministic local lexical fixture
+orchestration.fixture_version,1
+orchestration.dependency_order_passed,True
+orchestration.handoff_completion_passed,True
+orchestration.failure_reporting_passed,True
+orchestration.repair_behavior_passed,True
+orchestration.receipt_generated,True
+orchestration.mode,deterministic fixture; no model calls
+minimum_tested_host.status,deterministic demo verified
+minimum_tested_host.container_memory_limit_bytes,268435456
+minimum_tested_host.container_cpu_limit,0.5
+minimum_tested_host.scenario,repo-task
+minimum_tested_host.scope,"Pinned Python 3.13 slim image build, command smoke, real fixture unit test, and receipt generation. A live Telegram bot/provider was not tested under this limit."
+clean_install.venv_create_seconds,2.172
+clean_install.install_seconds,12.79
+clean_install.installed_distribution_count,45
+clean_install.command_smoke_passed,True
+clean_install.network_and_cache_state,live PyPI resolution; local pip cache may be used
