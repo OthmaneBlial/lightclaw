@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import tempfile
 import time
 import uuid
 from datetime import datetime
@@ -16,52 +13,11 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from ...fs import atomic_write_json as _atomic_write_json
+from ...fs import read_json_object
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import runtime_root_from_workspace
-
-
-def _atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
-    """Atomically write text to disk using fsync + rename."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path: Path | None = None
-
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding=encoding,
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as tmp:
-            tmp.write(content)
-            tmp.flush()
-            os.fsync(tmp.fileno())
-            temp_path = Path(tmp.name)
-
-        os.replace(temp_path, path)
-        temp_path = None
-
-        # Best-effort fsync of parent directory metadata.
-        try:
-            dir_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-        except OSError:
-            pass
-    finally:
-        if temp_path is not None:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    _atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True))
 
 
 class CommandsCronMixin:
@@ -111,11 +67,8 @@ class CommandsCronMixin:
 
     def _read_cron_store(self) -> dict[str, Any]:
         path = self._cron_jobs_path()
-        if not path.exists():
-            return {"jobs": []}
-
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = read_json_object(path, default={"jobs": []}, max_bytes=1024 * 1024)
         except Exception as e:
             log.warning(f"Failed to read cron jobs store, resetting to empty: {e}")
             return {"jobs": []}

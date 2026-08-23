@@ -50,6 +50,10 @@ jobs:
         run: lightclaw skills validate --path examples/safe-skill
       - name: Verify generated provider compatibility matrix
         run: python scripts/generate_provider_matrix.py --check
+      - name: Enforce architecture and growth budget
+        run: |
+          python scripts/check_architecture.py --check
+          python -m bench.runtime_footprint --output /tmp/lightclaw-runtime-footprint.json
       - name: Test with coverage evidence
         run: python -m pytest --cov=core --cov=config --cov=lightclaw_cli --cov=memory --cov=providers --cov=skills --cov-report=term-missing --cov-report=xml
       - name: Run all token-free product stories

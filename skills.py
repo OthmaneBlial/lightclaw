@@ -13,7 +13,6 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import os
 import re
 import shutil
 import tempfile
@@ -26,6 +25,10 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
+
+from core.fs import atomic_write_json as _atomic_write_json
+from core.fs import atomic_write_text as _atomic_write_text
+from core.fs import read_json_object
 
 DEFAULT_HUB_BASE_URL = "https://clawhub.ai"
 DEFAULT_API_PREFIX = "/api/v1"
@@ -332,50 +335,6 @@ def _body_summary(text: str, max_len: int = 180) -> str:
     return ""
 
 
-def _atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
-    """Atomically write text to disk using fsync + rename."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path: Path | None = None
-
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding=encoding,
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as tmp:
-            tmp.write(content)
-            tmp.flush()
-            os.fsync(tmp.fileno())
-            temp_path = Path(tmp.name)
-
-        os.replace(temp_path, path)
-        temp_path = None
-
-        # Best-effort: fsync directory to persist rename metadata.
-        try:
-            dir_fd = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(dir_fd)
-            finally:
-                os.close(dir_fd)
-        except OSError:
-            pass
-    finally:
-        if temp_path is not None:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Atomically write JSON object with stable formatting."""
-    _atomic_write_text(path, json.dumps(payload, indent=2, sort_keys=True))
-
-
 class SkillManager:
     """Manage installed skills, active per-chat skills, and ClawHub installs."""
 
@@ -486,11 +445,12 @@ class SkillManager:
                 _atomic_write_json(source_path, source)
 
     def _read_state(self) -> dict[str, Any]:
-        if not self.state_path.exists():
-            return {"active_by_chat": {}, "approved_hashes_by_chat": {}}
-
         try:
-            data = json.loads(self.state_path.read_text(encoding="utf-8"))
+            data = read_json_object(
+                self.state_path,
+                default={"active_by_chat": {}, "approved_hashes_by_chat": {}},
+                max_bytes=1024 * 1024,
+            )
             active = data.get("active_by_chat")
             if not isinstance(active, dict):
                 active = {}

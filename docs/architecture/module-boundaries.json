@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "required_concerns": [
+    "planning",
+    "execution",
+    "persistence",
+    "rendering",
+    "acceptance"
+  ],
+  "modules": {
+    "core/bot/delegation/planning.py": ["planning", "rendering"],
+    "core/bot/delegation/tasks.py": ["planning"],
+    "core/bot/commands/agent_acceptance.py": ["acceptance"],
+    "core/bot/commands/agent_execution.py": ["execution", "persistence", "rendering"],
+    "core/jobs.py": ["persistence"],
+    "core/receipts.py": ["persistence", "rendering"]
+  },
+  "invariants": {
+    "max_concerns_per_module": 3,
+    "planning_and_acceptance_separate": true,
+    "execution_and_acceptance_separate": true
+  }
+}

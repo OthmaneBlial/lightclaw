@@ -1,0 +1,289 @@
+{
+  "direct_dependencies": [
+    "anthropic>=1,<2",
+    "google-genai>=2,<3",
+    "httpx>=0.27,<1",
+    "openai>=2,<4",
+    "python-dotenv==1.2.3",
+    "python-telegram-bot>=21,<23"
+  ],
+  "direct_dependency_count": 6,
+  "highest_branch_functions": [
+    {
+      "branch_points": 99,
+      "line": 63,
+      "lines": 690,
+      "name": "_execute_multi_agent_plan",
+      "path": "core/bot/commands/agent_execution.py"
+    },
+    {
+      "branch_points": 93,
+      "line": 221,
+      "lines": 445,
+      "name": "_process_file_blocks",
+      "path": "core/bot/file_ops.py"
+    },
+    {
+      "branch_points": 84,
+      "line": 16,
+      "lines": 482,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
+      "branch_points": 76,
+      "line": 886,
+      "lines": 394,
+      "name": "_run_local_agent_task",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 61,
+      "line": 175,
+      "lines": 329,
+      "name": "_process_user_message",
+      "path": "core/bot/handlers.py"
+    },
+    {
+      "branch_points": 58,
+      "line": 862,
+      "lines": 209,
+      "name": "_normalize_multi_plan_payload",
+      "path": "core/bot/delegation/planning.py"
+    },
+    {
+      "branch_points": 57,
+      "line": 839,
+      "lines": 331,
+      "name": "cmd_chat",
+      "path": "lightclaw_cli.py"
+    },
+    {
+      "branch_points": 50,
+      "line": 406,
+      "lines": 168,
+      "name": "_evaluate_multi_worker_acceptance",
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
+      "branch_points": 47,
+      "line": 105,
+      "lines": 314,
+      "name": "cmd_skills",
+      "path": "core/bot/commands/skills.py"
+    },
+    {
+      "branch_points": 47,
+      "line": 383,
+      "lines": 94,
+      "name": "_ingest_claude_progress_obj",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 43,
+      "line": 143,
+      "lines": 73,
+      "name": "validate_skill_manifest",
+      "path": "skills.py"
+    },
+    {
+      "branch_points": 38,
+      "line": 155,
+      "lines": 149,
+      "name": "_parse_multi_agent_args",
+      "path": "core/bot/delegation/agents.py"
+    },
+    {
+      "branch_points": 35,
+      "line": 564,
+      "lines": 214,
+      "name": "_invoke_local_agent_streaming",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 33,
+      "line": 460,
+      "lines": 153,
+      "name": "_configure_env_interactive",
+      "path": "lightclaw_cli.py"
+    },
+    {
+      "branch_points": 33,
+      "line": 316,
+      "lines": 66,
+      "name": "_ingest_codex_progress_obj",
+      "path": "core/bot/delegation/execution.py"
+    }
+  ],
+  "largest_functions": [
+    {
+      "branch_points": 99,
+      "line": 63,
+      "lines": 690,
+      "name": "_execute_multi_agent_plan",
+      "path": "core/bot/commands/agent_execution.py"
+    },
+    {
+      "branch_points": 84,
+      "line": 16,
+      "lines": 482,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
+      "branch_points": 93,
+      "line": 221,
+      "lines": 445,
+      "name": "_process_file_blocks",
+      "path": "core/bot/file_ops.py"
+    },
+    {
+      "branch_points": 76,
+      "line": 886,
+      "lines": 394,
+      "name": "_run_local_agent_task",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 57,
+      "line": 839,
+      "lines": 331,
+      "name": "cmd_chat",
+      "path": "lightclaw_cli.py"
+    },
+    {
+      "branch_points": 61,
+      "line": 175,
+      "lines": 329,
+      "name": "_process_user_message",
+      "path": "core/bot/handlers.py"
+    },
+    {
+      "branch_points": 47,
+      "line": 105,
+      "lines": 314,
+      "name": "cmd_skills",
+      "path": "core/bot/commands/skills.py"
+    },
+    {
+      "branch_points": 0,
+      "line": 1647,
+      "lines": 245,
+      "name": "build_parser",
+      "path": "lightclaw_cli.py"
+    },
+    {
+      "branch_points": 35,
+      "line": 564,
+      "lines": 214,
+      "name": "_invoke_local_agent_streaming",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 58,
+      "line": 862,
+      "lines": 209,
+      "name": "_normalize_multi_plan_payload",
+      "path": "core/bot/delegation/planning.py"
+    },
+    {
+      "branch_points": 26,
+      "line": 260,
+      "lines": 206,
+      "name": "cmd_cron",
+      "path": "core/bot/commands/cron.py"
+    },
+    {
+      "branch_points": 9,
+      "line": 78,
+      "lines": 169,
+      "name": "_build_fallback_multi_plan_payload",
+      "path": "core/bot/delegation/planning.py"
+    },
+    {
+      "branch_points": 7,
+      "line": 276,
+      "lines": 169,
+      "name": "_build_agents_plan_payload",
+      "path": "core/bot/delegation/tasks.py"
+    },
+    {
+      "branch_points": 50,
+      "line": 406,
+      "lines": 168,
+      "name": "_evaluate_multi_worker_acceptance",
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
+      "branch_points": 25,
+      "line": 31,
+      "lines": 167,
+      "name": "_build_multi_agent_worker_task",
+      "path": "core/bot/delegation/tasks.py"
+    }
+  ],
+  "largest_modules": [
+    {
+      "lines": 1901,
+      "path": "lightclaw_cli.py"
+    },
+    {
+      "lines": 1279,
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "lines": 1271,
+      "path": "core/bot/delegation/planning.py"
+    },
+    {
+      "lines": 1181,
+      "path": "skills.py"
+    },
+    {
+      "lines": 934,
+      "path": "core/bot/file_ops.py"
+    },
+    {
+      "lines": 813,
+      "path": "memory.py"
+    },
+    {
+      "lines": 752,
+      "path": "core/bot/commands/agent_execution.py"
+    },
+    {
+      "lines": 614,
+      "path": "core/jobs.py"
+    },
+    {
+      "lines": 600,
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
+      "lines": 544,
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
+      "lines": 540,
+      "path": "core/bot/delegation/tasks.py"
+    },
+    {
+      "lines": 505,
+      "path": "core/bot/handlers.py"
+    },
+    {
+      "lines": 465,
+      "path": "core/bot/commands/cron.py"
+    },
+    {
+      "lines": 418,
+      "path": "core/artifacts.py"
+    },
+    {
+      "lines": 418,
+      "path": "core/bot/commands/skills.py"
+    }
+  ],
+  "runtime_lines": 17970,
+  "schema_version": 1
+}

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 from pathlib import Path
 
+from .fs import atomic_write_text
 from .security import redact_text
 
 RECEIPT_SCHEMA_VERSION = 1
@@ -60,19 +60,7 @@ def _redact_value(value):
 
 
 def _write_private(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temp = Path(raw_temp)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp, path)
-        path.chmod(0o600)
-    finally:
-        temp.unlink(missing_ok=True)
+    atomic_write_text(path, content, mode=0o600)
 
 
 def validate_receipt(receipt: dict[str, object]) -> list[str]:

@@ -20,12 +20,12 @@ import re
 import shlex
 import shutil
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+from core.fs import atomic_write_text
 from core.paths import config_path as app_config_path
 from core.paths import legacy_config_path
 from core.workspaces import WorkspaceSafetyError, undo_owned_task
@@ -86,18 +86,7 @@ def _write_private_text(path: Path, content: str, *, backup: bool = False) -> Pa
         shutil.copy2(path, backup_file)
         backup_file.chmod(0o600)
 
-    fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temp_path = Path(raw_temp)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(content)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_path, path)
-        path.chmod(0o600)
-    finally:
-        temp_path.unlink(missing_ok=True)
+    atomic_write_text(path, content, mode=0o600)
     return backup_file
 
 

@@ -53,6 +53,10 @@ jobs:
         run: |
           python -m build
           python -m twine check dist/*
+      - name: Measure release runtime footprint
+        run: |
+          wheel_path="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          python -m bench.runtime_footprint --wheel "$wheel_path" --output evidence/runtime-footprint.json
       - name: Attest distributions
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
@@ -62,6 +66,12 @@ jobs:
         with:
           name: python-distributions
           path: dist/*
+          if-no-files-found: error
+      - name: Upload runtime footprint
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: runtime-footprint
+          path: evidence/runtime-footprint.json
           if-no-files-found: error
 
   github-release-assets:
@@ -77,11 +87,16 @@ jobs:
         with:
           name: python-distributions
           path: dist
+      - name: Download runtime footprint
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: runtime-footprint
+          path: evidence
       - name: Attach distributions
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$RELEASE_TAG" dist/* evidence/* --repo "$GITHUB_REPOSITORY" --clobber
 
   pypi:
     name: Publish to PyPI with OIDC

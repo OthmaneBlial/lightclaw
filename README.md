@@ -131,6 +131,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Namespaced lexical memory, retention, export, and evaluation](docs/MEMORY.md)
 - [Build and validate a safe skill in 10 minutes](docs/SAFE_SKILLS.md)
 - [Typed provider contract and generated compatibility matrix](docs/PROVIDERS.md)
+- [Architecture map, enforced budgets, and decision records](docs/ARCHITECTURE.md)
 - [Upgrade and rollback policy](docs/UPGRADING.md)
 - [Optional systemd service](docs/SYSTEMD.md)
 - [Reproducible benchmarks](bench/README.md)

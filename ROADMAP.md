@@ -289,19 +289,19 @@ Receipts must be local and private by default. `lightclaw run export` may genera
 
 ### P3.4 Pay down orchestration complexity
 
-- [ ] Split the largest modules by stable domain boundaries, not arbitrary line counts.
-- [ ] Set a core complexity budget and review net-new code against it.
-- [ ] Replace duplicated file/state helpers with tested small primitives.
-- [ ] Add architecture decision records for security boundary, job persistence, receipts, memory, and skill permissions.
-- [ ] Measure cold start and dependency growth on every release.
+- [x] Split the largest modules by stable domain boundaries, not arbitrary line counts.
+- [x] Set a core complexity budget and review net-new code against it.
+- [x] Replace duplicated file/state helpers with tested small primitives.
+- [x] Add architecture decision records for security boundary, job persistence, receipts, memory, and skill permissions.
+- [x] Measure cold start and dependency growth on every release.
 
 ### Phase 3 exit criteria
 
 - [x] Memory claims are backed by a public versioned evaluation.
 - [x] Every active hub skill has recorded provenance and declared permissions.
 - [x] Six provider adapters pass the same contract suite.
-- [ ] No single module owns planning, execution, persistence, rendering, and acceptance at once.
-- [ ] Runtime footprint remains within an explicitly published budget.
+- [x] No single module owns planning, execution, persistence, rendering, and acceptance at once.
+- [x] Runtime footprint remains within an explicitly published budget.
 
 ## Phase 4 — Community and compounding distribution
 

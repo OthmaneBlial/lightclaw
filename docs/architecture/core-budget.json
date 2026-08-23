@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "scope": "Python runtime modules under core plus public top-level facades",
+  "limits": {
+    "runtime_lines": 19000,
+    "runtime_module_lines": 2000,
+    "core_module_lines": 1300,
+    "function_lines": 700,
+    "function_branch_points": 100,
+    "direct_dependencies": 7,
+    "cold_start_p95_ms": 1000,
+    "wheel_bytes": 1000000
+  },
+  "review_policy": "CI rejects code or dependency growth beyond a limit. Raising a limit requires an ADR or an explicit architecture-budget rationale in the same review."
+}

@@ -12,10 +12,12 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Namespaced SQLite FTS5 lexical memory with bounded retention, private export, selective delete, and an optional embedding-rerank protocol.
 - Permission-manifest skills with inactive-by-default installation, owner/version provenance, source-and-manifest hash review, isolated high-authority declarations, and a non-executing validator.
 - One typed six-provider contract with normalized nullable usage, errors, bounded timeout/retry policy, explicit SDK close, recorded fixtures, and a generated compatibility matrix.
+- Stable orchestration modules for routing, planning, worker tasks, acceptance, and execution; shared atomic JSON/file primitives; five accepted architecture records; and CI-enforced complexity/runtime budgets.
 
 ### Changed
 
 - Migrated Gemini from deprecated `google-generativeai` to `google-genai`; updated supported OpenAI and Anthropic SDK major ranges behind the provider protocol.
+- Release evidence now includes cold-start samples, direct dependency count, and wheel size as a separate machine-readable artifact.
 
 ## [0.1.0] - Unreleased
 
