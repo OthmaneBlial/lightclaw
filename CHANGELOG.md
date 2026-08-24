@@ -6,6 +6,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Added
 
+- A mobile-first GitHub Pages showcase with a deterministic proof path, responsive
+  320–430 px layouts, keyboard-operable navigation and scenario tabs, and local asset tests.
 - A guarded, OIDC-only manual PyPI prerelease path for external alpha installs; stable tags
   now fail unless the privacy-safe aggregate proves every release gate.
 - A privacy-safe private-alpha evidence contract, structured external tester issue form,

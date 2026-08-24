@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0a0d0f" />
+    <meta
+      name="description"
+      content="LightClaw turns Telegram requests into scoped, reviewed, verified work on your local projects."
+    />
+    <meta property="og:title" content="LightClaw — Local work. Remote control. Receipts included." />
+    <meta
+      property="og:description"
+      content="Review the plan, watch bounded workers, and keep the patch, checks, receipts, and undo path."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://othmaneblial.github.io/lightclaw/" />
+    <title>LightClaw — Verified local agent work from Telegram</title>
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@75..125,600..900&amp;family=DM+Mono:wght@400;500&amp;family=Public+Sans:wght@400;500;600;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      document.documentElement.classList.remove("no-js");
+      document.documentElement.classList.add("js");
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header" data-header>
+      <a class="brand" href="#top" aria-label="LightClaw home">
+        <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M9 7v13c0 9 6 17 15 21 9-4 15-12 15-21V7" />
+          <path d="M9 14l9 8-5 8M39 14l-9 8 5 8M18 22l6-8 6 8M24 14v20" />
+        </svg>
+        <span>LIGHTCLAW</span>
+      </a>
+
+      <button
+        class="nav-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="site-nav"
+        aria-label="Open navigation"
+      >
+        <span></span><span></span>
+      </button>
+
+      <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+        <a href="#workflow">Workflow</a>
+        <a href="#proof">Proof</a>
+        <a href="#security">Security</a>
+        <a href="#try">Try it</a>
+        <a class="nav-github" href="https://github.com/OthmaneBlial/lightclaw">GitHub ↗</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero section-shell" id="top">
+        <div class="hero-copy reveal">
+          <p class="eyebrow"><span>01</span> Telegram mission control for local coding agents</p>
+          <h1>
+            Send the mission.<br />
+            <em>Keep the proof.</em>
+          </h1>
+          <p class="hero-lede">
+            LightClaw turns a phone request into a scoped DAG, bounded local work, real checks,
+            a reviewable patch, a private receipt, and a deliberate undo path.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#try">Run the $0 demo</a>
+            <a class="button button-quiet" href="https://github.com/OthmaneBlial/lightclaw">Inspect the source</a>
+          </div>
+          <p class="hero-note">
+            Alpha software with host access. No Telegram or provider token is needed for the
+            deterministic demo.
+          </p>
+        </div>
+
+        <div class="mission-console reveal" aria-label="Illustrated LightClaw mission run">
+          <div class="console-topline">
+            <span class="console-id">LC / RUN-0142</span>
+            <span class="live-dot">local</span>
+          </div>
+          <div class="request-card">
+            <span class="request-from">PHONE / OWNER</span>
+            <p>“Add a health check, test it, and return only verified work.”</p>
+          </div>
+          <ol class="dag-list" aria-label="Reviewed task plan">
+            <li>
+              <span class="dag-index">01</span>
+              <span><b>builder</b><small>service.py · workspace-write</small></span>
+              <i>ready</i>
+            </li>
+            <li>
+              <span class="dag-index">02</span>
+              <span><b>verifier</b><small>python -m unittest</small></span>
+              <i>blocked by 01</i>
+            </li>
+          </ol>
+          <div class="approval-row">
+            <span>Scope reviewed</span>
+            <strong>APPROVED</strong>
+          </div>
+          <div class="evidence-grid">
+            <span><b>✓</b> test passed</span>
+            <span><b>✓</b> patch ready</span>
+            <span><b>✓</b> receipt sealed</span>
+            <span><b>↶</b> undo scoped</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof-strip" aria-label="Current repository evidence">
+        <div><strong>3</strong><span>token-free stories</span></div>
+        <div><strong>6</strong><span>provider adapters</span></div>
+        <div><strong>3.10–3.13</strong><span>tested Python range</span></div>
+        <div><strong>$0</strong><span>fixture cost</span></div>
+      </section>
+
+      <section class="workflow section-shell" id="workflow">
+        <div class="section-heading reveal">
+          <p class="eyebrow"><span>02</span> The control loop</p>
+          <h2>Autonomy is useful.<br /><em>Review is non-negotiable.</em></h2>
+          <p>
+            LightClaw stays narrow: one owner, one visible plan, explicit capability, local
+            execution, observable checks, and evidence you can inspect after the chat scrolls away.
+          </p>
+        </div>
+
+        <ol class="workflow-list">
+          <li class="reveal">
+            <span class="step-no">01</span>
+            <div><h3>Request</h3><p>Send a text or voice goal from Telegram, or start locally from the terminal.</p></div>
+            <code>owner → goal</code>
+          </li>
+          <li class="reveal">
+            <span class="step-no">02</span>
+            <div><h3>Scope</h3><p>See paths, risk, capability profile, worker ownership, dependencies, and expected output.</p></div>
+            <code>goal → DAG</code>
+          </li>
+          <li class="reveal">
+            <span class="step-no">03</span>
+            <div><h3>Approve</h3><p>Approve, edit, or deny before workers touch the dedicated task workspace.</p></div>
+            <code>human gate</code>
+          </li>
+          <li class="reveal">
+            <span class="step-no">04</span>
+            <div><h3>Verify</h3><p>Acceptance checks decide whether work is accepted, repaired within bounds, or rejected.</p></div>
+            <code>tests → status</code>
+          </li>
+          <li class="reveal">
+            <span class="step-no">05</span>
+            <div><h3>Review</h3><p>Keep the patch, artifacts, file hashes, receipt, cost/time evidence, and scoped recovery path.</p></div>
+            <code>proof → choice</code>
+          </li>
+        </ol>
+      </section>
+
+      <section class="scenario-lab section-shell" id="proof">
+        <div class="section-heading compact reveal">
+          <p class="eyebrow"><span>03</span> Replayable proof</p>
+          <h2>Three stories.<br /><em>Zero hidden steps.</em></h2>
+        </div>
+
+        <div class="scenario-shell reveal">
+          <div class="scenario-tabs" role="tablist" aria-label="Demo scenarios">
+            <button type="button" role="tab" aria-selected="true" aria-controls="scenario-panel" data-scenario="repo">
+              Repo patch
+            </button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="scenario-panel" data-scenario="memory">
+              Memory
+            </button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="scenario-panel" data-scenario="multi">
+              Multi-agent
+            </button>
+          </div>
+
+          <div class="scenario-panel" id="scenario-panel" role="tabpanel" tabindex="0">
+            <div class="scenario-copy">
+              <p class="scenario-kicker" data-scenario-kicker>PHONE REQUEST → VERIFIED PATCH</p>
+              <h3 data-scenario-title>A real Git patch with a real passing unit test.</h3>
+              <p data-scenario-body>
+                The fixture creates a disposable Git-backed service, adds a health check, runs
+                unittest, and records the request, approval, test output, and patch.
+              </p>
+              <ul data-scenario-artifacts>
+                <li>review/changes.patch</li>
+                <li>artifact/test-output.txt</li>
+                <li>receipt.json + receipt.md</li>
+              </ul>
+            </div>
+            <div class="command-card">
+              <span>REPLAY COMMAND</span>
+              <pre><code id="scenario-command">lightclaw demo --scenario repo-task --json</code></pre>
+              <button class="copy-button" type="button" data-copy-target="scenario-command">
+                <span>Copy</span><b aria-hidden="true">⌘</b>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <figure class="walkthrough reveal">
+          <div class="figure-label"><span>24 SEC / SILENT</span><b>Request → approval → workers → evidence</b></div>
+          <img
+            src="assets/demo.svg"
+            alt="Captioned LightClaw walkthrough showing a Telegram goal, reviewed DAG, workers, tests, artifacts, and receipt"
+            width="1200"
+            height="650"
+            loading="lazy"
+          />
+        </figure>
+      </section>
+
+      <section class="security section-shell" id="security">
+        <div class="section-heading reveal">
+          <p class="eyebrow"><span>04</span> Explicit boundaries</p>
+          <h2>Local by default.<br /><em>Honest about every edge.</em></h2>
+          <p>
+            “Self-hosted” does not make Telegram, hosted providers, or external coding-agent
+            CLIs local. LightClaw names those boundaries and fails closed where it can.
+          </p>
+        </div>
+
+        <div class="boundary-grid">
+          <article class="boundary-card reveal">
+            <span class="boundary-tag safe">FAIL CLOSED</span>
+            <h3>Owner access</h3>
+            <p>An empty Telegram allowlist blocks startup. Public mode requires a separate explicit acknowledgement.</p>
+          </article>
+          <article class="boundary-card reveal">
+            <span class="boundary-tag safe">MINIMAL ENV</span>
+            <h3>Worker isolation</h3>
+            <p>Delegated workers do not inherit provider or Telegram secrets and run inside an owned task workspace.</p>
+          </article>
+          <article class="boundary-card reveal">
+            <span class="boundary-tag warn">YOUR DECISION</span>
+            <h3>Trusted execution</h3>
+            <p>Trusted host commands widen the boundary and require a separate confirmation. They are not called sandboxed.</p>
+          </article>
+        </div>
+
+        <figure class="architecture reveal">
+          <img
+            src="assets/security-architecture.svg"
+            alt="LightClaw architecture diagram with local host, provider, coding-agent, and public-export trust boundaries"
+            width="1200"
+            height="680"
+            loading="lazy"
+          />
+        </figure>
+      </section>
+
+      <section class="try-it section-shell" id="try">
+        <div class="try-copy reveal">
+          <p class="eyebrow"><span>05</span> Five-minute proof</p>
+          <h2>Try the loop before<br /><em>you trust the claim.</em></h2>
+          <p>
+            Clone, isolate, install, and run the deterministic repository story. It uses no
+            Telegram account, provider credential, or paid model call.
+          </p>
+          <a href="https://github.com/OthmaneBlial/lightclaw/blob/main/docs/QUICKSTART.md">Read the annotated quickstart →</a>
+        </div>
+
+        <div class="install-card reveal">
+          <div class="install-card-head">
+            <span>TERMINAL / SAFE INSTALL</span>
+            <i>macOS · Linux</i>
+          </div>
+          <pre><code id="install-command">git clone https://github.com/OthmaneBlial/lightclaw.git
+cd lightclaw
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
+lightclaw demo --scenario repo-task --json</code></pre>
+          <button class="copy-button copy-install" type="button" data-copy-target="install-command">
+            <span>Copy all</span><b aria-hidden="true">⌘</b>
+          </button>
+          <div class="install-result"><b>EXPECTED</b><span>accepted receipt · passing test · reviewable patch</span></div>
+        </div>
+      </section>
+
+      <section class="alpha-call section-shell reveal" aria-labelledby="alpha-title">
+        <div>
+          <span class="alpha-index">ALPHA / EXTERNAL EVIDENCE</span>
+          <h2 id="alpha-title">Run it on your machine.<br />Tell us what actually happened.</h2>
+        </div>
+        <div>
+          <p>
+            The stable release is intentionally blocked until real external self-hosters test
+            a fresh install. Failures and missing timings count as useful evidence.
+          </p>
+          <a class="button button-primary" href="https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml">
+            Submit a bounded alpha report
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <a class="brand footer-brand" href="#top">
+        <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true">
+          <path d="M9 7v13c0 9 6 17 15 21 9-4 15-12 15-21V7" />
+          <path d="M9 14l9 8-5 8M39 14l-9 8 5 8M18 22l6-8 6 8M24 14v20" />
+        </svg>
+        <span>LIGHTCLAW</span>
+      </a>
+      <p>Auditable Telegram mission control for local coding agents.</p>
+      <nav aria-label="Footer navigation">
+        <a href="https://github.com/OthmaneBlial/lightclaw">Source</a>
+        <a href="https://github.com/OthmaneBlial/lightclaw/tree/main/docs">Docs</a>
+        <a href="https://github.com/OthmaneBlial/lightclaw/security">Security</a>
+        <a href="https://github.com/OthmaneBlial/lightclaw/blob/main/LICENSE">MIT</a>
+      </nav>
+    </footer>
+
+    <div class="copy-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
