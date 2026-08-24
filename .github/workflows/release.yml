@@ -4,6 +4,16 @@ on:
   push:
     tags: ["v*.*.*"]
   workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: Publish the current PEP 440 prerelease to PyPI after all build checks
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -25,7 +35,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - name: Install release tools
-        run: python -m pip install --disable-pip-version-check build twine 'pytest>=9.0.3,<10'
+        run: python -m pip install --disable-pip-version-check build packaging twine 'pytest>=9.0.3,<10'
       - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -36,7 +46,14 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_object_sha" --jq .verification.verified)" = true
           package_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
           test "$RELEASE_TAG" = "v$package_version"
+          python -c 'from packaging.version import Version; import sys; version = Version(sys.argv[1]); assert not version.is_prerelease and not version.is_devrelease, "tag publication is stable-only; use the guarded manual prerelease path"' "$package_version"
+          python scripts/aggregate_alpha_reports.py --check launch/alpha/aggregate.json --require-ready
           python scripts/check_release_notes.py "docs/releases/$RELEASE_TAG.md" --version "$package_version" --published
+      - name: Verify manual prerelease version
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease
+        run: |
+          package_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          python -c 'from packaging.version import Version; import sys; version = Version(sys.argv[1]); assert version.is_prerelease or version.is_devrelease, "manual publication is prerelease-only"' "$package_version"
       - name: Run tests and deterministic stories
         run: |
           python -m pip install -e '.[dev]'
@@ -106,7 +123,7 @@ jobs:
 
   pypi:
     name: Publish to PyPI with OIDC
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_prerelease)
     needs: build
     runs-on: ubuntu-latest
     environment:

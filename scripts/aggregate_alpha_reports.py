@@ -331,6 +331,19 @@ def validate_aggregate(value: object) -> list[str]:
     return errors
 
 
+def release_gate_errors(value: object) -> list[str]:
+    """Return an explicit error unless a valid aggregate proves release readiness."""
+    errors = validate_aggregate(value)
+    if errors:
+        return errors
+    assert isinstance(value, dict)
+    gates = value["gates"]
+    assert isinstance(gates, dict)
+    if gates.get("release_ready") != "met":
+        return ["alpha aggregate: stable release gate is not met"]
+    return []
+
+
 def _synthetic_reports_for_gate_recalculation(aggregate: dict[str, Any]) -> list[dict[str, Any]]:
     """Reconstruct only the values needed to deterministically recalculate gates."""
     report_count = int(aggregate["collection"]["report_count"])
@@ -396,6 +409,11 @@ def main() -> int:
     parser.add_argument("--input", type=Path, help="Private directory of consented report JSON files")
     parser.add_argument("--output", type=Path, help="Write a privacy-safe aggregate")
     parser.add_argument("--check", type=Path, help="Validate/compare an aggregate")
+    parser.add_argument(
+        "--require-ready",
+        action="store_true",
+        help="Fail unless the validated aggregate proves every stable-release gate",
+    )
     args = parser.parse_args()
     if args.input is None:
         check_path = args.check or DEFAULT_AGGREGATE
@@ -419,12 +437,14 @@ def main() -> int:
             else:
                 if aggregate != expected:
                     errors.append("alpha aggregate is stale for the supplied private reports")
-        if args.output and not errors:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(
-                json.dumps(aggregate, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+    if args.require_ready and not errors:
+        errors.extend(release_gate_errors(aggregate))
+    if args.output and args.input is not None and not errors:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(aggregate, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
     if errors:
         print("Alpha aggregate validation failed:")
         for error in errors:

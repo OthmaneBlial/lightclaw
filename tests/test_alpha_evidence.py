@@ -1,7 +1,12 @@
 from copy import deepcopy
 from pathlib import Path
 
-from scripts.aggregate_alpha_reports import build_aggregate, validate_aggregate, validate_report
+from scripts.aggregate_alpha_reports import (
+    build_aggregate,
+    release_gate_errors,
+    validate_aggregate,
+    validate_report,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -54,6 +59,13 @@ def test_synthetic_external_cohort_meets_numeric_gates():
     assert aggregate["outcomes"]["deterministic_time_seconds"]["median"] == 124
     assert aggregate["gates"]["release_ready"] == "met"
     assert validate_aggregate(aggregate) == []
+    assert release_gate_errors(aggregate) == []
+
+
+def test_empty_alpha_aggregate_blocks_a_stable_release():
+    assert release_gate_errors(build_aggregate([])) == [
+        "alpha aggregate: stable release gate is not met"
+    ]
 
 
 def test_report_rejects_identity_or_free_text_fields():

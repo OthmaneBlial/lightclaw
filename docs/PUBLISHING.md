@@ -5,8 +5,11 @@ release workflow, which verifies the tag against `pyproject.toml`, runs the full
 requires GitHub to verify its annotated signature, builds wheel/sdist, checks metadata,
 creates an artifact attestation, publishes through
 PyPI Trusted Publishing, pushes the GHCR image, and only then creates the GitHub Release
-with the exact committed notes and verified assets. Manual dispatch is rehearsal-only and
-cannot publish packages or containers.
+with the exact committed notes and verified assets. Manual dispatch does not publish by
+default. A maintainer may explicitly enable `publish_prerelease` to
+publish the current PEP 440 prerelease to PyPI after the same build, test, artifact, and
+attestation steps. That path refuses stable versions and never publishes GHCR `latest` or
+creates a stable GitHub Release.
 
 ## One-time PyPI setup
 
@@ -27,5 +30,21 @@ cannot publish packages or containers.
    GitHub Release manually; the workflow creates it only after PyPI and GHCR succeed.
 6. Approve the protected `pypi` environment only after inspecting the workflow's built artifacts.
 7. Verify PyPI metadata/attestations, GitHub assets/attestation, GHCR digest, clean pipx/uv install, deterministic demo, and rollback instructions.
+
+## External alpha prerelease
+
+Use the guarded manual prerelease path only to make an explicitly versioned development or
+prerelease build installable by external alpha testers:
+
+1. Keep a PEP 440 prerelease such as `0.1.0.dev0` in `pyproject.toml`.
+2. Run the canonical quality command and push a green commit to `main`.
+3. Dispatch `Release` with `publish_prerelease=true` and inspect the built distributions
+   before approving the protected `pypi` environment.
+4. Verify the exact version and hashes on PyPI, then install that exact version in a clean
+   Python 3.10–3.13 environment and execute the deterministic repository-task demo.
+
+This does not satisfy the stable-release gate, publish a stable GitHub Release, or turn
+maintainer fixtures into external-alpha evidence. PyPI versions are immutable; fix a bad
+upload with a new prerelease version rather than trying to replace its files.
 
 If PyPI trusted publishing is not configured, the publish job must fail; do not bypass it with a token pasted into CI.
