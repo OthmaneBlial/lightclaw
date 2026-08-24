@@ -11,7 +11,7 @@ LightClaw is an auditable Telegram mission control for local Codex and Claude co
 
 ![Silent 24-second LightClaw walkthrough: request, plan, workers, tests, and run receipt](assets/demo.svg)
 
-[Watch the demo](#see-it-work-without-a-token) · [Install safely](docs/INSTALL.md) · [Read the security boundary](docs/THREAT_MODEL.md)
+[Explore the live project site](https://othmaneblial.github.io/lightclaw/) · [Watch the demo](#see-it-work-without-a-token) · [Install safely](docs/INSTALL.md) · [Read the security boundary](docs/THREAT_MODEL.md)
 
 [Five-minute quickstart](docs/QUICKSTART.md) · [Replay the showcase](showcase/) · [Inspect the evidence-led launch pack](launch/)
 
