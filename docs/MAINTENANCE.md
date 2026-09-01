@@ -20,11 +20,12 @@ or infer adoption from stars, traffic, forks, or private messages.
 
 ## Repository discovery contract
 
-Verified on 2026-08-24 through the GitHub API:
+Maintainer-controlled target, reverified on 2026-09-01 before publication:
 
-- homepage/docs URL: `https://github.com/OthmaneBlial/lightclaw/tree/main/docs`;
-- topics: `telegram`, `python`, `self-hosted`, `coding-agent`, `local-first`, `codex`,
-  `claude`;
+- homepage URL: `https://othmaneblial.github.io/lightclaw/`;
+- topics: `ai-agent`, `claude-code`, `codex`, `coding-agent`, `developer-tools`,
+  `human-in-the-loop`, `local-first`, `multi-agent`, `python`, `remote-coding`,
+  `remote-control`, `self-hosted`, and `telegram-bot`;
 - community profile: 100%, backed by the actual README, MIT license, contribution guide,
   Code of Conduct, PR template, structured issue forms, security policy, and support routes;
 - Discussions and private vulnerability reporting: enabled.
@@ -35,12 +36,11 @@ than treated as permanent facts.
 ## Badge admission policy
 
 A README badge must link directly to a signal that exists and can be independently opened.
-The current badge set is intentionally limited to CI, CodeQL, the supported Python range,
-and the MIT license. Do not add stars, downloads, coverage, release, container, PyPI,
-security-grade, or compatibility badges until the linked public signal is live and its
-scope is accurately labeled. Remove a badge when its source is retired.
+The current README intentionally uses no badges so the product story and evidence lead the
+page. Do not add stars, downloads, coverage, release, container, PyPI, security-grade, or
+compatibility badges until the linked public signal is live and its scope is accurately
+labeled. Remove a badge when its source is retired.
 
 Marketing milestones never override failed CI, an open critical/high security finding, an
 unverified distribution, missing rollback instructions, or an unsatisfied external alpha
 gate.
-

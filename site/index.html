@@ -3,19 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#0a0d0f" />
+    <meta name="theme-color" content="#07090a" />
     <meta
       name="description"
-      content="LightClaw turns Telegram requests into scoped, reviewed, verified work on your local projects."
+      content="Control local Codex and Claude coding agents from Telegram. Review bounded plans, inspect diffs and tests, and keep private run receipts."
     />
-    <meta property="og:title" content="LightClaw — Local work. Remote control. Receipts included." />
+    <link rel="canonical" href="https://othmaneblial.github.io/lightclaw/" />
+    <meta property="og:title" content="LightClaw — Control Codex and Claude from Telegram" />
     <meta
       property="og:description"
-      content="Review the plan, watch bounded workers, and keep the patch, checks, receipts, and undo path."
+      content="Review the scope before local agents run. Keep the checks, patch, private receipt, and scoped undo path after."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://othmaneblial.github.io/lightclaw/" />
-    <title>LightClaw — Verified local agent work from Telegram</title>
+    <meta property="og:site_name" content="LightClaw" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content="https://othmaneblial.github.io/lightclaw/assets/social-preview.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="640" />
+    <meta property="og:image:alt" content="LightClaw mission flow from Telegram scope review to a verified patch and private run receipt" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="LightClaw — Control Codex and Claude from Telegram" />
+    <meta name="twitter:description" content="Review the scope before local agents run. Keep the checks, patch, private receipt, and scoped undo path after." />
+    <meta name="twitter:image" content="https://othmaneblial.github.io/lightclaw/assets/social-preview.png" />
+    <meta name="twitter:image:alt" content="LightClaw mission flow from Telegram scope review to a verified patch and private run receipt" />
+    <title>LightClaw — Control Codex and Claude from Telegram</title>
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -24,6 +36,36 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@id": "https://othmaneblial.github.io/lightclaw/#app",
+            "@type": "SoftwareApplication",
+            "name": "LightClaw",
+            "url": "https://othmaneblial.github.io/lightclaw/",
+            "description": "Telegram control for reviewed, verified work by local Codex and Claude coding agents.",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": ["macOS", "Linux"],
+            "runtimePlatform": "Python 3.10-3.13",
+            "isAccessibleForFree": true,
+            "installUrl": "https://github.com/OthmaneBlial/lightclaw/blob/main/docs/INSTALL.md",
+            "license": "https://github.com/OthmaneBlial/lightclaw/blob/main/LICENSE"
+          },
+          {
+            "@id": "https://othmaneblial.github.io/lightclaw/#source",
+            "@type": "SoftwareSourceCode",
+            "name": "LightClaw source code",
+            "codeRepository": "https://github.com/OthmaneBlial/lightclaw",
+            "programmingLanguage": "Python",
+            "runtimePlatform": "Python 3.10-3.13",
+            "license": "https://github.com/OthmaneBlial/lightclaw/blob/main/LICENSE",
+            "targetProduct": { "@id": "https://othmaneblial.github.io/lightclaw/#app" }
+          }
+        ]
+      }
+    </script>
     <script>
       document.documentElement.classList.remove("no-js");
       document.documentElement.classList.add("js");
@@ -53,7 +95,7 @@
 
       <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
         <a href="#workflow">Workflow</a>
-        <a href="#proof">Proof</a>
+        <a href="#proof">Receipt</a>
         <a href="#security">Security</a>
         <a href="#try">Try it</a>
         <a class="nav-github" href="https://github.com/OthmaneBlial/lightclaw">GitHub ↗</a>
@@ -63,14 +105,14 @@
     <main id="main">
       <section class="hero section-shell" id="top">
         <div class="hero-copy reveal">
-          <p class="eyebrow"><span>01</span> Telegram mission control for local coding agents</p>
+          <p class="eyebrow"><span>01</span> Control local Codex and Claude coding agents from Telegram</p>
           <h1>
             Send the mission.<br />
             <em>Keep the proof.</em>
           </h1>
           <p class="hero-lede">
-            LightClaw turns a phone request into a scoped DAG, bounded local work, real checks,
-            a reviewable patch, a private receipt, and a deliberate undo path.
+            Review the scope before local agents run. Keep the real checks, reviewable patch,
+            private run receipt, and deliberate undo path after the chat scrolls away.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="#try">Run the $0 demo</a>
@@ -118,8 +160,8 @@
 
       <section class="proof-strip" aria-label="Current repository evidence">
         <div><strong>3</strong><span>token-free stories</span></div>
-        <div><strong>6</strong><span>provider adapters</span></div>
-        <div><strong>3.10–3.13</strong><span>tested Python range</span></div>
+        <div><strong>3</strong><span>direct base dependencies</span></div>
+        <div><strong>10</strong><span>clean-wheel distributions</span></div>
         <div><strong>$0</strong><span>fixture cost</span></div>
       </section>
 
@@ -128,8 +170,9 @@
           <p class="eyebrow"><span>02</span> The control loop</p>
           <h2>Autonomy is useful.<br /><em>Review is non-negotiable.</em></h2>
           <p>
-            LightClaw stays narrow: one owner, one visible plan, explicit capability, local
-            execution, observable checks, and evidence you can inspect after the chat scrolls away.
+            Telegram is the review surface, not the moat. LightClaw stays narrow: one owner,
+            one visible contract, explicit capability, local execution, observable checks,
+            and evidence you can inspect later.
           </p>
         </div>
 
@@ -162,10 +205,45 @@
         </ol>
       </section>
 
+      <section class="fit section-shell" aria-labelledby="fit-title">
+        <div class="section-heading compact reveal">
+          <p class="eyebrow"><span>02B</span> Choose the right tool</p>
+          <h2 id="fit-title">Not a remote terminal.<br /><em>A governed handoff.</em></h2>
+          <p>
+            Direct mobile clients are better for steering every turn. LightClaw is for handing
+            off a bounded mission, leaving the desk, and judging delivery from durable evidence.
+          </p>
+        </div>
+        <div class="fit-grid">
+          <article class="fit-card fit-card-muted reveal">
+            <span>USE A LIVE REMOTE CLIENT WHEN</span>
+            <h3>You want to drive the session.</h3>
+            <ul>
+              <li>You need a full terminal or IDE on your phone.</li>
+              <li>You want to steer every prompt and tool call live.</li>
+              <li>A transcript and diff viewer are enough evidence.</li>
+            </ul>
+          </article>
+          <article class="fit-card fit-card-active reveal">
+            <span>USE LIGHTCLAW WHEN</span>
+            <h3>You want to review the delivery.</h3>
+            <ul>
+              <li>Scope, paths, risk, and checks must be approved first.</li>
+              <li>Codex or Claude workers need bounded handoffs and repair limits.</li>
+              <li>The result must include a patch, checks, receipt, and recovery path.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
       <section class="scenario-lab section-shell" id="proof">
         <div class="section-heading compact reveal">
           <p class="eyebrow"><span>03</span> Replayable proof</p>
-          <h2>Three stories.<br /><em>Zero hidden steps.</em></h2>
+          <h2>Inspect the receipt.<br /><em>Not the promise.</em></h2>
+          <p>
+            Each tab maps to a committed, sanitized Run Card and a replayable fixture. The cards
+            prove local contracts only—not live provider quality, latency, or availability.
+          </p>
         </div>
 
         <div class="scenario-shell reveal">
@@ -195,6 +273,22 @@
                 <li>receipt.json + receipt.md</li>
               </ul>
             </div>
+            <aside class="receipt-card" aria-label="Sanitized run receipt summary">
+              <div class="receipt-head">
+                <span>RUN RECEIPT</span>
+                <b data-receipt-status>ACCEPTED</b>
+              </div>
+              <dl>
+                <div><dt>Approved scope</dt><dd data-receipt-scope>deterministic fixture directory</dd></div>
+                <div><dt>Capability</dt><dd data-receipt-capability>fixture-workspace-write</dd></div>
+                <div><dt>Checks</dt><dd class="receipt-pass" data-receipt-checks>2 / 2 passed</dd></div>
+                <div><dt>Evidence</dt><dd data-receipt-evidence>patch + test output</dd></div>
+                <div><dt>Retries</dt><dd data-receipt-retries>0</dd></div>
+              </dl>
+              <a data-receipt-source href="https://github.com/OthmaneBlial/lightclaw/blob/main/showcase/entries/verified-repo-patch/run-card.json">
+                Inspect the committed Run Card ↗
+              </a>
+            </aside>
             <div class="command-card">
               <span>REPLAY COMMAND</span>
               <pre><code id="scenario-command">lightclaw demo --scenario repo-task --json</code></pre>
@@ -220,10 +314,10 @@
       <section class="security section-shell" id="security">
         <div class="section-heading reveal">
           <p class="eyebrow"><span>04</span> Explicit boundaries</p>
-          <h2>Local by default.<br /><em>Honest about every edge.</em></h2>
+          <h2>Local evidence.<br /><em>Every external edge named.</em></h2>
           <p>
-            “Self-hosted” does not make Telegram, hosted providers, or external coding-agent
-            CLIs local. LightClaw names those boundaries and fails closed where it can.
+            Telegram, configured model providers, and external coding-agent CLIs remain separate
+            boundaries. Receipts and workspaces stay local by default; the whole flow is not offline.
           </p>
         </div>
 
@@ -310,7 +404,7 @@ lightclaw demo --scenario repo-task --json</code></pre>
         </svg>
         <span>LIGHTCLAW</span>
       </a>
-      <p>Auditable Telegram mission control for local coding agents.</p>
+      <p>Governed missions for local Codex and Claude agents.</p>
       <nav aria-label="Footer navigation">
         <a href="https://github.com/OthmaneBlial/lightclaw">Source</a>
         <a href="https://github.com/OthmaneBlial/lightclaw/tree/main/docs">Docs</a>

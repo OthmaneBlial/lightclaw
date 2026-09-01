@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "lightclaw-ai"
 version = "0.1.0.dev0"
-description = "Auditable Telegram mission control for local AI coding agents"
+description = "Telegram mission control for reviewed, verified work by local Codex and Claude agents"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -13,7 +13,16 @@ license-files = ["LICENSE"]
 authors = [
   { name = "Othmane Blial" },
 ]
-keywords = ["ai-agent", "coding-agent", "self-hosted", "telegram"]
+keywords = [
+  "ai-agent",
+  "claude-code",
+  "codex",
+  "coding-agent",
+  "developer-tools",
+  "remote-coding",
+  "self-hosted",
+  "telegram-bot",
+]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -62,10 +71,12 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/OthmaneBlial/lightclaw"
+Homepage = "https://othmaneblial.github.io/lightclaw/"
 Documentation = "https://github.com/OthmaneBlial/lightclaw/tree/main/docs"
 Issues = "https://github.com/OthmaneBlial/lightclaw/issues"
 Repository = "https://github.com/OthmaneBlial/lightclaw.git"
+Changelog = "https://github.com/OthmaneBlial/lightclaw/blob/main/CHANGELOG.md"
+Releases = "https://github.com/OthmaneBlial/lightclaw/releases"
 
 [project.scripts]
 lightclaw = "lightclaw_cli:main"

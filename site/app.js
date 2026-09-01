@@ -9,6 +9,16 @@ const scenarios = {
       "artifact/test-output.txt",
       "receipt.json + receipt.md",
     ],
+    receipt: {
+      status: "ACCEPTED",
+      scope: "deterministic fixture directory",
+      capability: "fixture-workspace-write",
+      checks: "2 / 2 passed",
+      evidence: "patch + test output + phone-to-patch trace",
+      retries: "0",
+      source:
+        "https://github.com/OthmaneBlial/lightclaw/blob/main/showcase/entries/verified-repo-patch/run-card.json",
+    },
     command: "lightclaw demo --scenario repo-task --json",
   },
   memory: {
@@ -17,6 +27,16 @@ const scenarios = {
     body:
       "The memory fixture stores a synthetic project code in a namespaced local database, closes it, reopens it, and proves lexical recall without a model or network call.",
     artifacts: ["artifact/memory.db", "artifact/recall.json", "private run receipt"],
+    receipt: {
+      status: "ACCEPTED",
+      scope: "deterministic fixture directory",
+      capability: "fixture-workspace-write",
+      checks: "1 / 1 passed",
+      evidence: "recall.json after a real SQLite restart",
+      retries: "0",
+      source:
+        "https://github.com/OthmaneBlial/lightclaw/blob/main/showcase/entries/persistent-memory/run-card.json",
+    },
     command: "lightclaw demo --scenario memory --json",
   },
   multi: {
@@ -25,6 +45,16 @@ const scenarios = {
     body:
       "The multi-agent fixture runs dependency-ordered workers, records a failed acceptance check, applies one bounded repair, and keeps the complete audit trail.",
     artifacts: ["worker handoffs", "acceptance evidence", "repair audit + receipt"],
+    receipt: {
+      status: "ACCEPTED",
+      scope: "deterministic fixture directory",
+      capability: "fixture-workspace-write",
+      checks: "2 / 2 passed",
+      evidence: "initial failure + bounded repair + final audit",
+      retries: "1 recorded",
+      source:
+        "https://github.com/OthmaneBlial/lightclaw/blob/main/showcase/entries/audited-multi-agent/run-card.json",
+    },
     command: "lightclaw demo --scenario multi-agent --json",
   },
 };
@@ -72,6 +102,13 @@ const scenarioTitle = document.querySelector("[data-scenario-title]");
 const scenarioBody = document.querySelector("[data-scenario-body]");
 const scenarioArtifacts = document.querySelector("[data-scenario-artifacts]");
 const scenarioCommand = document.querySelector("#scenario-command");
+const receiptStatus = document.querySelector("[data-receipt-status]");
+const receiptScope = document.querySelector("[data-receipt-scope]");
+const receiptCapability = document.querySelector("[data-receipt-capability]");
+const receiptChecks = document.querySelector("[data-receipt-checks]");
+const receiptEvidence = document.querySelector("[data-receipt-evidence]");
+const receiptRetries = document.querySelector("[data-receipt-retries]");
+const receiptSource = document.querySelector("[data-receipt-source]");
 
 function selectScenario(name, { focus = false } = {}) {
   const scenario = scenarios[name];
@@ -88,6 +125,13 @@ function selectScenario(name, { focus = false } = {}) {
   scenarioTitle.textContent = scenario.title;
   scenarioBody.textContent = scenario.body;
   scenarioCommand.textContent = scenario.command;
+  receiptStatus.textContent = scenario.receipt.status;
+  receiptScope.textContent = scenario.receipt.scope;
+  receiptCapability.textContent = scenario.receipt.capability;
+  receiptChecks.textContent = scenario.receipt.checks;
+  receiptEvidence.textContent = scenario.receipt.evidence;
+  receiptRetries.textContent = scenario.receipt.retries;
+  receiptSource.href = scenario.receipt.source;
   scenarioArtifacts.replaceChildren(
     ...scenario.artifacts.map((artifact) => {
       const item = document.createElement("li");

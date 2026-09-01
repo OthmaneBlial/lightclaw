@@ -603,6 +603,82 @@ h2 em {
   white-space: nowrap;
 }
 
+.fit {
+  padding-block: 0 clamp(100px, 13vw, 170px);
+}
+
+.fit .section-heading > p:last-child {
+  max-width: 720px;
+}
+
+.fit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin-top: 58px;
+  border: 1px solid var(--line-bright);
+  background: var(--line-bright);
+}
+
+.fit-card {
+  min-width: 0;
+  padding: clamp(28px, 5vw, 56px);
+  background: var(--panel);
+}
+
+.fit-card > span {
+  display: block;
+  color: #707a7a;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+}
+
+.fit-card-active {
+  background:
+    linear-gradient(145deg, rgba(101, 230, 239, 0.08), transparent 56%),
+    #0d1315;
+}
+
+.fit-card-active > span {
+  color: var(--cyan);
+}
+
+.fit-card h3 {
+  max-width: 480px;
+  margin: 28px 0 34px;
+  font-family: var(--display);
+  font-size: clamp(2rem, 3.6vw, 4rem);
+  font-stretch: 84%;
+  line-height: 0.98;
+}
+
+.fit-card ul {
+  display: grid;
+  gap: 15px;
+  margin: 0;
+  padding: 0;
+  color: var(--muted);
+  list-style: none;
+  font-size: 0.86rem;
+}
+
+.fit-card li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.fit-card li::before {
+  content: "—";
+  color: #657071;
+}
+
+.fit-card-active li::before {
+  content: "✓";
+  color: var(--green);
+}
+
 .scenario-lab {
   padding-block: clamp(88px, 11vw, 150px);
 }
@@ -702,8 +778,80 @@ h2 em {
   color: var(--green);
 }
 
+.receipt-card {
+  min-width: 0;
+  border: 1px solid var(--line-bright);
+  background: #080b0c;
+}
+
+.receipt-head {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  color: #778180;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+}
+
+.receipt-head b {
+  padding: 4px 7px;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-size: 0.58rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+.receipt-card dl {
+  margin: 0;
+  padding: 0 18px;
+}
+
+.receipt-card dl > div {
+  padding: 15px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.receipt-card dt {
+  margin-bottom: 6px;
+  color: #687273;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.receipt-card dd {
+  min-width: 0;
+  margin: 0;
+  color: #c5ccca;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  overflow-wrap: anywhere;
+}
+
+.receipt-card dd.receipt-pass {
+  color: var(--green);
+}
+
+.receipt-card > a {
+  display: grid;
+  min-height: 52px;
+  align-items: center;
+  padding: 12px 18px;
+  color: var(--cyan);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  text-underline-offset: 4px;
+}
+
 .command-card {
   position: relative;
+  grid-column: 1 / -1;
   align-self: end;
   min-width: 0;
   padding: 22px;
@@ -1050,6 +1198,10 @@ pre {
   }
 
   .command-card {
+    grid-column: auto;
+  }
+
+  .command-card {
     min-height: 172px;
   }
 
@@ -1146,6 +1298,14 @@ pre {
   .security {
     gap: 64px;
     padding-block: 100px;
+  }
+
+  .fit {
+    padding-bottom: 100px;
+  }
+
+  .fit-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .workflow-list li {

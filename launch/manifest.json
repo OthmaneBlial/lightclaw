@@ -9,6 +9,8 @@
   "headline": "HEADLINE.md",
   "private_alpha_aggregate": "alpha/aggregate.json",
   "raw_benchmarks": [
+    "../bench/results/2026-09-01-macos-arm64-py313.json",
+    "../bench/results/2026-09-01-macos-arm64-py313.csv",
     "../bench/results/2026-08-23-macos-arm64-py313.json",
     "../bench/results/2026-08-23-macos-arm64-py313.csv",
     "../bench/results/memory-eval-v1.json"

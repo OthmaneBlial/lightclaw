@@ -1,0 +1,86 @@
+{
+  "clean_install": {
+    "command_smoke_passed": true,
+    "install_seconds": 4.245,
+    "installed_distribution_count": 10,
+    "network_and_cache_state": "live PyPI resolution; local pip cache may be used",
+    "venv_create_seconds": 6.877
+  },
+  "commit": "ca1aea7689bb2b5b8b62294504ce136f4e92a7b0",
+  "environment": {
+    "cpu_count": 8,
+    "machine": "arm64",
+    "os": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "processor": "arm",
+    "python": "3.13.1",
+    "total_memory_bytes": 17179869184
+  },
+  "evidence_mode": "full",
+  "memory_retrieval": {
+    "details": [
+      {
+        "query_label": "harbor",
+        "top1_passed": true
+      },
+      {
+        "query_label": "orchard",
+        "top1_passed": true
+      },
+      {
+        "query_label": "summit",
+        "top1_passed": true
+      },
+      {
+        "query_label": "forest",
+        "top1_passed": true
+      },
+      {
+        "query_label": "island",
+        "top1_passed": true
+      },
+      {
+        "query_label": "desert",
+        "top1_passed": true
+      },
+      {
+        "query_label": "valley",
+        "top1_passed": true
+      },
+      {
+        "query_label": "meadow",
+        "top1_passed": true
+      }
+    ],
+    "fixture_version": 1,
+    "mode": "deterministic local lexical fixture",
+    "queries": 8,
+    "top1_accuracy": 1.0,
+    "top1_hits": 8
+  },
+  "minimum_tested_host": {
+    "container_cpu_limit": 0.5,
+    "container_memory_limit_bytes": 268435456,
+    "scenario": "repo-task",
+    "scope": "Pinned Python 3.13 slim image build, command smoke, real fixture unit test, and receipt generation. A live Telegram bot/provider was not tested under this limit.",
+    "status": "deterministic demo verified"
+  },
+  "orchestration": {
+    "dependency_order_passed": true,
+    "failure_reporting_passed": true,
+    "fixture_version": 1,
+    "handoff_completion_passed": true,
+    "mode": "deterministic fixture; no model calls",
+    "receipt_generated": true,
+    "repair_behavior_passed": true
+  },
+  "recorded_at": "2026-09-01T15:48:39Z",
+  "run_count": 5,
+  "runtime": {
+    "config_routing_overhead_us_per_call": 3.4596,
+    "direct_runtime_dependency_count": 3,
+    "idle_import_process_rss_bytes": 20512768,
+    "runtime_python_loc": 18033,
+    "startup_median_ms": 223.499
+  },
+  "schema_version": 1
+}

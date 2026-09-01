@@ -1,2 +1,1 @@
-Turn a Telegram request into reviewed, verified work on your local projects.
-
+Control local Codex and Claude agents from Telegram, then keep the verified patch and private run receipt.

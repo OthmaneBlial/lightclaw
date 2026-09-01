@@ -1,21 +1,28 @@
 # LightClaw
 
-**Turn a Telegram request into reviewed, verified work on your local projects.**
+**Control local Codex and Claude coding agents from your phone via Telegram—and keep the proof of what they delivered.**
 
-[![CI](https://github.com/OthmaneBlial/lightclaw/actions/workflows/ci.yml/badge.svg)](https://github.com/OthmaneBlial/lightclaw/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/OthmaneBlial/lightclaw/actions/workflows/codeql.yml/badge.svg)](https://github.com/OthmaneBlial/lightclaw/actions/workflows/codeql.yml)
-[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-58c7ff)](pyproject.toml)
-[![MIT](https://img.shields.io/badge/license-MIT-72f1b8)](LICENSE)
-
-LightClaw is an auditable Telegram mission control for local Codex and Claude coding agents. You send a goal, review the scoped DAG, watch bounded workers, and receive the diff, checks, artifacts, cost/time evidence, and recovery instructions.
+LightClaw is a self-hosted mission-control layer, not a generic remote terminal. Send a goal,
+review its paths, risk, workers, and acceptance checks before execution, then receive the diff,
+test evidence, artifacts, private run receipt, and scoped recovery instructions.
 
 ![Silent 24-second LightClaw walkthrough: request, plan, workers, tests, and run receipt](assets/demo.svg)
 
-[Explore the live project site](https://othmaneblial.github.io/lightclaw/) · [Watch the demo](#see-it-work-without-a-token) · [Install safely](docs/INSTALL.md) · [Read the security boundary](docs/THREAT_MODEL.md)
-
-[Five-minute quickstart](docs/QUICKSTART.md) · [Replay the showcase](showcase/) · [Inspect the evidence-led launch pack](launch/)
+[Live site](https://othmaneblial.github.io/lightclaw/) · [Five-minute demo](#see-it-work-without-a-token) · [Install](docs/INSTALL.md) · [Security boundary](docs/THREAT_MODEL.md) · [Releases](https://github.com/OthmaneBlial/lightclaw/releases) · [Changelog](CHANGELOG.md)
 
 > Alpha software with meaningful host access. Telegram access fails closed, delegated workers do not inherit provider secrets, and trusted host execution always requires per-run confirmation.
+
+## Why LightClaw
+
+Phone access, Telegram, diffs, and multi-agent execution already exist elsewhere. LightClaw's
+narrower job is the **governed handoff**: approve a delivery contract, let bounded local workers
+execute it, and judge the result from durable evidence instead of a reassuring chat summary.
+
+| If you need… | Best fit |
+|---|---|
+| A live mobile terminal or full session steering | A dedicated remote-control client |
+| A broad multi-channel personal assistant | A general agent gateway |
+| Pre-run scope review, bounded Codex/Claude workers, acceptance checks, a patch, receipt, and undo path | **LightClaw** |
 
 ## One complete story
 
@@ -39,7 +46,7 @@ python -m pip install -e .
 lightclaw demo
 ```
 
-It replays a recorded phone request and approval, creates a tiny Git-backed Python service, runs a real unit test, and finishes with `changes.patch`, `artifact.json`, `receipt.json`, and `receipt.md`. Nothing is pushed. Try every product story:
+It replays a recorded phone request and approval, creates a disposable Git-backed Python service, runs a real unit test, and finishes with `changes.patch`, `artifact.json`, `receipt.json`, and `receipt.md`. Nothing is pushed. Try every product story:
 
 ```bash
 lightclaw demo --scenario memory
@@ -47,27 +54,32 @@ lightclaw demo --scenario repo-task
 lightclaw demo --scenario multi-agent
 ```
 
-The exact prompts, outputs, cost boundaries, cleanup, and limitations live in:
-
-- [Telegram memory](examples/telegram-memory/README.md)
-- [Telegram repository task](examples/telegram-repo-task/README.md)
-- [Telegram multi-agent plan](examples/telegram-multi-agent/README.md)
+| Story | What it proves locally | Replay notes |
+|---|---|---|
+| Repository task | A real unit test, Git patch, artifact, and accepted receipt | [Exact prompt and cleanup](examples/telegram-repo-task/README.md) |
+| Persistent memory | A synthetic fact survives a real SQLite restart and is recalled lexically | [Exact prompt and limits](examples/telegram-memory/README.md) |
+| Multi-agent plan | Dependency order, machine-readable handoffs, visible failure, and one bounded repair | [Exact plan and limits](examples/telegram-multi-agent/README.md) |
 
 For public, sanitized evidence that can be forked and replayed, browse the
 [privacy-checked showcase](showcase/). Its three starting recipes are maintainer fixtures,
 not community submissions or claims about live provider quality.
 
-## Help qualify v0.1.0
+### Measured proof, not a blanket performance claim
 
-The stable release is intentionally blocked until 10–20 real external self-hosters test a
-fresh install. Follow the [five-minute quickstart](docs/QUICKSTART.md), then submit the
-[bounded alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml).
-The [committed anonymous aggregate](launch/alpha/aggregate.json) is the source of truth for
-the current count, outcomes, timings, and gate status.
+The current full benchmark at commit [`ca1aea7`](bench/results/2026-09-01-macos-arm64-py313.json)
+used macOS 26.6, Python 3.13.1, five runs, and live PyPI resolution with a potentially warm cache.
 
-The report must never contain prompts, receipts, repository names or content, local paths,
-Telegram identities, tokens, request IDs, screenshots, or other private data. Failures and
-missing timings are useful evidence and remain visible in the denominator.
+| Measurement | Result |
+|---|---:|
+| Base direct dependencies | 3 |
+| Clean-wheel installed distributions | 10 |
+| Clean-wheel install | 4.245 s |
+| CLI import median | 223.499 ms |
+| Lexical memory fixture | 8 / 8 top-1 |
+| Orchestration fixture | 4 / 4 contracts |
+
+These numbers describe that commit and machine. They do not predict live Telegram latency,
+provider cost, model quality, or availability. Reproduce them from [`bench/`](bench/).
 
 ## LightClaw is / is not
 
@@ -143,28 +155,14 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 
 ## Documentation
 
-- [Install, upgrade, undo, uninstall](docs/INSTALL.md)
-- [Threat model](docs/THREAT_MODEL.md)
-- [Real Telegram verification](docs/MANUAL_VERIFICATION.md)
+- [Documentation map](docs/README.md) — start, operate, trust, extend, and maintain
+- [Install, upgrade, undo, and uninstall](docs/INSTALL.md)
+- [Architecture and enforced growth budgets](docs/ARCHITECTURE.md)
 - [Run receipts and sanitized Run Cards](docs/RUN_RECEIPTS.md)
-- [Durable queues, cancellation, and recovery](docs/JOB_CONTROL.md)
-- [Telegram approvals and high-risk confirmation](docs/APPROVALS.md)
-- [Reviewable patches, selective apply, and optional PRs](docs/ARTIFACTS.md)
-- [Namespaced lexical memory, retention, export, and evaluation](docs/MEMORY.md)
-- [Build and validate a safe skill in 10 minutes](docs/SAFE_SKILLS.md)
-- [Typed provider contract and generated compatibility matrix](docs/PROVIDERS.md)
-- [Architecture map, enforced budgets, and decision records](docs/ARCHITECTURE.md)
-- [Privacy boundaries and explicit public evidence](docs/PRIVACY.md)
-- [Sanitized, reproducible showcase](showcase/)
-- [Evidence-led launch pack and honest comparisons](launch/)
-- [Maintenance cadence, update channels, and badge policy](docs/MAINTENANCE.md)
-- [Upgrade and rollback policy](docs/UPGRADING.md)
-- [Optional systemd service](docs/SYSTEMD.md)
-- [Reproducible benchmarks](bench/README.md)
-- [Multi-agent guide](MULTI_AGENT.md)
-- [Roadmap](ROADMAP.md)
-- [Roadmap evidence audit and open external gates](docs/ROADMAP_AUDIT.md)
-- [Security policy](SECURITY.md)
+- [Threat model](docs/THREAT_MODEL.md) and [privacy boundaries](docs/PRIVACY.md)
+- [Provider contract and generated compatibility evidence](docs/PROVIDERS.md)
+- [Multi-agent guide](MULTI_AGENT.md) and [reproducible showcase](showcase/)
+- [Roadmap](ROADMAP.md) and [evidence audit](docs/ROADMAP_AUDIT.md)
 
 ## Honest alpha limits
 
@@ -172,6 +170,26 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - Fixture demos prove LightClaw contracts, not external model quality.
 - External coding-agent CLIs remain separate security boundaries with their own versions and settings.
 - The package is installable from Git today; the first stable PyPI release follows the release gate in the roadmap.
+
+## Roadmap and release state
+
+- **Now:** make the base install smaller, keep the three fixture stories reproducible, and
+  collect privacy-bounded external install evidence.
+- **Next:** publish `v0.1.0`, PyPI attestations, and a versioned container only after 10–20
+  external self-hosters exercise the clean install and the release gate passes.
+- **Later:** improve acknowledgement/reconnect proof and real-world operator ergonomics before
+  adding new channels or chasing broad assistant parity.
+
+No stable release exists yet. The [release page](https://github.com/OthmaneBlial/lightclaw/releases),
+[draft notes](docs/releases/v0.1.0.md), and [evidence-derived gate](launch/alpha/aggregate.json)
+make that status explicit.
+
+## Help qualify v0.1.0
+
+Follow the [five-minute quickstart](docs/QUICKSTART.md), then submit the
+[bounded alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml).
+Never include prompts, receipts, repository content, local paths, Telegram identities, tokens,
+request IDs, or screenshots. Failures and missing timings remain visible evidence.
 
 ## Community and updates
 
@@ -195,9 +213,9 @@ python -m pip install -e '.[dev]'
 python scripts/quality.py
 ```
 
-This is the canonical local quality command. CI additionally runs the key-free suite on
+This is the canonical local quality command. The GitHub workflow runs the key-free suite on
 Python 3.10–3.13 across Ubuntu and macOS, installs the wheel in a clean environment,
-audits dependencies, and runs all three deterministic product stories. Read
+audits dependencies, and replays all three deterministic stories. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), the [support routes](SUPPORT.md), and the
 [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 

@@ -35,7 +35,29 @@ python -m bench.memory_eval --output bench/results/memory-eval-v1.json
 
 The report publishes precision@k, recall@k, mean reciprocal rank, query latency, database size, per-query results, and cross-namespace leakage count. The synonym-group hybrid adapter is deterministic test machinery, not evidence of semantic understanding on arbitrary text. See [the memory contract](../docs/MEMORY.md).
 
-## Published evidence
+## Current slim-base evidence
+
+The full run tied to commit `ca1aea7689bb2b5b8b62294504ce136f4e92a7b0` measured the
+provider-SDK split and lazy CLI startup:
+
+| Measurement | Result | Scope |
+|---|---:|---|
+| Clean wheel install | 4.245 s | Live PyPI resolution; local pip cache may be used |
+| Installed distributions | 10 | Base package; no OpenAI, Anthropic, or Gemini SDK |
+| Startup median | 223.499 ms | Five fresh `import lightclaw_cli` subprocesses |
+| Idle import-process RSS | 19.56 MiB | One imported process sampled with `ps` |
+| Config routing overhead | 3.4596 microseconds/call | 100,000 deterministic provider/model resolutions |
+| Runtime Python LOC | 18,033 | Runtime modules only; tests and benchmarks excluded |
+| Direct base dependencies | 3 | Distribution metadata; provider SDKs are optional extras |
+| Memory retrieval fixture | 8/8 top-1 | Versioned deterministic lexical corpus |
+| Orchestration fixture | 4/4 contracts | Dependency, handoff, failure, and bounded repair |
+
+Conditions: macOS 26.6, Apple ARM64, Python 3.13.1, 8 logical CPUs, 16 GiB RAM,
+five timing runs. See the canonical [raw JSON](results/2026-09-01-macos-arm64-py313.json)
+or [flattened CSV](results/2026-09-01-macos-arm64-py313.csv). These measurements are
+machine- and cache-specific; they are not live-provider performance claims.
+
+## Earlier published evidence
 
 The first full run is tied to commit `be5a71d30cd7a2bea5119d2624fdeff275c5c8da`:
 

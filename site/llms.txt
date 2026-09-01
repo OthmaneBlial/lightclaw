@@ -1,0 +1,28 @@
+# LightClaw
+
+> LightClaw is an alpha, self-hosted Telegram control surface for reviewed and verified work by local Codex and Claude coding agents. Telegram and configured hosted model providers remain external services. Workspaces and private run receipts stay local by default. The deterministic demo uses fixtures, costs zero, and does not prove live-provider quality. LightClaw never pushes or publishes a demo result.
+
+Canonical site: https://othmaneblial.github.io/lightclaw/
+Source: https://github.com/OthmaneBlial/lightclaw
+License: MIT
+
+## Start here
+
+- Project overview: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/README.md
+- Five-minute token-free quickstart: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/QUICKSTART.md
+- Install, upgrade, and uninstall: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/INSTALL.md
+
+## Trust and evidence
+
+- Threat model: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/THREAT_MODEL.md
+- Privacy boundaries: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/PRIVACY.md
+- Run receipts: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/RUN_RECEIPTS.md
+- Provider contract: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/PROVIDERS.md
+- Architecture: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/ARCHITECTURE.md
+
+## Reproducible proof and current limits
+
+- Showcase recipes: https://github.com/OthmaneBlial/lightclaw/tree/main/showcase
+- Raw benchmarks: https://github.com/OthmaneBlial/lightclaw/tree/main/bench/results
+- Roadmap evidence audit: https://raw.githubusercontent.com/OthmaneBlial/lightclaw/main/docs/ROADMAP_AUDIT.md
+- Releases: https://github.com/OthmaneBlial/lightclaw/releases

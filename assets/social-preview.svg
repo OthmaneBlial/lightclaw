@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">LightClaw social preview</title>
+  <desc id="desc">Industrial mission-control graphic showing Telegram, scope review, local coding agents, tests, patch, and run receipt.</desc>
+  <defs>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#263136" stroke-width="1" opacity=".55"/>
+    </pattern>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#65e6ef" stop-opacity=".14"/>
+      <stop offset=".5" stop-color="#07090a" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ff6a2a" stop-opacity=".14"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="640" fill="#07090a"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <path d="M0 26H1280M0 614H1280" stroke="#435057"/>
+  <path d="M64 72H642" stroke="#ff6a2a" stroke-width="2"/>
+
+  <g transform="translate(64 54)" fill="none" stroke="#ff6a2a" stroke-linecap="round" stroke-linejoin="round" stroke-width="3">
+    <path d="M0 0v24c0 18 12 34 30 42 18-8 30-24 30-42V0"/>
+    <path d="M0 12l18 16-10 16M60 12L42 28l10 16M18 28L30 12l12 16M30 12v42"/>
+  </g>
+
+  <text x="144" y="90" fill="#f1efe7" font-family="Avenir Next Condensed, Helvetica Neue, sans-serif" font-size="27" font-weight="800" letter-spacing="3">LIGHTCLAW</text>
+  <text x="64" y="154" fill="#9ea6a4" font-family="Menlo, monospace" font-size="16" letter-spacing="1.5">TELEGRAM MISSION CONTROL / LOCAL CODING AGENTS</text>
+  <text x="62" y="256" fill="#f1efe7" font-family="Avenir Next Condensed, Helvetica Neue, sans-serif" font-size="74" font-weight="800" letter-spacing="-2">SEND THE MISSION.</text>
+  <text x="62" y="330" fill="#ff6a2a" font-family="Avenir Next Condensed, Helvetica Neue, sans-serif" font-size="74" font-weight="800" letter-spacing="-2">KEEP THE PROOF.</text>
+  <text x="64" y="382" fill="#b8c0be" font-family="Helvetica Neue, sans-serif" font-size="20">Review the scope before Codex or Claude runs.</text>
+  <text x="64" y="414" fill="#b8c0be" font-family="Helvetica Neue, sans-serif" font-size="20">Get the checks, patch, private receipt, and undo path after.</text>
+
+  <g transform="translate(64 476)" font-family="Menlo, monospace" font-size="14">
+    <rect width="710" height="82" fill="#0d1113" stroke="#435057"/>
+    <text x="22" y="34" fill="#65e6ef">TELEGRAM</text>
+    <text x="132" y="34" fill="#647073">→</text>
+    <text x="168" y="34" fill="#f1efe7">SCOPE REVIEW</text>
+    <text x="316" y="34" fill="#647073">→</text>
+    <text x="352" y="34" fill="#f1efe7">LOCAL AGENTS</text>
+    <text x="494" y="34" fill="#647073">→</text>
+    <text x="530" y="34" fill="#9df7c6">PATCH + RECEIPT</text>
+    <text x="22" y="61" fill="#778180">bounded work · acceptance checks · local evidence · scoped recovery</text>
+  </g>
+
+  <g transform="translate(836 74)">
+    <rect width="380" height="484" fill="#0b1012" stroke="#435057" stroke-width="2"/>
+    <rect x="1" y="1" width="378" height="56" fill="#12181b"/>
+    <text x="22" y="35" fill="#9ea6a4" font-family="Menlo, monospace" font-size="13">RUN RECEIPT / 0142</text>
+    <rect x="274" y="17" width="82" height="24" fill="none" stroke="#9df7c6"/>
+    <text x="287" y="34" fill="#9df7c6" font-family="Menlo, monospace" font-size="11">ACCEPTED</text>
+
+    <text x="22" y="94" fill="#6e7978" font-family="Menlo, monospace" font-size="11">APPROVED SCOPE</text>
+    <text x="22" y="120" fill="#f1efe7" font-family="Helvetica Neue, sans-serif" font-size="17">service.py · test_service.py</text>
+    <path d="M22 142H358" stroke="#293236"/>
+    <text x="22" y="176" fill="#6e7978" font-family="Menlo, monospace" font-size="11">CAPABILITY</text>
+    <text x="22" y="202" fill="#f1efe7" font-family="Helvetica Neue, sans-serif" font-size="17">workspace-write · low risk</text>
+    <path d="M22 224H358" stroke="#293236"/>
+    <text x="22" y="258" fill="#6e7978" font-family="Menlo, monospace" font-size="11">ACCEPTANCE</text>
+    <text x="22" y="286" fill="#9df7c6" font-family="Menlo, monospace" font-size="15">✓ unit tests passed</text>
+    <text x="22" y="316" fill="#9df7c6" font-family="Menlo, monospace" font-size="15">✓ patch recorded</text>
+    <text x="22" y="346" fill="#9df7c6" font-family="Menlo, monospace" font-size="15">✓ receipt generated</text>
+    <path d="M22 370H358" stroke="#293236"/>
+    <text x="22" y="404" fill="#6e7978" font-family="Menlo, monospace" font-size="11">RECOVERY</text>
+    <text x="22" y="432" fill="#65e6ef" font-family="Menlo, monospace" font-size="15">scoped undo ready ↶</text>
+    <text x="22" y="464" fill="#687273" font-family="Menlo, monospace" font-size="11">PRIVATE + LOCAL BY DEFAULT</text>
+  </g>
+
+  <text x="1115" y="600" fill="#ff8a4f" font-family="Menlo, monospace" font-size="12" letter-spacing="1">ALPHA / MIT</text>
+</svg>
