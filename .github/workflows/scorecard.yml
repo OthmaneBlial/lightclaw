@@ -1,10 +1,11 @@
 name: OpenSSF Scorecard
 
-# Temporarily paused while the repository-wide product refresh is in progress.
-# Restore the previous branch-protection, weekly schedule, and push triggers from
-# git history once the refresh is complete.
 on:
-  workflow_dispatch:
+  branch_protection_rule:
+  schedule:
+    - cron: "41 5 * * 2"
+  push:
+    branches: [main]
 
 permissions: read-all
 
