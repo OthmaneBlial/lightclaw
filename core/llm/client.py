@@ -31,6 +31,8 @@ class ProviderSpec:
     maintainer: str
     transport: str
     sdk: str
+    import_module: str
+    install_extra: str
     credential_field: str
     base_url: str | None
     fixture: str
@@ -43,6 +45,8 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
         maintainer="OthmaneBlial",
         transport="native-chat-completions",
         sdk="openai",
+        import_module="openai",
+        install_extra="openai",
         credential_field="openai_api_key",
         base_url=None,
         fixture="openai.json",
@@ -52,6 +56,8 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
         maintainer="OthmaneBlial",
         transport="openai-compatible",
         sdk="openai",
+        import_module="openai",
+        install_extra="openai",
         credential_field="xai_api_key",
         base_url="https://api.x.ai/v1",
         fixture="xai.json",
@@ -61,6 +67,8 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
         maintainer="OthmaneBlial",
         transport="native-messages",
         sdk="anthropic",
+        import_module="anthropic",
+        install_extra="claude",
         credential_field="anthropic_api_key|anthropic_auth_token",
         base_url=OFFICIAL_ANTHROPIC_BASE_URL,
         fixture="claude.json",
@@ -70,6 +78,8 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
         maintainer="OthmaneBlial",
         transport="native-generate-content",
         sdk="google-genai",
+        import_module="google.genai",
+        install_extra="gemini",
         credential_field="gemini_api_key",
         base_url=None,
         fixture="gemini.json",
@@ -79,6 +89,8 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
         maintainer="OthmaneBlial",
         transport="openai-compatible",
         sdk="openai",
+        import_module="openai",
+        install_extra="openai",
         credential_field="deepseek_api_key",
         base_url="https://api.deepseek.com",
         fixture="deepseek.json",
@@ -89,6 +101,8 @@ PROVIDER_SPECS: dict[str, ProviderSpec] = {
         maintainer="OthmaneBlial",
         transport="openai-compatible",
         sdk="openai",
+        import_module="openai",
+        install_extra="openai",
         credential_field="zai_api_key",
         base_url="https://api.z.ai/api/paas/v4/",
         fixture="zai.json",
@@ -105,7 +119,38 @@ def validate_provider_registry() -> list[str]:
             errors.append(f"provider {key} has no maintainer")
         if not spec.fixture.endswith(".json"):
             errors.append(f"provider {key} has no recorded JSON fixture")
+        if not spec.import_module.strip() or not spec.install_extra.strip():
+            errors.append(f"provider {key} has no installable SDK contract")
     return errors
+
+
+def provider_sdk_available(provider: str) -> bool:
+    """Return whether the configured provider's optional SDK can be imported."""
+    from importlib.util import find_spec
+
+    spec = PROVIDER_SPECS.get(provider.strip().lower())
+    if spec is None:
+        return False
+    try:
+        return find_spec(spec.import_module) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
+def _import_provider_module(spec: ProviderSpec):
+    from importlib import import_module
+
+    try:
+        return import_module(spec.import_module)
+    except ModuleNotFoundError as exc:
+        expected_roots = {spec.import_module, spec.import_module.split(".", 1)[0]}
+        if exc.name not in expected_roots:
+            raise
+        raise RuntimeError(
+            f"The {spec.sdk} SDK required for provider '{spec.name}' is not installed. "
+            f"Install the '{spec.install_extra}' extra from the same LightClaw source "
+            f"(package extra: lightclaw-ai[{spec.install_extra}])."
+        ) from exc
 
 
 def _status_code(error: Exception) -> int | None:
@@ -226,7 +271,7 @@ class LLMClient:
 
     def _build_adapter(self, spec: ProviderSpec) -> ProviderAdapter:
         if spec.transport in {"native-chat-completions", "openai-compatible"}:
-            import openai
+            openai = _import_provider_module(spec)
 
             api_key = str(getattr(self.config, spec.credential_field, "") or "").strip()
             if not api_key:
@@ -244,7 +289,7 @@ class LLMClient:
             return OpenAICompatibleAdapter(name=spec.name, model=self.model, client=client)
 
         if spec.name == "claude":
-            import anthropic
+            anthropic = _import_provider_module(spec)
 
             api_key = (self.config.anthropic_api_key or "").strip()
             auth_token = (self.config.anthropic_auth_token or "").strip()
@@ -274,7 +319,7 @@ class LLMClient:
             )
 
         if spec.name == "gemini":
-            from google import genai
+            genai = _import_provider_module(spec)
             from google.genai import types
 
             api_key = (self.config.gemini_api_key or "").strip()

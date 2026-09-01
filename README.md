@@ -81,13 +81,17 @@ missing timings are useful evidence and remain visible in the denominator.
 
 ## Safe installation
 
-Use an isolated tool environment:
+Use an isolated tool environment and install only the SDK for the provider you
+actually use. OpenAI, xAI, DeepSeek, and Z-AI share the `openai` transport extra:
 
 ```bash
-pipx install 'git+https://github.com/OthmaneBlial/lightclaw.git'
+pipx install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
 # or
-uv tool install 'git+https://github.com/OthmaneBlial/lightclaw.git'
+uv tool install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
 ```
+
+Replace `openai` with `claude` or `gemini`, or use `providers` to install all
+three SDK families. The token-free demo needs no provider extra.
 
 Then:
 

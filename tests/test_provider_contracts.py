@@ -270,6 +270,30 @@ def test_gemini_factory_uses_millisecond_timeout_one_attempt_and_closes(monkeypa
     assert instances[0].closed == 1
 
 
+def test_missing_optional_provider_sdk_has_actionable_install_error(monkeypatch):
+    from core.llm import client as client_module
+
+    real_import = __import__("importlib").import_module
+
+    def missing_openai(name):
+        if name == "openai":
+            error = ModuleNotFoundError("No module named 'openai'")
+            error.name = "openai"
+            raise error
+        return real_import(name)
+
+    monkeypatch.setattr("importlib.import_module", missing_openai)
+
+    with pytest.raises(RuntimeError, match=r"lightclaw-ai\[openai\]"):
+        client_module.LLMClient(
+            Config(
+                llm_provider="openai",
+                llm_model="fixture-model",
+                openai_api_key="test-provider-secret",
+            )
+        )
+
+
 class _StatusError(RuntimeError):
     def __init__(self, status_code: int, detail: str):
         super().__init__(detail)

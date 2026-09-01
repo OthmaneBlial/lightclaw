@@ -3,14 +3,14 @@
 
 Every row is derived from the provider registry and a recorded fixture exercised by the shared contract suite. `recorded-contract` proves deterministic adapter behavior, not live vendor availability or model quality.
 
-| Provider | Transport | SDK | Maintainer | Contract | Fixture SHA-256 |
-|---|---|---|---|---|---|
-| openai | native-chat-completions | openai | @OthmaneBlial | recorded-contract | `d9bb5c63a86ab07e21e617c0fa32ea8218cf571339fb3b560ee03a079d42ff45` |
-| xai | openai-compatible | openai | @OthmaneBlial | recorded-contract | `b696cd5a6957df04636d73cfb0d1365c5afdac4315c7fcc95f8e09c1bdacd711` |
-| claude | native-messages | anthropic | @OthmaneBlial | recorded-contract | `b095dac60864981b3b92e061202cc3e29fc181953d56c6fe7508257222714b21` |
-| gemini | native-generate-content | google-genai | @OthmaneBlial | recorded-contract | `b68f4c33c08fe1ba69e23b60fc8bdc2382b9b0a3afd3d5aae8d38226de66bf71` |
-| deepseek | openai-compatible | openai | @OthmaneBlial | recorded-contract | `284a091d2cb4386f30018c35aa84af4640aa61004d5a9b380f6b603f408cbd94` |
-| zai | openai-compatible | openai | @OthmaneBlial | recorded-contract | `0c31b3372c051dd6a49f28d1e065c174a7de51332c45e2d6ed9f8c678e5ddb12` |
+| Provider | Transport | SDK | Install extra | Maintainer | Contract | Fixture SHA-256 |
+|---|---|---|---|---|---|---|
+| openai | native-chat-completions | openai | `[openai]` | @OthmaneBlial | recorded-contract | `d9bb5c63a86ab07e21e617c0fa32ea8218cf571339fb3b560ee03a079d42ff45` |
+| xai | openai-compatible | openai | `[openai]` | @OthmaneBlial | recorded-contract | `b696cd5a6957df04636d73cfb0d1365c5afdac4315c7fcc95f8e09c1bdacd711` |
+| claude | native-messages | anthropic | `[claude]` | @OthmaneBlial | recorded-contract | `b095dac60864981b3b92e061202cc3e29fc181953d56c6fe7508257222714b21` |
+| gemini | native-generate-content | google-genai | `[gemini]` | @OthmaneBlial | recorded-contract | `b68f4c33c08fe1ba69e23b60fc8bdc2382b9b0a3afd3d5aae8d38226de66bf71` |
+| deepseek | openai-compatible | openai | `[openai]` | @OthmaneBlial | recorded-contract | `284a091d2cb4386f30018c35aa84af4640aa61004d5a9b380f6b603f408cbd94` |
+| zai | openai-compatible | openai | `[openai]` | @OthmaneBlial | recorded-contract | `0c31b3372c051dd6a49f28d1e065c174a7de51332c45e2d6ed9f8c678e5ddb12` |
 
 Regenerate with:
 

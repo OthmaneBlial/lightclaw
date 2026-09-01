@@ -64,9 +64,9 @@ if [ ! -x "${VENV_DIR}/bin/python" ]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-say "Installing LightClaw and its dependencies into the isolated environment..."
+say "Installing LightClaw and all provider adapters into the isolated environment..."
 "${VENV_DIR}/bin/python" -m pip install --upgrade pip
-"${VENV_DIR}/bin/python" -m pip install --upgrade "$PACKAGE_SOURCE"
+"${VENV_DIR}/bin/python" -m pip install --upgrade "${PACKAGE_SOURCE}[providers]"
 
 if [ -e "$COMMAND_PATH" ] || [ -L "$COMMAND_PATH" ]; then
     current_target="$(readlink "$COMMAND_PATH" 2>/dev/null || true)"

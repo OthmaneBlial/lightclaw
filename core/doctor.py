@@ -11,6 +11,7 @@ from pathlib import Path
 from config import Config
 
 from .jobs import inspect_job_database
+from .llm.client import PROVIDER_SPECS, provider_sdk_available
 from .security import access_policy_label, delegated_process_env
 from .workspaces import WorkspaceSafetyError, validate_workspace_root
 
@@ -44,11 +45,25 @@ def build_doctor_report(config: Config) -> dict[str, object]:
         "ok" if bool(config.telegram_bot_token) else "error",
         "configured" if config.telegram_bot_token else "missing",
     )
+    provider = config.llm_provider.strip().lower()
+    provider_spec = PROVIDER_SPECS.get(provider)
     add(
         "provider",
-        "ok" if bool(config.llm_provider) else "error",
-        config.llm_provider or "missing",
+        "ok" if provider_spec is not None else "error",
+        provider or "missing",
     )
+    if provider_spec is not None:
+        sdk_ready = provider_sdk_available(provider)
+        add(
+            "provider_sdk",
+            "ok" if sdk_ready else "error",
+            f"{provider_spec.sdk} installed"
+            if sdk_ready
+            else (
+                f"{provider_spec.sdk} missing; install the "
+                f"lightclaw-ai[{provider_spec.install_extra}] extra"
+            ),
+        )
 
     try:
         root = validate_workspace_root(config.workspace_path)

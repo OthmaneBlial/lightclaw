@@ -27,6 +27,7 @@ def build_matrix(fixture_root: Path) -> dict[str, object]:
                 "provider": name,
                 "transport": spec.transport,
                 "sdk": spec.sdk,
+                "install_extra": spec.install_extra,
                 "maintainer": spec.maintainer,
                 "fixture": f"tests/fixtures/providers/{spec.fixture}",
                 "fixture_sha256": hashlib.sha256(fixture_bytes).hexdigest(),
@@ -55,15 +56,16 @@ def render_markdown(matrix: dict[str, object]) -> str:
         "",
         "Every row is derived from the provider registry and a recorded fixture exercised by the shared contract suite. `recorded-contract` proves deterministic adapter behavior, not live vendor availability or model quality.",
         "",
-        "| Provider | Transport | SDK | Maintainer | Contract | Fixture SHA-256 |",
-        "|---|---|---|---|---|---|",
+        "| Provider | Transport | SDK | Install extra | Maintainer | Contract | Fixture SHA-256 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for row in matrix["providers"]:
         lines.append(
-            "| {provider} | {transport} | {sdk} | @{maintainer} | {status} | `{digest}` |".format(
+            "| {provider} | {transport} | {sdk} | `[{extra}]` | @{maintainer} | {status} | `{digest}` |".format(
                 provider=row["provider"],
                 transport=row["transport"],
                 sdk=row["sdk"],
+                extra=row["install_extra"],
                 maintainer=row["maintainer"],
                 status=row["status"],
                 digest=row["fixture_sha256"],

@@ -11,7 +11,6 @@ Commands:
 from __future__ import annotations
 
 import argparse
-import asyncio
 import getpass
 import json
 import logging
@@ -837,6 +836,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_chat(args: argparse.Namespace) -> int:
+    import asyncio
+
     home = _resolve_home(args.home)
     prep_code = _prepare_runtime_environment(
         home,

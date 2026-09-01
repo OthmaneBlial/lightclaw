@@ -47,7 +47,7 @@ The first full run is tied to commit `be5a71d30cd7a2bea5119d2624fdeff275c5c8da`:
 | Idle import-process RSS | 24.94 MiB | One imported process sampled with `ps` |
 | Config routing overhead | 1.6367 microseconds/call | 100,000 deterministic provider/model resolutions |
 | Runtime Python LOC | 13,291 | Runtime modules only; tests and benchmarks excluded |
-| Direct runtime dependencies | 6 | Distribution metadata |
+| Direct runtime dependencies | 6 | Distribution metadata at the measured commit; current base-package counts are emitted by each new run |
 | Memory retrieval fixture | 8/8 top-1 | Versioned deterministic lexical corpus |
 | Orchestration fixture | 4/4 contracts | Dependency, handoff, failure, and bounded repair |
 

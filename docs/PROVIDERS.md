@@ -2,6 +2,21 @@
 
 LightClaw supports six named adapters through one typed internal protocol. Provider-specific SDK objects never cross that boundary.
 
+## Install only the provider you use
+
+The deterministic demo needs only the base package. Live providers are optional so a first
+install does not download three unrelated vendor SDK families:
+
+```bash
+python -m pip install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
+# or use [claude], [gemini], or [providers]
+```
+
+The `openai` extra covers OpenAI plus the xAI, DeepSeek, and Z-AI compatible transports.
+The `providers` extra installs every SDK family. `lightclaw doctor` verifies the configured
+provider SDK without exposing credentials, and client construction fails with the exact
+missing extra instead of an unscoped import traceback.
+
 ## Normalized response
 
 `LLMClient.complete()` returns:

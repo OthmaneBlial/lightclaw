@@ -10,7 +10,7 @@ RUN groupadd --system lightclaw \
 
 WORKDIR /opt/lightclaw
 COPY . .
-RUN python -m pip install --no-cache-dir . \
+RUN python -m pip install --no-cache-dir '.[providers]' \
     && rm -rf /root/.cache/pip /opt/lightclaw/.git /opt/lightclaw/build /opt/lightclaw/dist
 
 USER lightclaw:lightclaw

@@ -28,17 +28,31 @@ classifiers = [
   "Topic :: Software Development",
 ]
 dependencies = [
-  "anthropic>=1,<2",
-  "google-genai>=2,<3",
   "httpx==0.28.1",
-  "openai>=2,<4",
   "python-dotenv==1.2.3",
   "python-telegram-bot>=21,<23",
 ]
 
 [project.optional-dependencies]
+openai = [
+  "openai>=2,<4",
+]
+claude = [
+  "anthropic>=1,<2",
+]
+gemini = [
+  "google-genai>=2,<3",
+]
+providers = [
+  "anthropic>=1,<2",
+  "google-genai>=2,<3",
+  "openai>=2,<4",
+]
 dev = [
+  "anthropic>=1,<2",
   "build>=1.2,<2",
+  "google-genai>=2,<3",
+  "openai>=2,<4",
   "pip-audit>=2.8,<3",
   "pytest>=9.0.3,<10",
   "pytest-asyncio>=0.24,<2",

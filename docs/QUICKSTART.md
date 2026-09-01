@@ -21,8 +21,9 @@ python -m pip install -e .
 lightclaw --help
 ```
 
-This installs the runtime in the virtual environment; it does not configure a Telegram bot
-or provider and does not write into global Python.
+This installs the base runtime in the virtual environment; it does not download a vendor
+SDK, configure a Telegram bot or provider, or write into global Python. A real provider is
+added later with one of the documented `openai`, `claude`, or `gemini` extras.
 
 ## Minute 2–3: run the complete fixture
 
@@ -52,4 +53,3 @@ The demo makes no claim about live provider quality or Telegram connectivity.
 - When ready for a real local install, follow [onboarding and rollback](INSTALL.md).
 
 Delete `lightclaw-demo/` when finished. The command does not publish or upload it.
-

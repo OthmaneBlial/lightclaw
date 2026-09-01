@@ -4,13 +4,25 @@ LightClaw requires Python 3.10–3.13 on macOS or Linux. The package distributio
 
 ## Install from the repository
 
-For a standard isolated tool installation:
+For a standard isolated tool installation, choose the provider extra you need:
 
 ```bash
-pipx install 'git+https://github.com/OthmaneBlial/lightclaw.git'
+pipx install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
 # or
-uv tool install 'git+https://github.com/OthmaneBlial/lightclaw.git'
+uv tool install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
 ```
+
+| Extra | Live providers enabled |
+|---|---|
+| `openai` | OpenAI, xAI, DeepSeek, and Z-AI |
+| `claude` | Anthropic Claude |
+| `gemini` | Google Gemini |
+| `providers` | All six configured provider paths |
+
+The base package is enough for `lightclaw demo` and does not download vendor SDKs.
+`lightclaw doctor` reports an actionable error if the configured provider extra is
+missing. The compatibility installer and container deliberately install `providers`
+so their existing one-step setup behavior remains unchanged.
 
 For a local checkout:
 

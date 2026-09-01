@@ -1,13 +1,10 @@
 {
   "direct_dependencies": [
-    "anthropic>=1,<2",
-    "google-genai>=2,<3",
     "httpx==0.28.1",
-    "openai>=2,<4",
     "python-dotenv==1.2.3",
     "python-telegram-bot>=21,<23"
   ],
-  "direct_dependency_count": 6,
+  "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
       "branch_points": 99,
@@ -53,8 +50,8 @@
     },
     {
       "branch_points": 57,
-      "line": 839,
-      "lines": 331,
+      "line": 838,
+      "lines": 333,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -102,7 +99,7 @@
     },
     {
       "branch_points": 33,
-      "line": 460,
+      "line": 459,
       "lines": 153,
       "name": "_configure_env_interactive",
       "path": "lightclaw_cli.py"
@@ -146,8 +143,8 @@
     },
     {
       "branch_points": 57,
-      "line": 839,
-      "lines": 331,
+      "line": 838,
+      "lines": 333,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -167,7 +164,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1647,
+      "line": 1648,
       "lines": 245,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -224,7 +221,7 @@
   ],
   "largest_modules": [
     {
-      "lines": 1901,
+      "lines": 1902,
       "path": "lightclaw_cli.py"
     },
     {
@@ -276,14 +273,14 @@
       "path": "core/bot/commands/cron.py"
     },
     {
-      "lines": 418,
-      "path": "core/artifacts.py"
+      "lines": 440,
+      "path": "core/llm/client.py"
     },
     {
       "lines": 418,
-      "path": "core/bot/commands/skills.py"
+      "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 17970,
+  "runtime_lines": 18033,
   "schema_version": 1
 }
