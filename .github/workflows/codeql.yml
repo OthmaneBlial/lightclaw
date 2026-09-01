@@ -1,12 +1,10 @@
 name: CodeQL
 
+# Temporarily paused while the repository-wide product refresh is in progress.
+# Restore the previous push, pull_request, and weekly schedule triggers from git
+# history once the refresh is complete.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: "23 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read

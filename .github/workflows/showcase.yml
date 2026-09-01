@@ -1,22 +1,10 @@
 name: Showcase privacy and reproducibility
 
+# Temporarily paused while the repository-wide product refresh is in progress.
+# Restore the previous path-filtered push and pull_request triggers from git
+# history once the refresh is complete.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "showcase/**"
-      - "examples/**"
-      - "scripts/validate_showcase.py"
-      - "tests/test_showcase.py"
-      - ".github/workflows/showcase.yml"
-  pull_request:
-    branches: [main]
-    paths:
-      - "showcase/**"
-      - "examples/**"
-      - "scripts/validate_showcase.py"
-      - "tests/test_showcase.py"
-      - ".github/workflows/showcase.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read

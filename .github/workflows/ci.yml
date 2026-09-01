@@ -1,10 +1,13 @@
 name: CI
 
+# Temporarily paused while the repository-wide product refresh is in progress.
+# Restore the previous automatic triggers by replacing workflow_dispatch with:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
