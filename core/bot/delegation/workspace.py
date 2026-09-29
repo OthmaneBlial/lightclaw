@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 import time
 from pathlib import Path
 
+from ...fs import sha256_file
 from ...workspaces import register_task_workspace, validate_workspace_root
 
 
@@ -143,7 +143,7 @@ class DelegationWorkspaceMixin:
                 digest = ""
                 if change != "deleted" and current.is_file() and not current.is_symlink():
                     try:
-                        digest = hashlib.sha256(current.read_bytes()).hexdigest()
+                        digest = sha256_file(current)
                     except OSError:
                         digest = "unavailable"
                 changes.append(

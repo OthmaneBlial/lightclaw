@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import subprocess
@@ -14,6 +13,7 @@ from pathlib import Path
 from memory import MemoryStore
 
 from .artifacts import create_patch_bundle, initialize_artifact_repository
+from .fs import sha256_file
 from .receipts import write_receipt
 from .security import delegated_process_env, redact_text
 
@@ -25,7 +25,7 @@ def _utc_now() -> str:
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    return sha256_file(path)
 
 
 def _file_change(path: Path, root: Path, change: str = "created") -> dict[str, object]:

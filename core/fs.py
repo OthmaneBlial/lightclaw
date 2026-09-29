@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
+
+
+def sha256_file(path: str | Path) -> str:
+    """Hash a file in fixed-size chunks so large artifacts stay memory-bounded."""
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def atomic_write_text(
@@ -75,8 +85,10 @@ def read_json_object(
         return fallback
     if source.is_symlink() or not source.is_file():
         raise OSError("JSON state path must be a regular non-symlink file")
-    raw = source.read_bytes()
-    if len(raw) > max(1, int(max_bytes)):
+    limit = max(1, int(max_bytes))
+    with source.open("rb") as handle:
+        raw = handle.read(limit + 1)
+    if len(raw) > limit:
         raise OSError("JSON state exceeds the size limit")
     loaded = json.loads(raw.decode("utf-8"))
     if not isinstance(loaded, dict):

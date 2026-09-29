@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -11,6 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
 
+from .fs import sha256_file
 from .receipts import _write_private
 from .security import delegated_process_env, redact_text
 
@@ -178,10 +178,7 @@ def create_patch_bundle(
         if patch_result.returncode != 0:
             detail = redact_text(patch_result.stderr or patch_result.stdout).strip()[-800:]
             raise ArtifactError(detail or "could not write the review patch")
-        patch_sha256 = hashlib.sha256()
-        with patch_temp.open("rb") as patch_file:
-            for chunk in iter(lambda: patch_file.read(1024 * 1024), b""):
-                patch_sha256.update(chunk)
+        patch_sha256 = sha256_file(patch_temp)
         os.chmod(patch_temp, 0o600)
         os.replace(patch_temp, patch_path)
     finally:
@@ -195,7 +192,7 @@ def create_patch_bundle(
         "changed_paths": changed_paths,
         "diff_stat": diff_stat,
         "patch": patch_path.as_posix(),
-        "patch_sha256": patch_sha256.hexdigest(),
+        "patch_sha256": patch_sha256,
         "published": False,
     }
     _write_private(manifest_path, json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -285,7 +282,7 @@ def apply_selected_files(
         operation = {
             "path": relative,
             "change": "overwrite" if destination.exists() else "create",
-            "source_sha256": hashlib.sha256(source_file.read_bytes()).hexdigest(),
+            "source_sha256": sha256_file(source_file),
             "backup": (backup_root / relative).as_posix() if destination.exists() else None,
         }
         operations.append(operation)

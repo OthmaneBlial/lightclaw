@@ -185,6 +185,26 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
         apply_selected_files(source, target, ["linked.py"], run_id="bad")
 
 
+def test_selective_apply_hashes_large_source_without_read_bytes(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    content = b"agent output\n" * 100_000
+    source_file = source / "large.txt"
+    source_file.write_bytes(content)
+    expected_sha256 = hashlib.sha256(content).hexdigest()
+
+    def fail_read_bytes(_path):
+        raise AssertionError("unbounded Path.read_bytes call")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+    preview = apply_selected_files(source, target, ["large.txt"], run_id="run-large")
+
+    assert preview["operations"][0]["source_sha256"] == expected_sha256
+    assert (source_file.stat().st_size > 1024 * 1024)
+
+
 def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path):
     source = tmp_path / "source"
     source.mkdir()
