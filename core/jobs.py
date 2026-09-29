@@ -439,9 +439,16 @@ class JobStore:
             raise JobStateError(f"cannot resume job in state {job['status']}")
         if not job["resumable"]:
             raise JobStateError("job is explicitly non-resumable")
-        unsafe = [lane["label"] for lane in job["lanes"] if not lane["resumable"]]
+        unsafe = [
+            lane["label"]
+            for lane in job["lanes"]
+            if not lane["resumable"] or not lane["idempotent"]
+        ]
         if unsafe:
-            raise JobStateError("non-resumable lanes block resume: " + ", ".join(unsafe))
+            raise JobStateError(
+                "non-resumable or non-idempotent lanes block resume: "
+                + ", ".join(unsafe)
+            )
         return self._transition(run_id, {str(job["status"])}, "queued", "resumed")
 
     def update_lane(

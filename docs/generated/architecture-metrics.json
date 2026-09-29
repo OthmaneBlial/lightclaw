@@ -249,7 +249,7 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 612,
+      "lines": 619,
       "path": "core/jobs.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/llm/client.py"
     }
   ],
-  "runtime_lines": 18144,
+  "runtime_lines": 18151,
   "schema_version": 1
 }

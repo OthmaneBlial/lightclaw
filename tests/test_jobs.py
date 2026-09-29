@@ -126,10 +126,23 @@ def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
     assert store.diagnostics()["counts"]["stalled"] == 1
     queued = _create(store, tmp_path / "repo")
     assert store.claim_next(workspace=tmp_path / "repo") is None
-    with pytest.raises(JobStateError, match="non-resumable lanes"):
+    with pytest.raises(JobStateError, match="non-resumable or non-idempotent lanes"):
         store.resume(job["run_id"])
     store.request_cancel(job["run_id"])
     assert store.claim_next(workspace=tmp_path / "repo")["run_id"] == queued["run_id"]
+    store.close()
+
+
+def test_resume_rejects_non_idempotent_lane_even_when_marked_resumable(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    plan = _plan()
+    plan[0]["idempotent"] = False
+    job = _create(store, tmp_path / "repo", plan=plan)
+    store.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    store.recover_stalled()
+
+    with pytest.raises(JobStateError, match="non-resumable or non-idempotent lanes"):
+        store.resume(job["run_id"])
     store.close()
 
 
