@@ -487,7 +487,16 @@ class JobStore:
     @staticmethod
     def _terminate_process_group(pgid: int, start_token: str) -> bool:
         if not JobStore._process_group_matches(pgid, start_token):
-            return not JobStore._process_group_exists(pgid)
+            if not JobStore._process_group_exists(pgid):
+                return True
+            try:
+                leader_still_owns_group = os.getpgid(pgid) == pgid
+            except ProcessLookupError:
+                leader_still_owns_group = False
+            except OSError:
+                return False
+            if leader_still_owns_group:
+                return False
         try:
             os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:

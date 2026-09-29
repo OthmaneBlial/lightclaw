@@ -269,6 +269,50 @@ def test_stalled_recovery_kills_registered_orphan_process_group(tmp_path):
         store.close()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="delegated process groups require POSIX")
+def test_stalled_recovery_kills_group_after_registered_leader_exits(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    job = _create(store, tmp_path / "repo")
+    store.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    child_marker = tmp_path / "child-ready"
+    child_result = tmp_path / "child-survived"
+    child_code = (
+        "import pathlib,time; "
+        f"pathlib.Path({str(child_marker)!r}).write_text('ready'); time.sleep(1.5); "
+        f"pathlib.Path({str(child_result)!r}).write_text('bad')"
+    )
+    parent_code = (
+        "import pathlib,subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}]); "
+        "time.sleep(.3)"
+    )
+    process = subprocess.Popen([sys.executable, "-c", parent_code], start_new_session=True)
+    store.register_process_group(job["run_id"], process.pid)
+    try:
+        for _ in range(100):
+            if child_marker.exists():
+                break
+            time.sleep(0.02)
+        assert child_marker.exists()
+        process.wait(timeout=5)
+        assert store._process_group_exists(process.pid)
+
+        assert store.recover_stalled() == [job["run_id"]]
+        assert store.db.execute(
+            "SELECT 1 FROM job_process_groups WHERE run_id = ?", (job["run_id"],)
+        ).fetchone() is None
+        time.sleep(1.7)
+        assert not child_result.exists()
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        if process.poll() is None:
+            process.wait(timeout=5)
+        store.close()
+
+
 def test_jobs_cli_exposes_bounded_control_actions():
     parser = build_parser()
     parsed = parser.parse_args(["jobs", "retry", "run-123", "--lane", "backend", "--json"])
