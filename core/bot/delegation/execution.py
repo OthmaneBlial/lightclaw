@@ -707,15 +707,13 @@ class DelegationExecutionMixin:
         )
 
         timed_out = False
+        streams_task = asyncio.gather(
+            read_stream(proc.stdout, stdout_lines, "stdout"),
+            read_stream(proc.stderr, stderr_lines, "stderr"),
+            proc.wait(),
+        )
         try:
-            await asyncio.wait_for(
-                asyncio.gather(
-                    read_stream(proc.stdout, stdout_lines, "stdout"),
-                    read_stream(proc.stderr, stderr_lines, "stderr"),
-                    proc.wait(),
-                ),
-                timeout=timeout_sec,
-            )
+            await asyncio.wait_for(streams_task, timeout=timeout_sec)
         except asyncio.TimeoutError:
             timed_out = True
             try:
@@ -725,24 +723,28 @@ class DelegationExecutionMixin:
             await proc.wait()
             stderr_lines.append(f"Timed out after {timeout_sec}s")
         except asyncio.CancelledError:
+            async def terminate_process_tree() -> None:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except Exception:
+                    if proc.returncode is None:
+                        proc.terminate()
+                await asyncio.sleep(0.2)
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except Exception:
+                    if proc.returncode is None:
+                        proc.kill()
+                await proc.wait()
+
+            cleanup_task = asyncio.create_task(terminate_process_tree())
             try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except Exception:
-                if proc.returncode is None:
-                    proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                pass
-            try:
-                # The leader may exit while a descendant still holds the process group.
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except Exception:
-                if proc.returncode is None:
-                    proc.kill()
-            await proc.wait()
+                await asyncio.shield(cleanup_task)
+            except asyncio.CancelledError:
+                await cleanup_task
+            await asyncio.gather(streams_task, return_exceptions=True)
             raise
         finally:
             heartbeat_stop.set()
