@@ -26,6 +26,8 @@ def _run(label: str, command: list[str], *, retries: int = 0) -> None:
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="lightclaw-quality-") as temporary:
         footprint = Path(temporary) / "runtime-footprint.json"
+        wheel_directory = Path(temporary) / "dist"
+        wheel_environment = Path(temporary) / "wheel-env"
         _run(
             "lint",
             [
@@ -67,7 +69,20 @@ def main() -> int:
         )
         _run("launch evidence pack", [PYTHON, "scripts/check_launch_pack.py"])
         _run("tests", [PYTHON, "-m", "pytest", "-q"])
-        _run("package build", [PYTHON, "-m", "build"])
+        _run("package build", [PYTHON, "-m", "build", "--outdir", str(wheel_directory)])
+        wheels = list(wheel_directory.glob("*.whl"))
+        if len(wheels) != 1:
+            raise SystemExit(f"Expected one built wheel, found {len(wheels)}")
+        _run("clean wheel environment", [PYTHON, "-m", "venv", str(wheel_environment)])
+        wheel_python = wheel_environment / "bin" / "python"
+        _run(
+            "install built wheel",
+            [str(wheel_python), "-m", "pip", "install", "--no-deps", str(wheels[0])],
+        )
+        _run(
+            "wheel data files",
+            [str(wheel_python), str(PROJECT_ROOT / "scripts" / "check_installed_wheel_data.py")],
+        )
     print("\nAll canonical LightClaw quality checks passed.")
     return 0
 

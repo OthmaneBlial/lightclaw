@@ -90,6 +90,7 @@ jobs:
         run: |
           python -m venv /tmp/lightclaw-wheel-smoke
           /tmp/lightclaw-wheel-smoke/bin/python -m pip install dist/*.whl
+          /tmp/lightclaw-wheel-smoke/bin/python "$GITHUB_WORKSPACE/scripts/check_installed_wheel_data.py"
           /tmp/lightclaw-wheel-smoke/bin/lightclaw --help
       - name: Upload coverage report
         if: always()
