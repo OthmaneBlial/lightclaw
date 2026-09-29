@@ -93,6 +93,16 @@ class BotMessagingMixin:
                     return
                 except Exception as exc:
                     log.warning("Could not attach long result artifact: %s", exc)
+                    failure = (
+                        "Telegram could not attach this oversized result. "
+                        f"It remains saved locally as `{artifact.name}` under "
+                        "`.lightclaw-meta/messages/`."
+                    )
+                    if placeholder:
+                        await self._try_send(placeholder.edit_text, failure)
+                    elif update.message:
+                        await self._try_send(update.message.reply_text, failure)
+            return
 
         # First chunk the markdown (before HTML conversion which expands entities)
         markdown_chunks = self._chunk_message(markdown_response, max_len=3000)

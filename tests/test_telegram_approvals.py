@@ -516,3 +516,25 @@ async def test_long_result_is_private_file_artifact_not_chat_wall(tmp_path):
     assert len(files) == 1
     assert stat.S_IMODE(files[0].stat().st_mode) == 0o600
     assert files[0].read_text(encoding="utf-8").startswith("evidence")
+
+
+@pytest.mark.asyncio
+async def test_long_result_does_not_spam_chat_when_attachment_fails(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
+    message = SimpleNamespace(
+        reply_document=AsyncMock(side_effect=RuntimeError("upload failed")),
+        reply_text=AsyncMock(),
+    )
+    placeholder = SimpleNamespace(edit_text=AsyncMock())
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=message,
+    )
+
+    await bot._send_response(placeholder, update, "evidence\n" * 1000)
+
+    message.reply_document.assert_awaited_once()
+    message.reply_text.assert_not_awaited()
+    assert placeholder.edit_text.await_count == 2
+    assert "saved locally" in placeholder.edit_text.await_args.args[0]
