@@ -4,6 +4,7 @@ LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in
 
 ## Guarantees
 
+- One run can execute per Telegram conversation at a time; separate conversations remain concurrent.
 - A SQLite partial unique index permits only one `running` or `cancel_requested` writer for a resolved workspace.
 - Stalled jobs also block queued work in their workspace until an operator cancels or resumes them.
 - Queued work is claimed by priority, then creation time.

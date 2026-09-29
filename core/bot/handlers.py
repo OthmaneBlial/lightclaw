@@ -219,14 +219,7 @@ class BotHandlersMixin:
                         ),
                     )
                     return
-                current = asyncio.current_task()
-                if current:
-                    self._active_run_tasks_by_session[session_id] = current
-                try:
-                    await self._execute_pending_multi_plan(update, session_id)
-                finally:
-                    if self._active_run_tasks_by_session.get(session_id) is current:
-                        self._active_run_tasks_by_session.pop(session_id, None)
+                await self._execute_pending_multi_plan(update, session_id)
                 return
             if decision == "cancel":
                 self._clear_pending_multi_plan(session_id)

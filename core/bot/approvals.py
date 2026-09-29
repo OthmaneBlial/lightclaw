@@ -216,16 +216,10 @@ class BotApprovalsMixin:
         session_id: str,
     ) -> None:
         proxy = self._callback_proxy(update)
-        current = asyncio.current_task()
-        if current:
-            self._active_run_tasks_by_session[session_id] = current
         try:
             await self._execute_pending_multi_plan(proxy, session_id)
         except asyncio.CancelledError:
             await self._reply_logged(proxy, "Canceled active run and its delegated process tree.")
-        finally:
-            if self._active_run_tasks_by_session.get(session_id) is current:
-                self._active_run_tasks_by_session.pop(session_id, None)
 
     async def handle_run_action(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query

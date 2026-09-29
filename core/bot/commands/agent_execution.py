@@ -17,6 +17,31 @@ from ...receipts import write_receipt
 
 class CommandsAgentExecutionMixin:
     async def _execute_pending_multi_plan(self, update: Update, session_id: str):
+        locks = getattr(self, "_session_run_locks", None)
+        if locks is None:
+            locks = self._session_run_locks = {}
+        lock = locks.setdefault(session_id, asyncio.Lock())
+        if lock.locked():
+            await self._reply_logged(
+                update,
+                "⏳ Another agent run is active in this chat. Wait for it or cancel it before approving this plan.",
+            )
+            return
+        try:
+            async with lock:
+                current = asyncio.current_task()
+                if current:
+                    self._active_run_tasks_by_session[session_id] = current
+                try:
+                    return await self._execute_pending_multi_plan_impl(update, session_id)
+                finally:
+                    if self._active_run_tasks_by_session.get(session_id) is current:
+                        self._active_run_tasks_by_session.pop(session_id, None)
+        finally:
+            if locks.get(session_id) is lock and not lock.locked():
+                locks.pop(session_id, None)
+
+    async def _execute_pending_multi_plan_impl(self, update: Update, session_id: str):
         pending = self._get_pending_multi_plan(session_id)
         if not pending:
             await self._reply_logged(

@@ -345,6 +345,7 @@ async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_p
     )
     bot.jobs = JobStore(tmp_path / "jobs.db")
     bot._active_run_ids_by_session = {}
+    bot._active_run_tasks_by_session = {}
     bot._active_worker_tasks_by_run = {}
     bot._active_run_heartbeats_by_run = {}
     worker_started = asyncio.Event()

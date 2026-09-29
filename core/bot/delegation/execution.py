@@ -831,6 +831,63 @@ class DelegationExecutionMixin:
         initialize_artifact: bool = True,
         process_owner_run_id: str | None = None,
     ) -> str:
+        if not manage_job:
+            return await self._run_local_agent_task_impl(
+                session_id=session_id,
+                agent=agent,
+                task=task,
+                progress_cb=progress_cb,
+                include_workspace_delta=include_workspace_delta,
+                workspace_dir=workspace_dir,
+                capability_profile=capability_profile,
+                emit_receipt=emit_receipt,
+                evidence_sink=evidence_sink,
+                manage_job=False,
+                initialize_artifact=initialize_artifact,
+                process_owner_run_id=process_owner_run_id,
+            )
+
+        locks = getattr(self, "_session_run_locks", None)
+        if locks is None:
+            locks = self._session_run_locks = {}
+        lock = locks.setdefault(session_id, asyncio.Lock())
+        if lock.locked():
+            return "⏳ An agent run is already active in this chat. Wait for it or cancel it before starting another."
+        try:
+            async with lock:
+                return await self._run_local_agent_task_impl(
+                    session_id=session_id,
+                    agent=agent,
+                    task=task,
+                    progress_cb=progress_cb,
+                    include_workspace_delta=include_workspace_delta,
+                    workspace_dir=workspace_dir,
+                    capability_profile=capability_profile,
+                    emit_receipt=emit_receipt,
+                    evidence_sink=evidence_sink,
+                    manage_job=True,
+                    initialize_artifact=initialize_artifact,
+                    process_owner_run_id=process_owner_run_id,
+                )
+        finally:
+            if locks.get(session_id) is lock and not lock.locked():
+                locks.pop(session_id, None)
+
+    async def _run_local_agent_task_impl(
+        self,
+        session_id: str,
+        agent: str,
+        task: str,
+        progress_cb: Callable[[str], Awaitable[None]] | None = None,
+        include_workspace_delta: bool = True,
+        workspace_dir: Path | str | None = None,
+        capability_profile: str | None = None,
+        emit_receipt: bool = True,
+        evidence_sink: dict[str, object] | None = None,
+        manage_job: bool = True,
+        initialize_artifact: bool = True,
+        process_owner_run_id: str | None = None,
+    ) -> str:
         available = self._available_local_agents()
         if agent not in available:
             installed = ", ".join(sorted(available.keys())) if available else "none"

@@ -89,6 +89,7 @@ class BotBaseMixin:
         self._pending_voice_goal_by_session: dict[str, dict[str, object]] = {}
         self._active_run_tasks_by_session: dict[str, asyncio.Task[object]] = {}
         self._active_run_ids_by_session: dict[str, str] = {}
+        self._session_run_locks: dict[str, asyncio.Lock] = {}
         self._active_worker_tasks_by_run: dict[
             str, dict[asyncio.Task[object], str]
         ] = {}

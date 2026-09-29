@@ -8,7 +8,7 @@
   "highest_branch_functions": [
     {
       "branch_points": 99,
-      "line": 102,
+      "line": 127,
       "lines": 699,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -29,15 +29,15 @@
     },
     {
       "branch_points": 79,
-      "line": 819,
+      "line": 876,
       "lines": 398,
-      "name": "_run_local_agent_task",
+      "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 62,
+      "branch_points": 59,
       "line": 178,
-      "lines": 340,
+      "lines": 333,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -78,7 +78,7 @@
     },
     {
       "branch_points": 46,
-      "line": 230,
+      "line": 224,
       "lines": 186,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -115,7 +115,7 @@
   "largest_functions": [
     {
       "branch_points": 99,
-      "line": 102,
+      "line": 127,
       "lines": 699,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -136,15 +136,15 @@
     },
     {
       "branch_points": 79,
-      "line": 819,
+      "line": 876,
       "lines": 398,
-      "name": "_run_local_agent_task",
+      "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 62,
+      "branch_points": 59,
       "line": 178,
-      "lines": 340,
+      "lines": 333,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -192,7 +192,7 @@
     },
     {
       "branch_points": 46,
-      "line": 230,
+      "line": 224,
       "lines": 186,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -225,12 +225,12 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1271,
-      "path": "core/bot/delegation/planning.py"
+      "lines": 1273,
+      "path": "core/bot/delegation/execution.py"
     },
     {
-      "lines": 1216,
-      "path": "core/bot/delegation/execution.py"
+      "lines": 1271,
+      "path": "core/bot/delegation/planning.py"
     },
     {
       "lines": 1181,
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 813,
-      "path": "memory.py"
+      "lines": 825,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 800,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 813,
+      "path": "memory.py"
     },
     {
       "lines": 729,
@@ -265,11 +265,11 @@
       "path": "core/bot/delegation/tasks.py"
     },
     {
-      "lines": 519,
+      "lines": 512,
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 508,
+      "lines": 502,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/llm/client.py"
     }
   ],
-  "runtime_lines": 18384,
+  "runtime_lines": 18454,
   "schema_version": 1
 }
