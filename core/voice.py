@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .logging_setup import log
+from .security import redact_text
 
 
 async def transcribe_voice(audio_bytes: bytes, groq_api_key: str) -> str | None:
@@ -21,10 +22,13 @@ async def transcribe_voice(audio_bytes: bytes, groq_api_key: str) -> str | None:
                 data={"model": "whisper-large-v3-turbo"},
             )
             if response.status_code == 200:
-                return response.json().get("text", "")
+                payload = response.json()
+                text = payload.get("text") if isinstance(payload, dict) else None
+                return text if isinstance(text, str) else None
     except ImportError:
         log.warning("httpx not installed — voice transcription unavailable. pip install httpx")
     except Exception as e:
-        log.error(f"Voice transcription failed: {e}")
+        detail = redact_text(str(e), {"GROQ_API_KEY": groq_api_key})
+        log.error("Voice transcription failed: %s", detail)
 
     return None
