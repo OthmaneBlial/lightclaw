@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import time
@@ -139,6 +140,32 @@ async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_p
         await task
     await asyncio.sleep(2.3)
     assert not (tmp_path / "child-survived.txt").exists()
+
+
+async def test_streaming_output_is_bounded_and_reports_truncation(tmp_path: Path):
+    harness = TimeoutHarness()
+    harness.config.local_agent_timeout_sec = 5
+    final_event = json.dumps(
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "completed"}}
+    ).encode() + b"\n"
+    script = (
+        "import os; line=b'x'*4096+b'\\n'; "
+        "[os.write(1, line) for _ in range(768)]; "
+        "os.write(1, b'y'*1200000+b'\\n'); "
+        f"os.write(1, {final_event!r})"
+    )
+    harness._build_delegation_prompt = lambda task, workspace=None: task
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [sys.executable, "-c", script],
+        None,
+    )
+
+    result = await harness._invoke_local_agent_streaming("codex", "task", workspace=tmp_path)
+
+    assert result.get("output_truncated") is True
+    assert len(result["stdout"].encode("utf-8")) <= 2 * 1024 * 1024
+    assert "completed" in result["summary"]
+    assert "truncated" in result["summary"].lower()
 
 
 def test_delegation_unregisters_process_group_after_completion(tmp_path: Path):

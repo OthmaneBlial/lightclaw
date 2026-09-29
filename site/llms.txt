@@ -6,6 +6,8 @@ Allowlisted bots accept commands only in private Telegram chats because group me
 
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 
+Delegated CLI output has per-line and per-stream limits. LightClaw marks truncated output for review.
+
 Canonical site: https://othmaneblial.github.io/lightclaw/
 Source: https://github.com/OthmaneBlial/lightclaw
 License: MIT

@@ -31,8 +31,10 @@ SENSITIVE_NAME_RE = re.compile(
     r"bot[_-]?token|password|passwd|secret|credential|private[_-]?key)"
 )
 SENSITIVE_ASSIGNMENT_RE = re.compile(
-    r"(?i)([\"']?)([A-Z0-9_.-]*(?:API[_-]?KEY|ACCESS[_-]?KEY|TOKEN|PASSWORD|PASSWD|SECRET|CREDENTIAL)"
-    r"[A-Z0-9_.-]*)([\"']?)(\s*[:=]\s*)([\"']?)([^\s,;}\"']+)([\"']?)"
+    r"(?i)(?<![A-Z0-9_.-])([\"']?)([A-Z0-9_.-]{0,128}(?:API[_-]?KEY|ACCESS[_-]?KEY|AUTH[_-]?TOKEN|"
+    r"REFRESH[_-]?TOKEN|BOT[_-]?TOKEN|TOKEN|PASSWORD|PASSWD|SECRET|CREDENTIAL|PRIVATE[_-]?KEY)"
+    r"[A-Z0-9_.-]{0,128})([\"']?)(\s*[:=]\s*)"
+    r"([\"']?)([^\s,;}\"']+)([\"']?)"
 )
 SENSITIVE_PATH_DIRECTORIES = frozenset({".aws", ".docker", ".gnupg", ".kube", ".ssh", "credentials", "secrets"})
 SENSITIVE_PATH_NAMES = frozenset(

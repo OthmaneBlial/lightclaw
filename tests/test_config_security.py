@@ -172,6 +172,13 @@ def test_redaction_covers_assignments_bearer_tokens_and_known_values():
     assert "123456789:" not in redacted
     assert "custom-value" not in redacted
     assert redacted.count("REDACTED") >= 4
+    assert "nested-secret" not in redact_text("note=prefix:API_KEY=nested-secret")
+
+
+def test_redaction_handles_large_nonsecret_text():
+    text = "x" * 500_000
+
+    assert redact_text(text) == text
 
 
 def test_sensitive_context_detection_covers_credential_paths_and_json_keys():

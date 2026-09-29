@@ -19,6 +19,7 @@ from ...logging_setup import log
 from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
 from ...workspaces import capture_git_checkpoint, validate_workspace_root
+from .streams import BoundedStreamCapture
 
 
 class DelegationExecutionMixin:
@@ -642,8 +643,8 @@ class DelegationExecutionMixin:
                 }
 
         state = self._new_progress_state()
-        stdout_lines: list[str] = []
-        stderr_lines: list[str] = []
+        stdout_capture = BoundedStreamCapture("stdout")
+        stderr_capture = BoundedStreamCapture("stderr")
         heartbeat_stop = asyncio.Event()
 
         async def emit_progress(text: str):
@@ -655,40 +656,14 @@ class DelegationExecutionMixin:
                 # Progress updates are best-effort and must not fail delegation.
                 pass
 
-        async def _iter_stream_lines(stream):
-            # Avoid StreamReader.readline() hard-limit failures on very long JSON lines
-            # (e.g. Claude stream-json events with large content blocks).
-            pending = b""
-            while True:
-                chunk = await stream.read(65536)
-                if not chunk:
-                    break
-                pending += chunk
-
-                while True:
-                    newline_idx = pending.find(b"\n")
-                    if newline_idx < 0:
-                        break
-                    raw_line = pending[:newline_idx]
-                    pending = pending[newline_idx + 1 :]
-                    if raw_line.endswith(b"\r"):
-                        raw_line = raw_line[:-1]
-                    yield raw_line.decode("utf-8", errors="replace")
-
-            if pending:
-                if pending.endswith(b"\r"):
-                    pending = pending[:-1]
-                yield pending.decode("utf-8", errors="replace")
-
         parse_warning_emitted: set[str] = set()
 
-        async def read_stream(stream, collector: list[str], stream_name: str):
+        async def read_stream(stream, collector: BoundedStreamCapture):
             if stream is None:
                 return
-            async for line in _iter_stream_lines(stream):
-                collector.append(line)
+            async for line in collector.read_lines(stream):
                 try:
-                    self._ingest_progress_event(agent, line, state, stream_name)
+                    self._ingest_progress_event(agent, line, state, collector.name)
                 except Exception as e:
                     # Progress parsing is best-effort; never crash the worker on it.
                     state["errors"] = int(state.get("errors", 0)) + 1
@@ -696,8 +671,8 @@ class DelegationExecutionMixin:
                         f"progress parser warning: {e}",
                         max_chars=220,
                     )
-                    if stream_name not in parse_warning_emitted:
-                        parse_warning_emitted.add(stream_name)
+                    if collector.name not in parse_warning_emitted:
+                        parse_warning_emitted.add(collector.name)
                         log.warning("Delegation progress event could not be parsed")
 
         async def heartbeat_loop():
@@ -721,8 +696,8 @@ class DelegationExecutionMixin:
 
         timed_out = False
         streams_task = asyncio.gather(
-            read_stream(proc.stdout, stdout_lines, "stdout"),
-            read_stream(proc.stderr, stderr_lines, "stderr"),
+            read_stream(proc.stdout, stdout_capture),
+            read_stream(proc.stderr, stderr_capture),
             proc.wait(),
         )
         try:
@@ -745,7 +720,7 @@ class DelegationExecutionMixin:
             except Exception:
                 proc.kill()
             await proc.wait()
-            stderr_lines.append(f"Timed out after {timeout_sec}s")
+            stderr_capture.append_line(f"Timed out after {timeout_sec}s")
         except asyncio.CancelledError:
             async def terminate_process_tree() -> None:
                 try:
@@ -792,13 +767,19 @@ class DelegationExecutionMixin:
 
         elapsed = time.monotonic() - started
         exit_code = 124 if timed_out else int(proc.returncode if proc.returncode is not None else 1)
-        stdout = redact_text("\n".join(stdout_lines))
-        stderr = redact_text("\n".join(stderr_lines))
+        stdout = redact_text(stdout_capture.text())
+        stderr = redact_text(stderr_capture.text())
 
         if agent == "codex":
             summary = self._parse_codex_exec_output(stdout)
         else:
             summary = self._parse_claude_cli_output(stdout)
+        output_truncated = stdout_capture.truncated or stderr_capture.truncated
+        if output_truncated:
+            summary = (
+                "⚠️ Agent output was truncated by LightClaw; review changed files and the run receipt.\n\n"
+                f"{summary}"
+            ).strip()
         summary = redact_text(summary)
 
         ok = exit_code == 0
@@ -811,6 +792,7 @@ class DelegationExecutionMixin:
             "stdout": stdout,
             "stderr": stderr,
             "summary": summary,
+            "output_truncated": output_truncated,
             "elapsed": elapsed,
             "timed_out": timed_out,
             "commands": list(state.get("command_records", [])),
