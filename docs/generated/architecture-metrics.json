@@ -15,7 +15,7 @@
     },
     {
       "branch_points": 95,
-      "line": 231,
+      "line": 245,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
@@ -129,7 +129,7 @@
     },
     {
       "branch_points": 95,
-      "line": 231,
+      "line": 245,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
@@ -237,7 +237,7 @@
       "path": "skills.py"
     },
     {
-      "lines": 986,
+      "lines": 1018,
       "path": "core/bot/file_ops.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18826,
+  "runtime_lines": 18877,
   "schema_version": 1
 }

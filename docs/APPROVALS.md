@@ -26,4 +26,8 @@ Voice input is transcribed, displayed as “not executed,” and retained in mem
 
 Completed runs show View diff, Retry failed lane when applicable, Accept result, and Cancel. Retry still obeys durable idempotency and attempt bounds; unsafe retries fail closed. Accept changes only the local durable disposition and never pushes or publishes.
 
-Responses larger than 6,000 characters or detected as large code dumps are written to an owner-only Markdown artifact and attached to Telegram. LightClaw avoids splitting them into unreadable chat walls.
+Responses larger than 6,000 characters or detected as large code dumps are written to an owner-only Markdown artifact and attached to Telegram. If attachment fails, the artifact stays local and LightClaw does not split the response into chat walls.
+
+## Chat file edits
+
+Model-generated chat file blocks read and write at most 2 MiB per file, keeping diffs and retry context bounded. Larger changes should use a delegated local-agent task or a local edit; an oversized target is left unchanged.

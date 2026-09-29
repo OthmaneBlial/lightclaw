@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import Any
 
 
+class FileTooLargeError(OSError):
+    """Raised when a bounded text read exceeds its byte limit."""
+
+
 def sha256_file(path: str | Path) -> str:
     """Hash a file in fixed-size chunks so large artifacts stay memory-bounded."""
     digest = hashlib.sha256()
@@ -17,6 +21,21 @@ def sha256_file(path: str | Path) -> str:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def read_text_bounded(
+    path: str | Path,
+    max_bytes: int,
+    *,
+    encoding: str = "utf-8",
+) -> str:
+    """Read and decode text while consuming at most max_bytes plus one byte."""
+    limit = max(1, int(max_bytes))
+    with Path(path).open("rb") as handle:
+        raw = handle.read(limit + 1)
+    if len(raw) > limit:
+        raise FileTooLargeError(f"file exceeds the {limit}-byte read limit")
+    return raw.decode(encoding)
 
 
 def atomic_write_text(

@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from core.fs import atomic_write_json, atomic_write_text, read_json_object, sha256_file
+from core.fs import (
+    FileTooLargeError,
+    atomic_write_json,
+    atomic_write_text,
+    read_json_object,
+    read_text_bounded,
+    sha256_file,
+)
 
 
 class _ReadProbe:
@@ -45,6 +52,22 @@ def test_sha256_file_reads_large_files_in_bounded_chunks(tmp_path, monkeypatch):
     monkeypatch.setattr(Path, "open", probe_open)
     assert sha256_file(path) == expected.hexdigest()
     assert read_requests and max(read_requests) <= 1024 * 1024
+
+
+def test_bounded_text_reader_stops_at_limit_plus_one(tmp_path, monkeypatch):
+    path = tmp_path / "large.txt"
+    path.write_text("x" * 100, encoding="utf-8")
+    read_requests = []
+    original_open = Path.open
+
+    def probe_open(candidate, *args, **kwargs):
+        handle = original_open(candidate, *args, **kwargs)
+        return _ReadProbe(handle, read_requests) if candidate == path else handle
+
+    monkeypatch.setattr(Path, "open", probe_open)
+    with pytest.raises(FileTooLargeError):
+        read_text_bounded(path, 8)
+    assert read_requests == [9]
 
 
 def test_atomic_private_write_and_bounded_json_read(tmp_path):

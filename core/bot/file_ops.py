@@ -8,13 +8,27 @@ import re
 import time
 from pathlib import Path
 
-from ..fs import atomic_write_text
+from ..fs import FileTooLargeError, atomic_write_text, read_text_bounded
 from ..logging_setup import log
 from ..security import has_sensitive_content, is_sensitive_path
 from ..types import FileOperationResult
 
+MAX_CHAT_FILE_BYTES = 2 * 1024 * 1024
+_CHAT_FILE_LIMIT_MESSAGE = (
+    "file exceeds LightClaw's 2 MiB chat-edit limit; use a delegated local-agent task for larger files"
+)
+
+
+def _read_chat_file(target: Path) -> str:
+    try:
+        return read_text_bounded(target, MAX_CHAT_FILE_BYTES)
+    except FileTooLargeError as exc:
+        raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE) from exc
+
 
 def _write_workspace_text(target: Path, content: str) -> None:
+    if len(content) > MAX_CHAT_FILE_BYTES or len(content.encode("utf-8")) > MAX_CHAT_FILE_BYTES:
+        raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE)
     try:
         mode = target.stat().st_mode & 0o777
     except FileNotFoundError:
@@ -290,7 +304,7 @@ class BotFileOpsMixin:
             before = None
             if target.exists():
                 try:
-                    before = target.read_text(encoding="utf-8")
+                    before = _read_chat_file(target)
                 except Exception as e:
                     operations.append(FileOperationResult("error", rel_path, f"failed to read file: {e}"))
                     return f"[Save failed: {rel_path}]"
@@ -488,7 +502,7 @@ class BotFileOpsMixin:
                 return f"[Edit failed: {rel_path}]"
 
             try:
-                before = target.read_text(encoding="utf-8")
+                before = _read_chat_file(target)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to read file: {e}"))
                 return f"[Edit failed: {rel_path}]"
@@ -721,7 +735,7 @@ class BotFileOpsMixin:
             if not target.exists():
                 continue
             try:
-                content = target.read_text(encoding="utf-8")
+                content = _read_chat_file(target)
             except Exception:
                 continue
             if has_sensitive_content(content):
@@ -797,6 +811,7 @@ class BotFileOpsMixin:
         target_files = self._collect_workspace_candidates(user_text, session_id, limit=4)
         snippets: list[str] = []
         sensitive_files_omitted = False
+        oversized_files: list[str] = []
         for rel_path in target_files:
             if is_sensitive_path(rel_path):
                 sensitive_files_omitted = True
@@ -805,7 +820,10 @@ class BotFileOpsMixin:
             if err or target is None or not target.exists():
                 continue
             try:
-                content = target.read_text(encoding="utf-8")
+                content = _read_chat_file(target)
+            except FileTooLargeError:
+                oversized_files.append(rel_path)
+                continue
             except Exception:
                 continue
             if has_sensitive_content(content):
@@ -822,6 +840,11 @@ class BotFileOpsMixin:
                 "Automatic edit retry skipped because workspace candidates may contain credentials. "
                 "Share a sanitized excerpt or edit that file locally."
             )
+        if oversized_files and not snippets:
+            return [], (
+                "Automatic edit retry skipped because workspace candidates exceed the 2 MiB chat-edit limit. "
+                "Use a delegated local-agent task or provide a smaller excerpt."
+            )
         file_context = (
             f"Current candidate workspace files:\n{joined_snippets}"
             if snippets
@@ -829,6 +852,11 @@ class BotFileOpsMixin:
         )
         if sensitive_files_omitted:
             file_context += "\nPotentially credential-bearing files were omitted; do not recreate or rewrite them."
+        if oversized_files:
+            file_context += (
+                "\nFiles over the 2 MiB chat-edit limit were omitted: "
+                f"{', '.join(oversized_files)}. Do not recreate or rewrite them."
+            )
 
         forced_system = (
             "You are a file operation engine for LightClaw. "
@@ -905,7 +933,11 @@ class BotFileOpsMixin:
 
             for attempt in range(1, max_attempts + 1):
                 try:
-                    content = target.read_text(encoding="utf-8")
+                    content = _read_chat_file(target)
+                except FileTooLargeError as exc:
+                    repair_skipped = True
+                    repair_ops.append(FileOperationResult("error", rel_path, str(exc)))
+                    break
                 except Exception:
                     break
 
@@ -965,7 +997,7 @@ class BotFileOpsMixin:
                     repair_ops.extend(ops)
 
                 try:
-                    updated = target.read_text(encoding="utf-8")
+                    updated = _read_chat_file(target)
                 except Exception:
                     updated = ""
                 if updated and not self._is_incomplete_html_text(updated):

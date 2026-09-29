@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from core.bot import LightClawBot
-from core.bot.file_ops import BotFileOpsMixin
+from core.bot.file_ops import MAX_CHAT_FILE_BYTES, BotFileOpsMixin
 from core.types import FileOperationResult
 
 
@@ -99,6 +99,25 @@ async def test_credential_files_and_contents_never_enter_automatic_edit_context(
 
 
 @pytest.mark.asyncio
+async def test_force_file_ops_skips_oversized_files_without_sending_them_to_model(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "large.txt").write_bytes(b"private source" * (MAX_CHAT_FILE_BYTES // 10))
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    bot._collect_workspace_candidates = lambda *_args, **_kwargs: ["large.txt"]
+    bot.llm = SimpleNamespace(chat=AsyncMock())
+
+    operations, message = await bot._force_file_ops_pass(
+        "chat-1", "edit large.txt", "No changes yet."
+    )
+
+    assert operations == []
+    assert "2 MiB chat-edit limit" in message
+    bot.llm.chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_model_file_blocks_cannot_overwrite_env_files(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -116,6 +135,30 @@ async def test_model_file_blocks_cannot_overwrite_env_files(tmp_path):
     assert operations[0].action == "error"
     assert "credential-sensitive" in operations[0].detail
     assert env_file.read_text(encoding="utf-8") == "OPENAI_API_KEY=keep-me\n"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("existing", [False, True])
+async def test_chat_file_blocks_refuse_files_over_the_bounded_limit(tmp_path, existing):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "large.txt"
+    if existing:
+        target.write_bytes(b"x" * (MAX_CHAT_FILE_BYTES + 1))
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+
+    replacement = "small replacement" if existing else "x" * (MAX_CHAT_FILE_BYTES + 1)
+    operations, _ = await bot._process_file_blocks(
+        f"```text:large.txt\n{replacement}\n```", allow_file_writes=True
+    )
+
+    assert len(operations) == 1
+    assert operations[0].action == "error"
+    assert "2 MiB chat-edit limit" in operations[0].detail
+    assert target.exists() is existing
+    if existing:
+        assert target.stat().st_size == MAX_CHAT_FILE_BYTES + 1
 
 
 @pytest.mark.asyncio

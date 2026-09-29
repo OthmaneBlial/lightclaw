@@ -155,7 +155,8 @@ intentionally public mode (`LIGHTCLAW_PUBLIC_BOT_ACK=yes`) with no user allowlis
 processes get a minimal environment that excludes Telegram/provider keys. Delegated CLI output is
 bounded per line and per stream; LightClaw flags truncation for review. Automatic edit retries omit
 common credential paths and files with detectable secrets; model-generated file blocks cannot
-write common credential paths. This detection is heuristic. `lightclaw undo`
+write common credential paths and cap each chat-edited file at 2 MiB. Use a delegated local-agent
+task for larger files. Secret detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.
 
 These controls do not protect the host after you explicitly enable `trusted-command`, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
@@ -166,6 +167,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 
 - [Documentation map](docs/README.md) — start, operate, trust, extend, and maintain
 - [Install, upgrade, undo, and uninstall](docs/INSTALL.md)
+- [Telegram approvals and chat file-operation limits](docs/APPROVALS.md)
 - [Architecture and enforced growth budgets](docs/ARCHITECTURE.md)
 - [Run receipts and sanitized Run Cards](docs/RUN_RECEIPTS.md)
 - [Threat model](docs/THREAT_MODEL.md) and [privacy boundaries](docs/PRIVACY.md)
