@@ -97,7 +97,8 @@ class CommandsHeartbeatMixin:
         except Exception as e:
             log.error(f"Heartbeat scheduler stopped due to error: {e}")
         finally:
-            self._heartbeat_task = None
+            if self._heartbeat_task is asyncio.current_task():
+                self._heartbeat_task = None
 
 
     async def _run_heartbeat_once(self, bot, session_id: str):
