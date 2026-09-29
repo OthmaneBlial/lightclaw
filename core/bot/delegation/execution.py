@@ -8,7 +8,6 @@ import os
 import re
 import secrets
 import signal
-import subprocess
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -780,113 +779,6 @@ class DelegationExecutionMixin:
             "elapsed": elapsed,
             "timed_out": timed_out,
             "commands": list(state.get("command_records", [])),
-        }
-
-    def _invoke_local_agent_sync(
-        self,
-        agent: str,
-        task: str,
-        workspace: Path | None = None,
-        capability_profile: str | None = None,
-    ) -> dict:
-        workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
-        timeout_sec = max(1, int(self.config.local_agent_timeout_sec))
-        prompt = self._build_delegation_prompt(task, workspace=workspace)
-        env = delegated_process_env(
-            extra={"LIGHTCLAW_DELEGATED_AGENT": agent, "CI": "1"}
-        )
-
-        cmd, run_input = self._build_local_agent_command(
-            agent=agent,
-            workspace=workspace,
-            prompt=prompt,
-            stream_output=False,
-            capability_profile=capability_profile,
-        )
-        if not cmd:
-            return {
-                "ok": False,
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": f"unsupported local agent: {agent}",
-                "summary": "",
-                "elapsed": 0.0,
-                "timed_out": False,
-            }
-
-        started = time.monotonic()
-        process: subprocess.Popen[str] | None = None
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE if run_input is not None else None,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=workspace.as_posix(),
-                env=env,
-                start_new_session=True,
-            )
-            stdout_raw, stderr_raw = process.communicate(
-                input=run_input,
-                timeout=timeout_sec,
-            )
-            elapsed = time.monotonic() - started
-        except subprocess.TimeoutExpired as e:
-            if process is not None:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except Exception:
-                    process.kill()
-                stdout_raw, stderr_raw = process.communicate()
-            else:
-                stdout_raw, stderr_raw = str(e.stdout or ""), str(e.stderr or "")
-            elapsed = time.monotonic() - started
-            return {
-                "ok": False,
-                "exit_code": 124,
-                "stdout": redact_text(stdout_raw or ""),
-                "stderr": redact_text(
-                    ((stderr_raw or "") + f"\nTimed out after {timeout_sec}s").strip()
-                ),
-                "summary": "",
-                "elapsed": elapsed,
-                "timed_out": True,
-            }
-        except Exception as e:
-            elapsed = time.monotonic() - started
-            return {
-                "ok": False,
-                "exit_code": 1,
-                "stdout": "",
-                "stderr": str(e),
-                "summary": "",
-                "elapsed": elapsed,
-                "timed_out": False,
-            }
-
-        stdout = redact_text(stdout_raw or "")
-        stderr = redact_text(stderr_raw or "")
-
-        if agent == "codex":
-            summary = self._parse_codex_exec_output(stdout)
-        else:
-            summary = self._parse_claude_cli_output(stdout)
-        summary = redact_text(summary)
-
-        return_code = process.returncode if process is not None else 1
-        ok = return_code == 0
-        if summary.strip().lower().startswith("error:"):
-            ok = False
-
-        return {
-            "ok": ok,
-            "exit_code": int(return_code if ok or return_code != 0 else 1),
-            "stdout": stdout,
-            "stderr": stderr,
-            "summary": summary,
-            "elapsed": elapsed,
-            "timed_out": False,
         }
 
     async def _run_local_agent_task(

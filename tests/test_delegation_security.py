@@ -103,12 +103,16 @@ def test_invalid_profile_falls_back_to_workspace_sandbox(tmp_path: Path):
     assert command[command.index("--sandbox") + 1] == "workspace-write"
 
 
-def test_timeout_kills_worker_process_group_and_preserves_existing_files(tmp_path: Path):
+async def test_streaming_timeout_kills_worker_process_group_and_preserves_existing_files(
+    tmp_path: Path,
+):
     harness = TimeoutHarness()
     existing = tmp_path / "existing.txt"
     existing.write_text("user data", encoding="utf-8")
 
-    result = harness._invoke_local_agent_sync("codex", "task", workspace=tmp_path)
+    result = await harness._invoke_local_agent_streaming(
+        "codex", "task", workspace=tmp_path
+    )
     time.sleep(2.3)
 
     assert result["timed_out"] is True
