@@ -279,7 +279,7 @@ class BotHandlersMixin:
             self.memory.ingest("assistant", delegation_context, session_id)
             await self._send_response(placeholder, update, delegated_response)
             if not self._llm_backoff_active():
-                asyncio.create_task(self.maybe_summarize(session_id))
+                self._create_background_task(self.maybe_summarize(session_id))
             return
 
         # Provider backoff: avoid hammering the API on every user message.
@@ -507,6 +507,6 @@ class BotHandlersMixin:
 
         # 12. Async summarization check
         if not provider_error_response:
-            asyncio.create_task(self.maybe_summarize(session_id))
+            self._create_background_task(self.maybe_summarize(session_id))
 
     # ── Message Chunking (Telegram 4096 char limit) ─────────

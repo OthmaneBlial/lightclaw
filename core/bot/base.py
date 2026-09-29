@@ -50,6 +50,7 @@ class BotBaseMixin:
         # Per-session summaries (in-memory, persisted via memory.py)
         self._session_summaries: dict[str, str] = {}
         self._summary_generation_by_session: dict[str, int] = {}
+        self._background_tasks: set[asyncio.Task] = set()
         # Lock to prevent concurrent summarization per session
         self._summarizing: set[str] = set()
         # Confirmation window for destructive memory wipe command (per chat).
@@ -110,6 +111,36 @@ class BotBaseMixin:
         self.llm.close()
         self.jobs.close()
         self.memory.db.close()
+
+    def _create_background_task(self, coroutine) -> asyncio.Task:
+        task = asyncio.create_task(coroutine)
+        self._background_tasks.add(task)
+
+        def discard_finished_task(finished: asyncio.Task) -> None:
+            self._background_tasks.discard(finished)
+            if not finished.cancelled() and (error := finished.exception()):
+                log.error("Background bot task failed: %s", error)
+
+        task.add_done_callback(discard_finished_task)
+        return task
+
+    async def shutdown(self) -> None:
+        """Stop bot-owned background tasks before closing their dependencies."""
+        self._heartbeat_enabled = False
+        tasks = set(self._background_tasks)
+        tasks.update(
+            task
+            for task in (self._heartbeat_task, self._cron_task)
+            if task is not None
+        )
+        self._heartbeat_task = None
+        self._cron_task = None
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self.close()
 
     def is_allowed(self, user_id: int) -> bool:
         """Fail closed unless an allowlist or explicit public override exists."""

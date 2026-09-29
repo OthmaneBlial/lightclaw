@@ -122,7 +122,7 @@ def main():
         await bot._ensure_cron_task(application.bot)
 
     async def _post_shutdown(application: Application):
-        bot.close()
+        await bot.shutdown()
 
     # Build Telegram application
     app = (

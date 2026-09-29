@@ -132,7 +132,7 @@ class CommandsCronMixin:
             return
         if not hasattr(bot, "send_message"):
             return
-        self._cron_task = asyncio.create_task(self._cron_loop(bot))
+        self._cron_task = self._create_background_task(self._cron_loop(bot))
 
 
     async def _cron_loop(self, bot):

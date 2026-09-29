@@ -24,6 +24,7 @@ async def test_cancelled_heartbeat_does_not_clear_restarted_task(monkeypatch):
     bot._heartbeat_enabled = True
     bot._heartbeat_interval_sec = 300
     bot._heartbeat_last_chat_id = ""
+    bot._background_tasks = set()
     bot._heartbeat_task = asyncio.create_task(bot._heartbeat_loop(None))
     old_task = bot._heartbeat_task
 

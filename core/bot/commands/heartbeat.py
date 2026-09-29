@@ -72,7 +72,7 @@ class CommandsHeartbeatMixin:
     async def _ensure_heartbeat_task(self, bot):
         if self._heartbeat_task and not self._heartbeat_task.done():
             return
-        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(bot))
+        self._heartbeat_task = self._create_background_task(self._heartbeat_loop(bot))
 
 
     def _stop_heartbeat_task(self):

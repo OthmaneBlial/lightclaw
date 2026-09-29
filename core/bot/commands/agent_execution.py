@@ -815,7 +815,7 @@ class CommandsAgentExecutionMixin:
         )
         self.memory.ingest("assistant", memory_entry, session_id)
         if not self._llm_backoff_active():
-            asyncio.create_task(self.maybe_summarize(session_id))
+            self._create_background_task(self.maybe_summarize(session_id))
 
         await self._send_response(None, update, "\n".join(final_lines).strip())
         await self._reply_logged(
