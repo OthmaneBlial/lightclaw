@@ -47,6 +47,7 @@ def main() -> int:
                 "scripts",
             ],
         )
+        _run("documentation links", [PYTHON, "scripts/check_doc_links.py"])
         _run(
             "provider contract artifacts",
             [PYTHON, "scripts/generate_provider_matrix.py", "--check"],

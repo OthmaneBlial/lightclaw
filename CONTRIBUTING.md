@@ -104,8 +104,15 @@ python scripts/quality.py
 ```
 
 It checks lint, generated provider/architecture contracts, runtime budgets, the safe-skill
-fixture, the full test suite, and package construction. CI adds the supported OS/Python
-matrix, coverage evidence, dependency review, and clean-wheel smoke tests.
+fixture, tracked Markdown links and anchors, the full test suite, package construction, and
+installed wheel data files. CI adds the supported OS/Python matrix, coverage evidence,
+dependency review, and clean-wheel smoke tests.
+
+Check documentation links alone with `python scripts/check_doc_links.py`. Fix a missing-file
+error by correcting the path relative to its Markdown file or adding the intended tracked file.
+Use `%20` for spaces in link paths. Fix a missing-anchor error by matching the target heading's
+GitHub-style slug; duplicate headings receive `-1`, `-2`, and later suffixes. External links
+are syntax-checked without network requests.
 
 Use the [architecture module map](docs/ARCHITECTURE.md#runtime-domains) to find the owner
 of a behavior. Compatibility facades should stay small; put a change in its stable domain.
