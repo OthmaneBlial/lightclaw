@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import stat
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -302,6 +303,49 @@ async def test_duplicate_result_taps_only_run_one_acceptance():
     release.set()
     await first
     assert bot._result_actions_in_flight == set()
+
+
+@pytest.mark.asyncio
+async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
+    patch_path = tmp_path / "changes.patch"
+    patch_path.write_text("diff --git a/file b/file\n", encoding="utf-8")
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "run_id": "run-18",
+                "diff_summary": "large file-by-file stat\n3 files changed, 7 insertions(+), 2 deletions(-)",
+                "file_changes": [
+                    {"change": "modified", "path": "src/main.py"},
+                    {"change": "added", "path": "tests/test_main.py"},
+                    {"change": "deleted", "path": "old.txt"},
+                ],
+                "artifacts": [str(patch_path)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    events = []
+
+    async def send_summary(_update, text):
+        events.append(("summary", text))
+
+    async def send_patch(**_kwargs):
+        events.append(("patch", ""))
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._last_run_receipts_by_session = {"456": str(receipt_path)}
+    bot._reply_logged = AsyncMock(side_effect=send_summary)
+    message = SimpleNamespace(reply_document=AsyncMock(side_effect=send_patch))
+    update = SimpleNamespace(message=message)
+
+    await bot._send_last_run_diff(update, "456", "run-18")
+
+    assert [kind for kind, _ in events] == ["summary", "patch"]
+    assert "3 files changed, 7 insertions(+), 2 deletions(-)" in events[0][1]
+    assert "src/main.py" in events[0][1]
+    assert "nothing has been accepted or pushed" in events[0][1]
+    message.reply_document.assert_awaited_once()
 
 
 @pytest.mark.asyncio

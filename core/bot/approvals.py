@@ -418,23 +418,47 @@ class BotApprovalsMixin:
             (Path(str(path)) for path in artifacts if str(path).endswith("changes.patch")),
             None,
         )
+        raw_summary = str(receipt.get("diff_summary") or "not available").strip()
+        summary = next(
+            (
+                line.strip()
+                for line in reversed(raw_summary.splitlines())
+                if " changed" in line
+            ),
+            raw_summary.splitlines()[0] if raw_summary else "not available",
+        )
+        if len(summary) > 240:
+            summary = summary[:237].rstrip() + "..."
+        review_lines = [f"Diff summary: {summary}"]
+        changed_files = [item for item in changes if isinstance(item, dict)]
+        if changed_files:
+            review_lines.append("Changed files:")
+            for item in changed_files[:12]:
+                status = re.sub(r"\s+", " ", str(item.get("change") or "changed"))
+                path = re.sub(r"\s+", " ", str(item.get("path") or ""))
+                if len(path) > 180:
+                    path = path[:177].rstrip() + "..."
+                review_lines.append(f"- {status[:24]}: {path}")
+            if len(changed_files) > 12:
+                review_lines.append(f"- and {len(changed_files) - 12} more files")
         if patch_path and patch_path.is_file() and update.message:
+            review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
+            await self._reply_logged(update, "\n".join(review_lines))
             try:
                 with patch_path.open("rb") as handle:
                     await update.message.reply_document(
                         document=handle,
                         filename=f"{receipt.get('run_id', 'lightclaw')}.patch",
-                        caption="Private review patch — nothing has been pushed.",
+                        caption="Private review patch — nothing has been accepted or pushed.",
                     )
-                return
             except Exception:
-                pass
-        lines = [f"Diff summary: {receipt.get('diff_summary', 'not available')}"]
-        for item in changes[:40]:
-            if isinstance(item, dict):
-                lines.append(f"- {item.get('change', 'changed')}: `{item.get('path', '')}`")
-        lines.append(f"Private receipt: `{receipt_value}`")
-        await self._send_response(None, update, "\n".join(lines))
+                await self._reply_logged(
+                    update,
+                    "Could not attach the full patch. The summary above is available; review the local receipt on the host.",
+                )
+            return
+        review_lines.append(f"Private receipt on host: {receipt_value}")
+        await self._reply_logged(update, "\n".join(review_lines))
 
     async def _accept_last_run_result(self, update, session_id: str, run_id: str) -> None:
         try:
