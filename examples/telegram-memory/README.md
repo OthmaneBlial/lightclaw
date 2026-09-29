@@ -4,7 +4,7 @@ This fixture proves one narrow claim: a known fact stored in SQLite can be recal
 
 ## Prerequisites
 
-- Python 3.10–3.13
+- Python 3.10–3.14
 - LightClaw installed from this repository
 - No Telegram account, bot token, or provider key
 

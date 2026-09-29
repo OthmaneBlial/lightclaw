@@ -38,6 +38,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Verified Python 3.14 support and aligned package metadata, documentation, and alpha evidence
+  validation with the Python 3.10–3.14 range.
 - Added universal hash locks for CI, release, showcase, and container dependencies;
   Dependabot updates the Python locks, Docker images, and GitHub Actions pins.
 
@@ -65,7 +67,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Codex and Claude single/multi-agent delegation with DAG planning, approval, handoffs, acceptance checks, and bounded repair.
 - Persistent local SQLite memory, skills, voice transcription, heartbeat, and scheduled jobs.
 - Standard `lightclaw-ai` packaging, isolated installation, app-specific private configuration, doctor, undo, and uninstall commands.
-- Python 3.10–3.13 CI across Ubuntu and macOS, package smoke tests, dependency audit, CodeQL, secret scanning, Dependabot, and OpenSSF Scorecard.
+- Python 3.10–3.14 compatibility, package smoke tests, dependency audit, CodeQL, secret scanning, Dependabot, and OpenSSF Scorecard.
 
 ### Security
 

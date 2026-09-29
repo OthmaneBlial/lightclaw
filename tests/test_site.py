@@ -89,6 +89,7 @@ def test_site_has_complete_share_and_search_metadata() -> None:
         "SoftwareSourceCode",
     }
     assert not any("aggregateRating" in item for item in graph)
+    assert all(item.get("runtimePlatform") == "Python 3.10-3.14" for item in graph)
 
     social = (SITE / "assets" / "social-preview.png").read_bytes()
     assert social.startswith(b"\x89PNG\r\n\x1a\n")

@@ -41,7 +41,7 @@ prerelease build installable by external alpha testers:
 3. Dispatch `Release` with `publish_prerelease=true` and inspect the built distributions
    before approving the protected `pypi` environment.
 4. Verify the exact version and hashes on PyPI, then install that exact version in a clean
-   Python 3.10–3.13 environment and execute the deterministic repository-task demo.
+   Python 3.10–3.14 environment and execute the deterministic repository-task demo.
 
 This does not satisfy the stable-release gate, publish a stable GitHub Release, or turn
 maintainer fixtures into external-alpha evidence. PyPI versions are immutable; fix a bad

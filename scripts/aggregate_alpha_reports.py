@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_AGGREGATE = PROJECT_ROOT / "launch" / "alpha" / "aggregate.json"
 REPORT_ID = re.compile(r"alpha-[0-9a-f]{12}")
 VERSION = re.compile(r"(?:v)?[0-9]+\.[0-9]+\.[0-9]+(?:\.[a-z0-9]+)?|[0-9a-f]{7,40}")
-PYTHON_VERSION = re.compile(r"3\.(?:10|11|12|13)(?:\.[0-9]+)?")
+PYTHON_VERSION = re.compile(r"3\.(?:10|11|12|13|14)(?:\.[0-9]+)?")
 ALLOWED_REPORT_KEYS = {
     "schema_version",
     "report_id",
@@ -73,7 +73,7 @@ def validate_report(report: object, *, label: str = "report") -> list[str]:
         errors.append(f"{label}: lightclaw_version must be a release or commit")
     python_version = report.get("python_version")
     if not isinstance(python_version, str) or PYTHON_VERSION.fullmatch(python_version) is None:
-        errors.append(f"{label}: python_version must be within supported Python 3.10-3.13")
+        errors.append(f"{label}: python_version must be within supported Python 3.10-3.14")
     for key, choices in ENUMS.items():
         if report.get(key) not in choices:
             errors.append(f"{label}: {key} must be one of {', '.join(sorted(choices))}")

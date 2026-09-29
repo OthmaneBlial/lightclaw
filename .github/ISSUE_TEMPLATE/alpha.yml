@@ -40,7 +40,7 @@ body:
     id: python
     attributes:
       label: Python version
-      description: Enter the exact major/minor version. Supported releases are 3.10–3.13.
+      description: Enter the exact major/minor version. Supported releases are 3.10–3.14.
       placeholder: "3.13"
     validations:
       required: true

@@ -93,7 +93,7 @@ Rule of thumb: if your PR adds more code than it removes, explain why the added 
 
 ## Start Locally
 
-Use Python 3.10–3.13, install the development dependencies, and run the one canonical
+Use Python 3.10–3.14, install the development dependencies, and run the one canonical
 quality command before submitting:
 
 ```bash

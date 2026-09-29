@@ -74,6 +74,17 @@ def test_report_rejects_identity_or_free_text_fields():
     assert validate_report(report) == ["report: forbidden fields: telegram_username"]
 
 
+def test_alpha_report_accepts_python_314_and_rejects_315():
+    report = _report(1)
+    report["python_version"] = "3.14"
+    assert validate_report(report) == []
+
+    report["python_version"] = "3.15"
+    assert validate_report(report) == [
+        "report: python_version must be within supported Python 3.10-3.14"
+    ]
+
+
 def test_aggregate_rejects_manually_inflated_gate_state():
     aggregate = deepcopy(build_aggregate([]))
     aggregate["gates"]["release_ready"] = "met"

@@ -40,7 +40,7 @@ def validate_release_notes(
         "deterministic verification": "lightclaw demo --scenario repo-task",
         "doctor verification": "lightclaw doctor --json",
         "uninstall command": "pipx uninstall lightclaw-ai",
-        "supported Python range": "Python 3.10–3.13",
+        "supported Python range": "Python 3.10–3.14",
         "rollback tag": f"v{version}",
         "private data boundary": "local and private by default",
     }

@@ -4,7 +4,7 @@ This fixture reproduces the core LightClaw promise without remote services: a re
 
 ## Prerequisites
 
-- Python 3.10–3.13
+- Python 3.10–3.14
 - LightClaw installed from this repository
 - No Telegram account, coding-agent CLI, bot token, or provider key
 

@@ -15,7 +15,7 @@ environment categories, missing values, and deterministic gate states.
    structured record.
 3. Treat every issue-form dropdown as conservative by default. Transcribe a success only
    when the tester explicitly selected it, and normalize `Other/unspecified` to `other`.
-   Reject Python versions outside the supported 3.10–3.13 range instead of guessing.
+   Reject Python versions outside the supported 3.10–3.14 range instead of guessing.
 4. Create a random opaque ID matching `alpha-[0-9a-f]{12}` and transcribe only the fields
    allowed by [`report.schema.json`](report.schema.json) into a local directory such as
    `evidence/private-alpha/`. That directory is ignored by Git.

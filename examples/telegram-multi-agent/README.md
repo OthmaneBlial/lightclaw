@@ -4,7 +4,7 @@ This fixture proves the orchestration contract: a two-lane DAG, a machine-readab
 
 ## Prerequisites
 
-- Python 3.10–3.13
+- Python 3.10–3.14
 - LightClaw installed from this repository
 - No Telegram account, coding-agent CLI, bot token, or provider key
 
