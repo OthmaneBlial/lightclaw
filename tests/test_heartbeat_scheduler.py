@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+from telegram.error import NetworkError
 
 from core.bot import LightClawBot
 
@@ -42,3 +43,33 @@ async def test_cancelled_heartbeat_does_not_clear_restarted_task(monkeypatch):
         if new_task and not new_task.done():
             new_task.cancel()
             await new_task
+
+
+@pytest.mark.asyncio
+async def test_telegram_delivery_error_does_not_stop_heartbeat_scheduler(monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._heartbeat_enabled = True
+    bot._heartbeat_interval_sec = 300
+    bot._heartbeat_last_chat_id = "123"
+    bot._heartbeat_task = None
+    attempts = 0
+    sleep_calls = 0
+
+    async def fail_delivery(_bot, _session_id):
+        nonlocal attempts
+        attempts += 1
+        raise NetworkError("temporary failure")
+
+    async def stop_after_next_interval(_seconds):
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls == 2:
+            bot._heartbeat_enabled = False
+
+    bot._run_heartbeat_once = fail_delivery
+    monkeypatch.setattr("core.bot.commands.heartbeat.asyncio.sleep", stop_after_next_interval)
+
+    await bot._heartbeat_loop(None)
+
+    assert attempts == 1
+    assert sleep_calls == 2

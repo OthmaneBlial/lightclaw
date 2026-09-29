@@ -12,7 +12,7 @@ from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.error import Conflict, NetworkError, RetryAfter, TimedOut
+from telegram.error import BadRequest, Conflict, NetworkError, RetryAfter, TimedOut
 from telegram.ext import ContextTypes
 
 from ..logging_setup import log
@@ -157,11 +157,11 @@ class BotMessagingMixin:
         log.exception(f"[{session_id}] Unhandled Telegram error", exc_info=err)
 
     async def _try_send(self, send_fn, text: str) -> bool:
-        """Try to send/edit with HTML, fall back to plain text. Returns True on success."""
+        """Use plain text only when Telegram rejects the HTML payload."""
         try:
             await send_fn(text, parse_mode=ParseMode.HTML)
             return True
-        except Exception:
+        except BadRequest:
             pass
 
         # Fallback: strip HTML tags and send as plain text
@@ -169,6 +169,6 @@ class BotMessagingMixin:
             plain = unescape(re.sub(r"<[^>]+>", "", text))
             await send_fn(plain)
             return True
-        except Exception as e:
+        except BadRequest as e:
             log.error(f"Failed to send message chunk: {e}")
             return False

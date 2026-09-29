@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from telegram.constants import ParseMode
+from telegram.error import BadRequest, NetworkError
 
 from core.bot.messaging import BotMessagingMixin
 
@@ -51,10 +52,24 @@ async def test_plain_fallback_decodes_escaped_html_entities():
     async def send(text: str, parse_mode: str | None = None):
         calls.append((text, parse_mode))
         if parse_mode:
-            raise ValueError("bad markup")
+            raise BadRequest("bad markup")
 
     assert await bot._try_send(send, "A &lt; B &amp; <b>bold</b>")
     assert calls == [
         ("A &lt; B &amp; <b>bold</b>", ParseMode.HTML),
         ("A < B & bold", None),
     ]
+
+
+@pytest.mark.asyncio
+async def test_uncertain_edit_failure_does_not_trigger_a_second_message():
+    bot = MessagingHarness()
+    placeholder = SimpleNamespace(edit_text=AsyncMock(side_effect=NetworkError("timed out")))
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(message=message)
+
+    with pytest.raises(NetworkError, match="timed out"):
+        await bot._send_response(placeholder, update, "final result")
+
+    placeholder.edit_text.assert_awaited_once()
+    message.reply_text.assert_not_awaited()

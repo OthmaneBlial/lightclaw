@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from telegram import Update
 from telegram.constants import ParseMode
+from telegram.error import RetryAfter, TelegramError
 from telegram.ext import ContextTypes
 
 from ...fs import atomic_write_json as _atomic_write_json
@@ -196,13 +198,30 @@ class CommandsCronMixin:
                         parse_mode=parse_mode,
                     )
 
-                sent = await self._try_send(_send_message, html)
+                mode = str(job.get("mode") or "").strip().lower()
+                retry_delay = max(60, int(self._cron_poll_sec))
+                try:
+                    sent = await self._try_send(_send_message, html)
+                except RetryAfter as e:
+                    retry_after = e.retry_after
+                    if isinstance(retry_after, timedelta):
+                        retry_after = retry_after.total_seconds()
+                    retry_delay = max(retry_delay, math.ceil(retry_after))
+                    sent = False
+                    log.warning("Cron job %s rate limited; retrying later", job["id"])
+                except TelegramError as e:
+                    sent = False
+                    log.warning("Cron job %s delivery failed; retrying later: %s", job["id"], e)
+
                 if not sent:
+                    if mode == "every":
+                        retry_delay = max(retry_delay, int(job.get("interval_sec", 60)))
+                    job["next_run_at"] = now + retry_delay
                     updated_jobs.append(job)
+                    changed = True
                     continue
 
                 self._cron_last_run_at = now
-                mode = str(job.get("mode") or "").strip().lower()
                 if mode == "every":
                     interval_sec = max(60, int(job.get("interval_sec", 60)))
                     job["next_run_at"] = now + interval_sec

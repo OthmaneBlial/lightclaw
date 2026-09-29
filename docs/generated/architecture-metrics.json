@@ -185,7 +185,7 @@
     },
     {
       "branch_points": 26,
-      "line": 260,
+      "line": 279,
       "lines": 206,
       "name": "cmd_cron",
       "path": "core/bot/commands/cron.py"
@@ -273,7 +273,7 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 465,
+      "lines": 484,
       "path": "core/bot/commands/cron.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18733,
+  "runtime_lines": 18756,
   "schema_version": 1
 }

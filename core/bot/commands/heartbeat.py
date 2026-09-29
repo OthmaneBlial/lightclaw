@@ -8,6 +8,7 @@ from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from ...logging_setup import log
@@ -91,7 +92,10 @@ class CommandsHeartbeatMixin:
                 session_id = (self._heartbeat_last_chat_id or "").strip()
                 if not session_id:
                     continue
-                await self._run_heartbeat_once(bot, session_id)
+                try:
+                    await self._run_heartbeat_once(bot, session_id)
+                except TelegramError as e:
+                    log.warning(f"[{session_id}] Heartbeat Telegram delivery failed: {e}")
         except asyncio.CancelledError:
             pass
         except Exception as e:
