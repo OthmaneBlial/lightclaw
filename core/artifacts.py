@@ -149,7 +149,6 @@ def create_patch_bundle(
         raise ArtifactError("Git returned malformed changed-path data")
     if len(status_fields) > 1000:
         raise ArtifactError("review artifacts support at most 500 changed paths; reduce the run scope")
-    patch = _require_git(root, "diff", "--cached", "--binary", "--no-ext-diff", "HEAD", timeout=120)
     diff_stat = _require_git(root, "diff", "--cached", "--stat", "HEAD")
     branch = _require_git(root, "branch", "--show-current")
     base_commit = _require_git(root, "rev-parse", "HEAD")
@@ -159,7 +158,34 @@ def create_patch_bundle(
     ]
     patch_path = output / "changes.patch"
     manifest_path = output / "artifact.json"
-    _write_private(patch_path, patch + ("\n" if patch and not patch.endswith("\n") else ""))
+    if patch_path.is_symlink():
+        raise ArtifactError("refusing to replace a symlink patch path")
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    patch_fd, raw_patch_temp = tempfile.mkstemp(prefix=".changes.", dir=output)
+    os.close(patch_fd)
+    patch_temp = Path(raw_patch_temp)
+    try:
+        patch_result = _git(
+            root,
+            "diff",
+            "--cached",
+            "--binary",
+            "--no-ext-diff",
+            f"--output={patch_temp}",
+            "HEAD",
+            timeout=120,
+        )
+        if patch_result.returncode != 0:
+            detail = redact_text(patch_result.stderr or patch_result.stdout).strip()[-800:]
+            raise ArtifactError(detail or "could not write the review patch")
+        patch_sha256 = hashlib.sha256()
+        with patch_temp.open("rb") as patch_file:
+            for chunk in iter(lambda: patch_file.read(1024 * 1024), b""):
+                patch_sha256.update(chunk)
+        os.chmod(patch_temp, 0o600)
+        os.replace(patch_temp, patch_path)
+    finally:
+        patch_temp.unlink(missing_ok=True)
     manifest: dict[str, object] = {
         "schema_version": 1,
         "run_id": run_id,
@@ -169,7 +195,7 @@ def create_patch_bundle(
         "changed_paths": changed_paths,
         "diff_stat": diff_stat,
         "patch": patch_path.as_posix(),
-        "patch_sha256": hashlib.sha256(patch.encode("utf-8")).hexdigest(),
+        "patch_sha256": patch_sha256.hexdigest(),
         "published": False,
     }
     _write_private(manifest_path, json.dumps(manifest, indent=2, sort_keys=True) + "\n")

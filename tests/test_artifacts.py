@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import stat
 import subprocess
 from pathlib import Path
@@ -78,6 +80,9 @@ def test_patch_bundle_is_private_reproducible_and_locally_acceptable(tmp_path):
     patch = Path(str(bundle["patch"]))
     manifest = Path(str(bundle["manifest"]))
     assert "VERSION = 2" in patch.read_text(encoding="utf-8")
+    assert json.loads(manifest.read_text(encoding="utf-8"))["patch_sha256"] == hashlib.sha256(
+        patch.read_bytes()
+    ).hexdigest()
     assert stat.S_IMODE(patch.stat().st_mode) == 0o600
     assert stat.S_IMODE(manifest.stat().st_mode) == 0o600
 

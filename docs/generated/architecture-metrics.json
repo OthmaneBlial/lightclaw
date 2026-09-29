@@ -277,10 +277,10 @@
       "path": "core/bot/commands/cron.py"
     },
     {
-      "lines": 440,
-      "path": "core/llm/client.py"
+      "lines": 453,
+      "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 18495,
+  "runtime_lines": 18521,
   "schema_version": 1
 }
