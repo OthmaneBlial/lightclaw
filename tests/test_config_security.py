@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 
 from config import Config, load_config
@@ -91,6 +92,22 @@ def test_privileged_rate_limiter_uses_per_user_and_action_windows(monkeypatch):
     assert bot._privileged_rate_limited(7, "agent", limit=2, window_sec=60) is False
     assert bot._privileged_rate_limited(7, "agent", limit=2, window_sec=60) is True
     assert bot._privileged_rate_limited(7, "agent", limit=2, window_sec=60) is False
+
+
+def test_workspace_candidates_rank_newest_files(tmp_path):
+    bot = BotBaseMixin.__new__(BotBaseMixin)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot._last_file_by_session = {}
+    for index in range(25):
+        path = tmp_path / f"file-{index:02}.txt"
+        path.write_text("fixture\n", encoding="utf-8")
+        os.utime(path, (index, index))
+
+    assert bot._collect_workspace_candidates("", "chat-1", limit=3) == [
+        "file-24.txt",
+        "file-23.txt",
+        "file-22.txt",
+    ]
 
 
 def test_delegated_environment_is_allowlisted_and_secret_free():

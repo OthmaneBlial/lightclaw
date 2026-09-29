@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import heapq
 import os
 import re
 import secrets
@@ -328,15 +329,16 @@ class BotBaseMixin:
 
         # 3) Most recently modified workspace files.
         workspace = Path(self.config.workspace_path).resolve()
-        files = []
-        for path in workspace.rglob("*"):
-            if path.is_file():
+
+        def recent_files():
+            for path in workspace.rglob("*"):
                 try:
-                    files.append((path.stat().st_mtime, path))
-                except Exception:
+                    if path.is_file():
+                        yield path.stat().st_mtime, path
+                except OSError:
                     continue
-        files.sort(reverse=True, key=lambda x: x[0])
-        for _, path in files[:20]:
+
+        for _, path in heapq.nlargest(20, recent_files(), key=lambda item: item[0]):
             rel = path.relative_to(workspace).as_posix()
             candidates.append(rel)
             if len(candidates) >= limit * 3:
