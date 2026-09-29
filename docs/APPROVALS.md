@@ -14,6 +14,8 @@ Before a multi-agent run, the bot shows:
 
 If scope is missing, the review says so rather than inventing paths. Editing a scope regenerates the plan and requires a new approval.
 
+Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
+
 ## High-risk confirmation
 
 Destructive language, publishing/deployment, credential changes, or external-system scope requires two ordered confirmations. A forged second-confirmation callback is rejected unless the first approval was recorded. Trusted host execution retains its separate confirmation gate.

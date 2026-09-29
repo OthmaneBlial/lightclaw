@@ -108,7 +108,7 @@ def read_json_object(
     with source.open("rb") as handle:
         raw = handle.read(limit + 1)
     if len(raw) > limit:
-        raise OSError("JSON state exceeds the size limit")
+        raise FileTooLargeError("JSON state exceeds the size limit")
     loaded = json.loads(raw.decode("utf-8"))
     if not isinstance(loaded, dict):
         raise ValueError("JSON state must contain an object")

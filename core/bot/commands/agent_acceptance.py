@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-import json
 import re
 import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
+
+from ...fs import FileTooLargeError, read_json_object
+
+MAX_MULTI_HANDOFF_JSON_BYTES = 1024 * 1024
 
 
 class CommandsAgentAcceptanceMixin:
@@ -379,16 +382,23 @@ class CommandsAgentAcceptanceMixin:
         workspace: Path,
         label: str,
     ) -> tuple[dict[str, Any], str]:
-        path = workspace / self._multi_handoff_json_path(label)
+        relative_path = self._multi_handoff_json_path(label)
+        path = workspace / relative_path
         if not path.exists():
-            return {}, f"missing `{self._multi_handoff_json_path(label)}`"
+            return {}, f"missing `{relative_path}`"
+        return self._read_multi_handoff_json(path, relative_path)
+
+    @staticmethod
+    def _read_multi_handoff_json(
+        path: Path,
+        display_path: str,
+    ) -> tuple[dict[str, Any], str]:
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:
-            return {}, f"invalid JSON in `{self._multi_handoff_json_path(label)}`: {e}"
-        if not isinstance(raw, dict):
-            return {}, f"`{self._multi_handoff_json_path(label)}` must contain a JSON object"
-        return raw, ""
+            return read_json_object(path, max_bytes=MAX_MULTI_HANDOFF_JSON_BYTES), ""
+        except FileTooLargeError:
+            return {}, f"handoff JSON `{display_path}` exceeds 1 MiB limit"
+        except (OSError, ValueError) as exc:
+            return {}, f"invalid handoff JSON `{display_path}`: {exc}"
 
     def _reported_multi_handoff_files(self, handoff_data: dict[str, Any]) -> list[str]:
         changed_files_obj = handoff_data.get("changed_files")
@@ -463,13 +473,9 @@ class CommandsAgentAcceptanceMixin:
                 if not target.is_file():
                     failures.append(f"missing handoff JSON `{rel_path}`")
                     continue
-                try:
-                    raw = json.loads(target.read_text(encoding="utf-8"))
-                except Exception as e:
-                    failures.append(f"invalid handoff JSON `{rel_path}`: {e}")
-                    continue
-                if not isinstance(raw, dict):
-                    failures.append(f"`{rel_path}` must contain a JSON object")
+                raw, error = self._read_multi_handoff_json(target, rel_path)
+                if error:
+                    failures.append(error)
                     continue
                 lane_value = str(raw.get("lane") or "").strip().lower()
                 if lane_value != label.lower():

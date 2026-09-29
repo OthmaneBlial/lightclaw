@@ -56,9 +56,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 50,
-      "line": 406,
-      "lines": 168,
+      "branch_points": 49,
+      "line": 416,
+      "lines": 164,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
     },
@@ -212,11 +212,11 @@
       "path": "core/bot/delegation/tasks.py"
     },
     {
-      "branch_points": 50,
-      "line": 406,
-      "lines": 168,
-      "name": "_evaluate_multi_worker_acceptance",
-      "path": "core/bot/commands/agent_acceptance.py"
+      "branch_points": 25,
+      "line": 31,
+      "lines": 167,
+      "name": "_build_multi_agent_worker_task",
+      "path": "core/bot/delegation/tasks.py"
     }
   ],
   "largest_modules": [
@@ -253,7 +253,7 @@
       "path": "core/jobs.py"
     },
     {
-      "lines": 600,
+      "lines": 606,
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18877,
+  "runtime_lines": 18883,
   "schema_version": 1
 }
