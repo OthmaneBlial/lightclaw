@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 76,
-      "line": 886,
+      "line": 892,
       "lines": 394,
       "name": "_run_local_agent_task",
       "path": "core/bot/delegation/execution.py"
@@ -98,9 +98,9 @@
       "path": "core/bot/delegation/agents.py"
     },
     {
-      "branch_points": 35,
+      "branch_points": 37,
       "line": 564,
-      "lines": 214,
+      "lines": 220,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 76,
-      "line": 886,
+      "line": 892,
       "lines": 394,
       "name": "_run_local_agent_task",
       "path": "core/bot/delegation/execution.py"
@@ -170,9 +170,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 35,
+      "branch_points": 37,
       "line": 564,
-      "lines": 214,
+      "lines": 220,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1279,
+      "lines": 1285,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/llm/client.py"
     }
   ],
-  "runtime_lines": 18222,
+  "runtime_lines": 18228,
   "schema_version": 1
 }

@@ -729,15 +729,21 @@ class DelegationExecutionMixin:
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
             except Exception:
-                proc.terminate()
+                if proc.returncode is None:
+                    proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                pass
+            try:
+                # The leader may exit while a descendant still holds the process group.
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             except Exception:
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except Exception:
+                if proc.returncode is None:
                     proc.kill()
-                await proc.wait()
+            await proc.wait()
             raise
         finally:
             heartbeat_stop.set()

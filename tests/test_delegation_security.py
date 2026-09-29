@@ -20,9 +20,10 @@ class ExecutionHarness(DelegationExecutionMixin):
 
 
 class TimeoutHarness(ExecutionHarness):
-    def __init__(self):
+    def __init__(self, *, resistant_child: bool = False):
         super().__init__()
         self.config.local_agent_timeout_sec = 1
+        self.resistant_child = resistant_child
 
     @staticmethod
     def _build_delegation_prompt(task: str, workspace: Path | None = None) -> str:
@@ -37,8 +38,14 @@ class TimeoutHarness(ExecutionHarness):
         capability_profile: str | None = None,
     ):
         child_code = (
-            "import pathlib,time; time.sleep(2); "
+            "import pathlib,signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+            "pathlib.Path('child-ready.txt').write_text('ready'); time.sleep(2); "
             "pathlib.Path('child-survived.txt').write_text('bad')"
+            if self.resistant_child
+            else (
+                "import pathlib,time; time.sleep(2); "
+                "pathlib.Path('child-survived.txt').write_text('bad')"
+            )
         )
         parent_code = (
             "import subprocess,sys,time; "
@@ -110,13 +117,17 @@ def test_timeout_kills_worker_process_group_and_preserves_existing_files(tmp_pat
     assert existing.read_text(encoding="utf-8") == "user data"
 
 
-async def test_task_cancellation_kills_worker_process_group(tmp_path: Path):
-    harness = TimeoutHarness()
+async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_path: Path):
+    harness = TimeoutHarness(resistant_child=True)
     harness.config.local_agent_timeout_sec = 30
     task = asyncio.create_task(
         harness._invoke_local_agent_streaming("codex", "task", workspace=tmp_path)
     )
-    await asyncio.sleep(0.2)
+    for _ in range(100):
+        if (tmp_path / "child-ready.txt").exists():
+            break
+        await asyncio.sleep(0.02)
+    assert (tmp_path / "child-ready.txt").exists()
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
