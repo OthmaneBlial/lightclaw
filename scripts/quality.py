@@ -69,6 +69,7 @@ def main() -> int:
             [PYTHON, "scripts/check_release_notes.py", "docs/releases/v0.1.0.md", "--version", "0.1.0"],
         )
         _run("launch evidence pack", [PYTHON, "scripts/check_launch_pack.py"])
+        _run("dependency audit", [PYTHON, "-m", "pip_audit", "--skip-editable"])
         _run("tests", [PYTHON, "-m", "pytest", "-q"])
         _run("package build", [PYTHON, "-m", "build", "--outdir", str(wheel_directory)])
         wheels = list(wheel_directory.glob("*.whl"))
