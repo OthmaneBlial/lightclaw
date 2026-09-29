@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -140,6 +141,71 @@ async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_p
         await task
     await asyncio.sleep(2.3)
     assert not (tmp_path / "child-survived.txt").exists()
+
+
+async def test_cancellation_during_process_registration_kills_and_unregisters_worker(
+    tmp_path: Path,
+):
+    class BlockingProcessStore:
+        def __init__(self):
+            self.registration_started = threading.Event()
+            self.allow_registration = threading.Event()
+            self.registered = False
+            self.unregistered: list[tuple[str, int]] = []
+
+        def register_process_group(self, _run_id: str, _pid: int) -> None:
+            self.registration_started.set()
+            if not self.allow_registration.wait(timeout=5):
+                raise TimeoutError("registration fixture timed out")
+            self.registered = True
+
+        def unregister_process_group(self, run_id: str, pid: int) -> None:
+            self.registered = False
+            self.unregistered.append((run_id, pid))
+
+    harness = TimeoutHarness()
+    harness.config.local_agent_timeout_sec = 30
+    harness.jobs = BlockingProcessStore()
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [
+            sys.executable,
+            "-c",
+            "import pathlib,time; pathlib.Path('registration-ready.txt').touch(); "
+            "time.sleep(.6); pathlib.Path('registration-survived.txt').touch()",
+        ],
+        None,
+    )
+    task = asyncio.create_task(
+        harness._invoke_local_agent_streaming(
+            "codex", "task", workspace=tmp_path, job_run_id="run-race"
+        )
+    )
+    try:
+        for _ in range(100):
+            if harness.jobs.registration_started.is_set() and (
+                tmp_path / "registration-ready.txt"
+            ).exists():
+                break
+            await asyncio.sleep(.02)
+        assert harness.jobs.registration_started.is_set()
+        assert (tmp_path / "registration-ready.txt").exists()
+
+        task.cancel()
+        await asyncio.sleep(.05)
+        harness.jobs.allow_registration.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(.7)
+
+        assert not (tmp_path / "registration-survived.txt").exists()
+        assert harness.jobs.registered is False
+        assert len(harness.jobs.unregistered) == 1
+        assert harness.jobs.unregistered[0][0] == "run-race"
+    finally:
+        harness.jobs.allow_registration.set()
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 async def test_streaming_output_is_bounded_and_reports_truncation(tmp_path: Path):

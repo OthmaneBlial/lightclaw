@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 79,
-      "line": 858,
+      "line": 886,
       "lines": 398,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -91,9 +91,9 @@
       "path": "skills.py"
     },
     {
-      "branch_points": 38,
+      "branch_points": 41,
       "line": 564,
-      "lines": 236,
+      "lines": 264,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 79,
-      "line": 858,
+      "line": 886,
       "lines": 398,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -163,18 +163,18 @@
       "path": "core/bot/commands/skills.py"
     },
     {
+      "branch_points": 41,
+      "line": 564,
+      "lines": 264,
+      "name": "_invoke_local_agent_streaming",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
       "branch_points": 0,
       "line": 1648,
       "lines": 245,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 38,
-      "line": 564,
-      "lines": 236,
-      "name": "_invoke_local_agent_streaming",
-      "path": "core/bot/delegation/execution.py"
     },
     {
       "branch_points": 58,
@@ -225,12 +225,12 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1271,
-      "path": "core/bot/delegation/planning.py"
+      "lines": 1283,
+      "path": "core/bot/delegation/execution.py"
     },
     {
-      "lines": 1255,
-      "path": "core/bot/delegation/execution.py"
+      "lines": 1271,
+      "path": "core/bot/delegation/planning.py"
     },
     {
       "lines": 1181,
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18756,
+  "runtime_lines": 18784,
   "schema_version": 1
 }

@@ -618,14 +618,56 @@ class DelegationExecutionMixin:
                 "timed_out": False,
             }
 
+        async def terminate_process_tree() -> None:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except Exception:
+                if proc.returncode is None:
+                    proc.terminate()
+            await asyncio.sleep(0.2)
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except Exception:
+                if proc.returncode is None:
+                    proc.kill()
+            await proc.wait()
+
         process_store = getattr(self, "jobs", None)
         process_group_registered = False
         if job_run_id and process_store is not None:
-            try:
-                await asyncio.to_thread(
+            registration_task = asyncio.create_task(
+                asyncio.to_thread(
                     process_store.register_process_group, job_run_id, proc.pid
                 )
-                process_group_registered = True
+            )
+            try:
+                await asyncio.shield(registration_task)
+            except asyncio.CancelledError:
+                async def abort_registration() -> None:
+                    await terminate_process_tree()
+                    try:
+                        await registration_task
+                    except Exception:
+                        return
+                    try:
+                        await asyncio.to_thread(
+                            process_store.unregister_process_group,
+                            job_run_id,
+                            proc.pid,
+                        )
+                    except Exception:
+                        log.exception(
+                            "Canceled delegated process group could not be unregistered"
+                        )
+
+                cleanup_task = asyncio.create_task(abort_registration())
+                try:
+                    await asyncio.shield(cleanup_task)
+                except asyncio.CancelledError:
+                    await cleanup_task
+                raise
             except Exception as e:
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
@@ -641,6 +683,8 @@ class DelegationExecutionMixin:
                     "elapsed": 0.0,
                     "timed_out": False,
                 }
+            else:
+                process_group_registered = True
 
         state = self._new_progress_state()
         stdout_capture = BoundedStreamCapture("stdout")
@@ -722,22 +766,6 @@ class DelegationExecutionMixin:
             await proc.wait()
             stderr_capture.append_line(f"Timed out after {timeout_sec}s")
         except asyncio.CancelledError:
-            async def terminate_process_tree() -> None:
-                try:
-                    os.killpg(proc.pid, signal.SIGTERM)
-                except Exception:
-                    if proc.returncode is None:
-                        proc.terminate()
-                await asyncio.sleep(0.2)
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                except Exception:
-                    if proc.returncode is None:
-                        proc.kill()
-                await proc.wait()
-
             cleanup_task = asyncio.create_task(terminate_process_tree())
             try:
                 await asyncio.shield(cleanup_task)
