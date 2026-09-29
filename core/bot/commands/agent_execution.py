@@ -748,5 +748,5 @@ class CommandsAgentExecutionMixin:
         await self._reply_logged(
             update,
             "Review the evidence before accepting the result.",
-            reply_markup=self._inline_result_keyboard(sorted(failed)),
+            reply_markup=self._inline_result_keyboard(run_id, sorted(failed)),
         )

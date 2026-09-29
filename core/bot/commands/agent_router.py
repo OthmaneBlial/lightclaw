@@ -233,7 +233,9 @@ class CommandsAgentRouterMixin:
                     update,
                     preview,
                     parse_mode=ParseMode.HTML,
-                    reply_markup=self._inline_plan_keyboard(),
+                    reply_markup=self._inline_plan_keyboard(
+                        str(pending_payload["approval_id"])
+                    ),
                 )
                 return
 
@@ -297,7 +299,9 @@ class CommandsAgentRouterMixin:
                 update,
                 preview,
                 parse_mode=ParseMode.HTML,
-                reply_markup=self._inline_plan_keyboard(),
+                reply_markup=self._inline_plan_keyboard(
+                    str(pending_payload["approval_id"])
+                ),
             )
 
             if self.config.local_agent_multi_auto_continue:

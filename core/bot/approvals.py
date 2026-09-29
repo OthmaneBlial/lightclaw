@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
+import secrets
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,48 +29,84 @@ class BotApprovalsMixin:
     )
 
     @staticmethod
-    def _inline_plan_keyboard(*, second_confirmation: bool = False) -> InlineKeyboardMarkup:
+    def _inline_plan_keyboard(
+        approval_id: str,
+        *,
+        second_confirmation: bool = False,
+    ) -> InlineKeyboardMarkup:
         if second_confirmation:
             return InlineKeyboardMarkup(
                 [
                     [
-                        InlineKeyboardButton("⚠️ Confirm high-risk run", callback_data="lc:plan:confirm-risk"),
+                        InlineKeyboardButton(
+                            "⚠️ Confirm high-risk run",
+                            callback_data=f"lc:plan:confirm-risk:{approval_id}",
+                        ),
                     ],
-                    [InlineKeyboardButton("Deny", callback_data="lc:plan:deny")],
+                    [
+                        InlineKeyboardButton(
+                            "Deny", callback_data=f"lc:plan:deny:{approval_id}"
+                        )
+                    ],
                 ]
             )
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Approve", callback_data="lc:plan:approve"),
-                    InlineKeyboardButton("Edit scope", callback_data="lc:plan:edit"),
-                    InlineKeyboardButton("Deny", callback_data="lc:plan:deny"),
+                    InlineKeyboardButton(
+                        "Approve", callback_data=f"lc:plan:approve:{approval_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "Edit scope", callback_data=f"lc:plan:edit:{approval_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "Deny", callback_data=f"lc:plan:deny:{approval_id}"
+                    ),
                 ],
                 [InlineKeyboardButton("Cancel active run", callback_data="lc:run:cancel")],
             ]
         )
 
     @staticmethod
-    def _inline_voice_keyboard() -> InlineKeyboardMarkup:
+    def _inline_voice_keyboard(approval_id: str) -> InlineKeyboardMarkup:
         return InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Use transcription", callback_data="lc:voice:approve"),
-                    InlineKeyboardButton("Discard", callback_data="lc:voice:deny"),
+                    InlineKeyboardButton(
+                        "Use transcription",
+                        callback_data=f"lc:voice:approve:{approval_id}",
+                    ),
+                    InlineKeyboardButton(
+                        "Discard", callback_data=f"lc:voice:deny:{approval_id}"
+                    ),
                 ]
             ]
         )
 
     @staticmethod
-    def _inline_result_keyboard(failed_lanes: list[str] | None = None) -> InlineKeyboardMarkup:
+    def _run_action_token(run_id: str) -> str:
+        return hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:16]
+
+    @staticmethod
+    def _inline_result_keyboard(
+        run_id: str,
+        failed_lanes: list[str] | None = None,
+    ) -> InlineKeyboardMarkup:
+        run_token = BotApprovalsMixin._run_action_token(run_id)
         rows = [
             [
-                InlineKeyboardButton("View diff", callback_data="lc:run:diff"),
-                InlineKeyboardButton("Accept result", callback_data="lc:run:accept"),
+                InlineKeyboardButton(
+                    "View diff", callback_data=f"lc:run:diff:{run_token}"
+                ),
+                InlineKeyboardButton(
+                    "Accept result", callback_data=f"lc:run:accept:{run_token}"
+                ),
             ],
             [
-                InlineKeyboardButton("Reject result", callback_data="lc:run:reject"),
-                InlineKeyboardButton("Cancel", callback_data="lc:run:cancel"),
+                InlineKeyboardButton(
+                    "Reject result", callback_data=f"lc:run:reject:{run_token}"
+                ),
+                InlineKeyboardButton("Cancel active run", callback_data="lc:run:cancel"),
             ],
         ]
         if failed_lanes:
@@ -79,7 +117,7 @@ class BotApprovalsMixin:
                     [
                         InlineKeyboardButton(
                             f"Retry {safe_label}",
-                            callback_data=f"lc:run:retry:{safe_label}",
+                            callback_data=f"lc:run:retry:{run_token}:{safe_label}",
                         )
                     ],
                 )
@@ -196,51 +234,97 @@ class BotApprovalsMixin:
         action = str(query.data or "")
         proxy = self._callback_proxy(update)
 
-        if action == "lc:voice:approve":
-            pending = self._pending_voice_goal_by_session.pop(session_id, None)
-            if not pending or float(pending.get("expires_at", 0)) < time.time():
+        if action.startswith("lc:voice:"):
+            parts = action.split(":")
+            if len(parts) != 4 or parts[2] not in {"approve", "deny"}:
+                await self._reply_logged(proxy, "Unknown or expired voice action.")
+                return
+            decision, callback_id = parts[2], parts[3]
+            pending = self._pending_voice_goal_by_session.get(session_id)
+            if (
+                not pending
+                or not re.fullmatch(r"[0-9a-f]{16}", callback_id)
+                or not secrets.compare_digest(
+                    str(pending.get("approval_id") or ""), callback_id
+                )
+            ):
+                await self._reply_logged(
+                    proxy, "This voice approval is stale; review the latest transcription."
+                )
+                return
+            self._pending_voice_goal_by_session.pop(session_id, None)
+            if float(pending.get("expires_at", 0)) < time.time():
                 await self._reply_logged(proxy, "Voice transcription expired; send it again.")
                 return
-            await self._process_user_message(proxy, context, str(pending.get("text") or ""))
-            return
-        if action == "lc:voice:deny":
-            self._pending_voice_goal_by_session.pop(session_id, None)
-            await self._reply_logged(proxy, "Discarded voice transcription. Nothing was executed.")
+            if decision == "approve":
+                await self._process_user_message(
+                    proxy, context, str(pending.get("text") or "")
+                )
+            else:
+                await self._reply_logged(
+                    proxy, "Discarded voice transcription. Nothing was executed."
+                )
             return
 
         if action.startswith("lc:plan:"):
+            parts = action.split(":")
+            if len(parts) != 4 or parts[2] not in {
+                "approve",
+                "edit",
+                "deny",
+                "confirm-risk",
+            }:
+                await self._reply_logged(proxy, "Unknown or expired plan action.")
+                return
+            decision, callback_id = parts[2], parts[3]
             pending = self._get_pending_multi_plan(session_id)
             if not pending:
                 await self._reply_logged(proxy, "No pending plan; create a new `/agent multi` request.")
                 return
-            if action == "lc:plan:edit":
+            if (
+                not re.fullmatch(r"[0-9a-f]{16}", callback_id)
+                or not secrets.compare_digest(
+                    str(pending.get("approval_id") or ""), callback_id
+                )
+            ):
+                await self._reply_logged(
+                    proxy, "This plan approval is stale; review the latest plan."
+                )
+                return
+            if decision == "edit":
                 await self._reply_logged(
                     proxy,
                     "Reply with <code>/agent multi edit &lt;scope changes&gt;</code>. The current plan will not run.",
                     parse_mode=ParseMode.HTML,
                 )
                 return
-            if action == "lc:plan:deny":
+            if decision == "deny":
                 self._clear_pending_multi_plan(session_id)
                 await self._reply_logged(proxy, "Denied pending plan. Nothing was executed.")
                 return
             review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
-            if action == "lc:plan:approve" and review.get("second_confirmation_required"):
+            if decision == "approve" and review.get("second_confirmation_required"):
                 review["second_confirmation_prompted"] = True
                 pending["review"] = review
                 await self._reply_logged(
                     proxy,
                     "⚠️ <b>Second confirmation required.</b> Review the high-risk scope once more.",
                     parse_mode=ParseMode.HTML,
-                    reply_markup=self._inline_plan_keyboard(second_confirmation=True),
+                    reply_markup=self._inline_plan_keyboard(
+                        callback_id,
+                        second_confirmation=True,
+                    ),
                 )
                 return
-            if action == "lc:plan:confirm-risk":
+            if decision == "confirm-risk":
                 if not review.get("second_confirmation_prompted"):
                     await self._reply_logged(proxy, "First review and approve the high-risk plan.")
                     return
                 review["second_confirmed"] = True
                 pending["review"] = review
+            elif decision != "approve":
+                await self._reply_logged(proxy, "Unknown or expired plan action.")
+                return
             await self._execute_approved_plan_action(update, context, session_id)
             return
 
@@ -259,33 +343,48 @@ class BotApprovalsMixin:
                 await self._reply_logged(proxy, "No active run to cancel.")
             return
 
-        if action.startswith("lc:run:retry:"):
+        if action.startswith("lc:run:"):
+            parts = action.split(":")
             run_id = self._last_run_ids_by_session.get(session_id)
-            label = action.rsplit(":", 1)[-1]
-            if not run_id:
-                await self._reply_logged(proxy, "No previous run is available for retry.")
+            if (
+                not run_id
+                or len(parts) not in {4, 5}
+                or parts[2] not in {"diff", "accept", "reject", "retry"}
+                or (parts[2] == "retry") != (len(parts) == 5)
+                or not re.fullmatch(r"[0-9a-f]{16}", parts[3])
+                or not secrets.compare_digest(
+                    parts[3], self._run_action_token(run_id)
+                )
+            ):
+                await self._reply_logged(
+                    proxy, "This result action is stale; review the latest run."
+                )
                 return
-            try:
-                job = await asyncio.to_thread(self.jobs.retry_lane, run_id, label)
-            except JobStateError as exc:
-                await self._reply_logged(proxy, f"Retry refused: {_escape_html(str(exc))}")
-                return
-            await self._reply_logged(proxy, f"Queued bounded retry for `{label}` in `{job['run_id']}`.")
-            return
-
-        if action == "lc:run:diff":
-            await self._send_last_run_diff(proxy, session_id)
-            return
-        if action == "lc:run:accept":
-            await self._accept_last_run_result(proxy, session_id)
-            return
-        if action == "lc:run:reject":
-            await self._reject_last_run_result(proxy, session_id)
+            decision = parts[2]
+            if decision == "retry":
+                label = parts[4]
+                if not re.fullmatch(r"[a-z0-9_-]{1,24}", label):
+                    await self._reply_logged(proxy, "Unknown or expired retry action.")
+                    return
+                try:
+                    job = await asyncio.to_thread(self.jobs.retry_lane, run_id, label)
+                except JobStateError as exc:
+                    await self._reply_logged(proxy, f"Retry refused: {_escape_html(str(exc))}")
+                    return
+                await self._reply_logged(
+                    proxy, f"Queued bounded retry for `{label}` in `{job['run_id']}`."
+                )
+            elif decision == "diff":
+                await self._send_last_run_diff(proxy, session_id, run_id)
+            elif decision == "accept":
+                await self._accept_last_run_result(proxy, session_id, run_id)
+            else:
+                await self._reject_last_run_result(proxy, session_id, run_id)
             return
 
         await self._reply_logged(proxy, "Unknown or expired LightClaw action.")
 
-    async def _send_last_run_diff(self, update, session_id: str) -> None:
+    async def _send_last_run_diff(self, update, session_id: str, run_id: str) -> None:
         receipt_value = self._last_run_receipts_by_session.get(session_id)
         if not receipt_value:
             await self._reply_logged(update, "No completed run receipt is available.")
@@ -294,6 +393,9 @@ class BotApprovalsMixin:
             receipt = json.loads(Path(receipt_value).read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             await self._reply_logged(update, "The local run receipt is unavailable.")
+            return
+        if str(receipt.get("run_id") or "") != run_id:
+            await self._reply_logged(update, "This result button no longer matches its run.")
             return
         changes = receipt.get("file_changes") if isinstance(receipt.get("file_changes"), list) else []
         artifacts = receipt.get("artifacts") if isinstance(receipt.get("artifacts"), list) else []
@@ -319,11 +421,7 @@ class BotApprovalsMixin:
         lines.append(f"Private receipt: `{receipt_value}`")
         await self._send_response(None, update, "\n".join(lines))
 
-    async def _accept_last_run_result(self, update, session_id: str) -> None:
-        run_id = self._last_run_ids_by_session.get(session_id)
-        if not run_id:
-            await self._reply_logged(update, "No completed run is available to accept.")
-            return
+    async def _accept_last_run_result(self, update, session_id: str, run_id: str) -> None:
         try:
             job = await asyncio.to_thread(self.jobs.get_job, run_id)
             if job["status"] != "succeeded":
@@ -339,11 +437,7 @@ class BotApprovalsMixin:
             f"Accepted local result `{job['run_id']}` at commit `{artifact['commit']}`. Nothing was pushed or published.",
         )
 
-    async def _reject_last_run_result(self, update, session_id: str) -> None:
-        run_id = self._last_run_ids_by_session.get(session_id)
-        if not run_id:
-            await self._reply_logged(update, "No completed run is available to reject.")
-            return
+    async def _reject_last_run_result(self, update, session_id: str, run_id: str) -> None:
         try:
             job = await asyncio.to_thread(self.jobs.get_job, run_id)
             if job["status"] not in {"succeeded", "failed"}:

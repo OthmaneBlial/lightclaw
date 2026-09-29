@@ -141,7 +141,7 @@ def _run_repo_scenario(artifact: Path, run_id: str) -> dict[str, object]:
                     {
                         "actor": "phone-owner",
                         "event": "approve",
-                        "callback": "lc:plan:approve",
+                        "callback": "lc:plan:approve:<plan-id>",
                     },
                     {
                         "actor": "lightclaw",

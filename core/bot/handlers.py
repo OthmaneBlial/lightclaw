@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 import time
 
 from telegram import Update
@@ -109,9 +110,11 @@ class BotHandlersMixin:
                 user_text = f"{caption}\n{user_text}"
             log.info("Voice message transcribed and awaiting approval")
             session_id = self._session_id_from_update(update)
+            approval_id = secrets.token_hex(8)
             self._pending_voice_goal_by_session[session_id] = {
                 "text": user_text,
                 "transcription": text,
+                "approval_id": approval_id,
                 "expires_at": time.time() + 10 * 60,
             }
             await self._reply_logged(
@@ -120,7 +123,7 @@ class BotHandlersMixin:
                 f"{_escape_html(text)}\n\n"
                 "Review the transcription, then explicitly approve or discard it.",
                 parse_mode=ParseMode.HTML,
-                reply_markup=self._inline_voice_keyboard(),
+                reply_markup=self._inline_voice_keyboard(approval_id),
             )
             return
         else:
@@ -204,11 +207,16 @@ class BotHandlersMixin:
                     else {}
                 )
                 if review.get("second_confirmation_required") and not review.get("second_confirmed"):
+                    review["second_confirmation_prompted"] = True
+                    pending_multi["review"] = review
                     await self._reply_logged(
                         update,
                         "⚠️ <b>Second confirmation required.</b> Use the high-risk confirmation button.",
                         parse_mode=ParseMode.HTML,
-                        reply_markup=self._inline_plan_keyboard(second_confirmation=True),
+                        reply_markup=self._inline_plan_keyboard(
+                            str(pending_multi["approval_id"]),
+                            second_confirmation=True,
+                        ),
                     )
                     return
                 current = asyncio.current_task()

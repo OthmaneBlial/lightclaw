@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import secrets
 import time
 from pathlib import Path
 
@@ -353,6 +354,7 @@ class BotBaseMixin:
         ttl = max(30, int(ttl_sec or self._pending_multi_plan_ttl_sec))
         now = time.time()
         item = dict(payload or {})
+        item["approval_id"] = secrets.token_hex(8)
         item["created_at"] = now
         item["expires_at"] = now + ttl
         self._pending_multi_plan_by_session[session_id] = item

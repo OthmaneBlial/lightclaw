@@ -23,7 +23,7 @@
     {
       "branch_points": 84,
       "line": 16,
-      "lines": 482,
+      "lines": 486,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -36,8 +36,8 @@
     },
     {
       "branch_points": 61,
-      "line": 175,
-      "lines": 329,
+      "line": 178,
+      "lines": 334,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -84,6 +84,13 @@
       "path": "skills.py"
     },
     {
+      "branch_points": 42,
+      "line": 225,
+      "lines": 161,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 38,
       "line": 155,
       "lines": 149,
@@ -103,13 +110,6 @@
       "lines": 153,
       "name": "_configure_env_interactive",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 33,
-      "line": 316,
-      "lines": 66,
-      "name": "_ingest_codex_progress_obj",
-      "path": "core/bot/delegation/execution.py"
     }
   ],
   "largest_functions": [
@@ -123,7 +123,7 @@
     {
       "branch_points": 84,
       "line": 16,
-      "lines": 482,
+      "lines": 486,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -142,18 +142,18 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
+      "branch_points": 61,
+      "line": 178,
+      "lines": 334,
+      "name": "_process_user_message",
+      "path": "core/bot/handlers.py"
+    },
+    {
       "branch_points": 57,
       "line": 838,
       "lines": 333,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 61,
-      "line": 175,
-      "lines": 329,
-      "name": "_process_user_message",
-      "path": "core/bot/handlers.py"
     },
     {
       "branch_points": 47,
@@ -257,7 +257,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 544,
+      "lines": 548,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -265,7 +265,7 @@
       "path": "core/bot/delegation/tasks.py"
     },
     {
-      "lines": 505,
+      "lines": 513,
       "path": "core/bot/handlers.py"
     },
     {
@@ -273,14 +273,14 @@
       "path": "core/bot/commands/cron.py"
     },
     {
-      "lines": 440,
-      "path": "core/llm/client.py"
+      "lines": 454,
+      "path": "core/bot/approvals.py"
     },
     {
-      "lines": 418,
-      "path": "core/artifacts.py"
+      "lines": 440,
+      "path": "core/llm/client.py"
     }
   ],
-  "runtime_lines": 18085,
+  "runtime_lines": 18193,
   "schema_version": 1
 }
