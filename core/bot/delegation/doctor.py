@@ -8,7 +8,11 @@ import subprocess
 import time
 from pathlib import Path
 
+from ...fs import read_text_bounded
 from ...markdown import _escape_html
+from ...security import delegated_process_env, redact_text
+
+MAX_AGENT_AUTH_FILE_BYTES = 1024 * 1024
 
 
 class DelegationDoctorMixin:
@@ -37,8 +41,10 @@ class DelegationDoctorMixin:
         input_text: str | None = None,
     ) -> dict:
         """Run a short-lived local CLI probe command."""
-        env = os.environ.copy()
-        env["CI"] = "1"
+        extra_env = {"CI": "1"}
+        if codex_home := os.getenv("CODEX_HOME", "").strip():
+            extra_env["CODEX_HOME"] = codex_home
+        env = delegated_process_env(extra=extra_env)
         try:
             completed = subprocess.run(
                 cmd,
@@ -51,8 +57,8 @@ class DelegationDoctorMixin:
             return {
                 "ok": completed.returncode == 0,
                 "exit_code": int(completed.returncode),
-                "stdout": str(completed.stdout or ""),
-                "stderr": str(completed.stderr or ""),
+                "stdout": redact_text(str(completed.stdout or ""), os.environ),
+                "stderr": redact_text(str(completed.stderr or ""), os.environ),
                 "timed_out": False,
                 "error": "",
             }
@@ -60,8 +66,8 @@ class DelegationDoctorMixin:
             return {
                 "ok": False,
                 "exit_code": 124,
-                "stdout": str(e.stdout or ""),
-                "stderr": str(e.stderr or ""),
+                "stdout": redact_text(str(e.stdout or ""), os.environ),
+                "stderr": redact_text(str(e.stderr or ""), os.environ),
                 "timed_out": True,
                 "error": f"timed out after {int(timeout_sec)}s",
             }
@@ -72,7 +78,7 @@ class DelegationDoctorMixin:
                 "stdout": "",
                 "stderr": "",
                 "timed_out": False,
-                "error": str(e),
+                "error": redact_text(str(e), os.environ),
             }
 
     def _probe_agent_version(self, agent: str) -> str:
@@ -113,11 +119,13 @@ class DelegationDoctorMixin:
 
         if auth_path.exists():
             try:
-                payload = json.loads(auth_path.read_text(encoding="utf-8"))
+                payload = json.loads(
+                    read_text_bounded(auth_path, MAX_AGENT_AUTH_FILE_BYTES)
+                )
                 tokens = payload.get("tokens") if isinstance(payload, dict) else {}
                 access_token = tokens.get("access_token") if isinstance(tokens, dict) else ""
                 token_present = isinstance(access_token, str) and bool(access_token.strip())
-            except Exception:
+            except (OSError, UnicodeError, ValueError):
                 path_parse_error = True
 
             try:
@@ -195,8 +203,10 @@ class DelegationDoctorMixin:
             if not settings_path.exists():
                 continue
             try:
-                data = json.loads(settings_path.read_text(encoding="utf-8"))
-            except Exception:
+                data = json.loads(
+                    read_text_bounded(settings_path, MAX_AGENT_AUTH_FILE_BYTES)
+                )
+            except (OSError, UnicodeError, ValueError):
                 parse_errors.append(settings_path.as_posix())
                 continue
             env_block = data.get("env") if isinstance(data, dict) else None
