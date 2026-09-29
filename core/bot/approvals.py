@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import re
 import secrets
 import time
@@ -18,6 +17,7 @@ from telegram.ext import ContextTypes
 from ..artifacts import ArtifactError, accept_artifact, reject_artifact
 from ..jobs import JobStateError
 from ..markdown import _escape_html
+from ..receipts import read_receipt
 
 
 class BotApprovalsMixin:
@@ -414,8 +414,8 @@ class BotApprovalsMixin:
             await self._reply_logged(update, "No completed run receipt is available.")
             return
         try:
-            receipt = json.loads(Path(receipt_value).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+            receipt = read_receipt(receipt_value)
+        except ValueError:
             await self._reply_logged(update, "The local run receipt is unavailable.")
             return
         if str(receipt.get("run_id") or "") != run_id:

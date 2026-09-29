@@ -499,6 +499,22 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_view_diff_handles_oversized_receipt(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.receipts.MAX_RECEIPT_BYTES", 8)
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_bytes(b" " * 9)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._last_run_receipts_by_session = {"456": str(receipt_path)}
+    bot._reply_logged = AsyncMock()
+
+    await bot._send_last_run_diff(SimpleNamespace(message=None), "456", "run-18")
+
+    bot._reply_logged.assert_awaited_once_with(
+        SimpleNamespace(message=None), "The local run receipt is unavailable."
+    )
+
+
+@pytest.mark.asyncio
 async def test_long_result_is_private_file_artifact_not_chat_wall(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))

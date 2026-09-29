@@ -269,6 +269,22 @@ def test_pr_preview_contains_receipt_evidence_and_requires_exact_confirmation(tm
         publish_pull_request(preview, confirmation="wrong-run")
 
 
+def test_pr_preview_rejects_oversized_receipt(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.receipts.MAX_RECEIPT_BYTES", 8)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_bytes(b" " * 9)
+
+    with pytest.raises(ArtifactError, match="private receipt is missing or invalid"):
+        build_pull_request_preview(
+            workspace,
+            receipt_path,
+            run_id="run-large-receipt",
+            title="Review bounded receipt",
+        )
+
+
 def test_artifact_cli_defaults_to_preview_and_exposes_publish_confirmation():
     parser = build_parser()
     parsed = parser.parse_args(

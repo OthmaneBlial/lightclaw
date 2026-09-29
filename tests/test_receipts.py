@@ -5,7 +5,12 @@ import stat
 
 import pytest
 
-from core.receipts import export_share_card, validate_receipt, write_receipt
+from core.receipts import (
+    export_share_card,
+    read_receipt,
+    validate_receipt,
+    write_receipt,
+)
 
 
 def _receipt(secret: str = "safe goal") -> dict[str, object]:
@@ -57,6 +62,19 @@ def test_receipt_contract_and_markdown_cover_required_evidence(tmp_path):
 def test_receipt_rejects_missing_required_fields(tmp_path):
     with pytest.raises(ValueError, match="missing required field: approved_scope"):
         write_receipt({"run_id": "incomplete"}, tmp_path)
+
+
+def test_read_receipt_is_bounded_and_rejects_non_objects(tmp_path, monkeypatch):
+    source = tmp_path / "receipt.json"
+    monkeypatch.setattr("core.receipts.MAX_RECEIPT_BYTES", 8)
+    source.write_bytes(b" " * 9)
+
+    with pytest.raises(ValueError, match="too large"):
+        read_receipt(source)
+
+    source.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid JSON"):
+        read_receipt(source)
 
 
 def test_share_card_is_preview_first_whitelisted_and_redacted(tmp_path, monkeypatch):

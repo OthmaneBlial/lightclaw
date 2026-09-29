@@ -11,7 +11,7 @@ import tempfile
 from pathlib import Path, PurePosixPath
 
 from .fs import sha256_file
-from .receipts import _write_private
+from .receipts import _write_private, read_receipt
 from .security import delegated_process_env, redact_text
 
 
@@ -321,10 +321,10 @@ def build_pull_request_preview(
 ) -> dict[str, object]:
     """Build a complete PR preview without network writes."""
     root = Path(workspace).expanduser().resolve()
-    receipt_file = Path(receipt_path).expanduser().resolve()
+    receipt_file = Path(receipt_path).expanduser()
     try:
-        receipt = json.loads(receipt_file.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        receipt = read_receipt(receipt_file)
+    except ValueError as exc:
         raise ArtifactError("private receipt is missing or invalid") from exc
     branch = _safe_git_ref(_require_git(root, "branch", "--show-current"), "branch")
     base = _safe_git_ref(base, "base branch")

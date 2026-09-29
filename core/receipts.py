@@ -6,10 +6,11 @@ import json
 import os
 from pathlib import Path
 
-from .fs import atomic_write_text
+from .fs import atomic_write_text, read_json_object
 from .security import redact_text
 
 RECEIPT_SCHEMA_VERSION = 1
+MAX_RECEIPT_BYTES = 8 * 1024 * 1024
 REQUIRED_RECEIPT_FIELDS = (
     "run_id",
     "original_goal",
@@ -61,6 +62,17 @@ def _redact_value(value):
 
 def _write_private(path: Path, content: str) -> None:
     atomic_write_text(path, content, mode=0o600)
+
+
+def read_receipt(path: str | Path) -> dict[str, object]:
+    """Load one bounded receipt object from a regular non-symlink file."""
+    try:
+        receipt = read_json_object(path, max_bytes=MAX_RECEIPT_BYTES)
+    except (OSError, ValueError) as exc:
+        raise ValueError("receipt is missing, too large, or invalid JSON") from exc
+    if not receipt:
+        raise ValueError("receipt is missing or invalid")
+    return receipt
 
 
 def validate_receipt(receipt: dict[str, object]) -> list[str]:
@@ -213,13 +225,12 @@ def export_share_card(
     apply: bool = False,
 ) -> dict[str, object]:
     """Preview or write a sanitized Run Card; writing is always explicit."""
-    source = Path(receipt_path).expanduser().resolve()
+    source = Path(receipt_path).expanduser()
     try:
-        raw = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError("receipt is missing or invalid JSON") from exc
-    if not isinstance(raw, dict):
-        raise ValueError("receipt must contain a JSON object")
+        raw = read_receipt(source)
+    except ValueError as exc:
+        raise ValueError("receipt is missing, too large, or invalid JSON") from exc
+    source = source.resolve()
     errors = validate_receipt(raw)
     if errors:
         raise ValueError("invalid receipt: " + "; ".join(errors))
