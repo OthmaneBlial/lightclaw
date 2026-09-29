@@ -140,11 +140,6 @@ class CommandsAgentExecutionMixin:
         agents_path = await asyncio.to_thread(
             self._write_agents_plan_file, multi_workspace, plan_payload
         )
-        loaded_payload = await asyncio.to_thread(
-            self._load_agents_plan_file, multi_workspace
-        )
-        if loaded_payload:
-            plan_payload = loaded_payload
 
         handoff_dir = multi_workspace / "handoff"
         handoff_dir.mkdir(parents=True, exist_ok=True)

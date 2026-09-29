@@ -520,21 +520,3 @@ class DelegationMultiTaskMixin:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(self._render_agents_markdown(payload), encoding="utf-8")
         return target
-
-    def _load_agents_plan_file(self, workspace: Path) -> dict[str, object]:
-        path = workspace / "AGENTS.md"
-        if not path.exists():
-            return {}
-        try:
-            text = path.read_text(encoding="utf-8")
-        except Exception:
-            return {}
-        match = re.search(r"```json\s*([\s\S]*?)```", text)
-        if not match:
-            return {}
-        raw = match.group(1).strip()
-        try:
-            obj = json.loads(raw)
-        except Exception:
-            return {}
-        return obj if isinstance(obj, dict) else {}

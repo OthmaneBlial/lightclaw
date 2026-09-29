@@ -7,9 +7,9 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
-      "branch_points": 99,
+      "branch_points": 98,
       "line": 127,
-      "lines": 699,
+      "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -114,9 +114,9 @@
   ],
   "largest_functions": [
     {
-      "branch_points": 99,
+      "branch_points": 98,
       "line": 127,
-      "lines": 699,
+      "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 825,
+      "lines": 820,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -261,7 +261,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 540,
+      "lines": 522,
       "path": "core/bot/delegation/tasks.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18936,
+  "runtime_lines": 18913,
   "schema_version": 1
 }
