@@ -9,6 +9,10 @@ from pathlib import Path
 from config import Config
 
 from .constants import FALLBACK_IDENTITY, FILE_IO_RULES, PROJECT_ROOT
+from .fs import FileTooLargeError, read_text_bounded
+from .logging_setup import log
+
+MAX_PERSONALITY_FILE_BYTES = 64 * 1024
 
 
 def runtime_root_from_workspace(workspace_path: str) -> Path:
@@ -51,14 +55,23 @@ def load_personality(workspace_path: str) -> str:
     for filename in files:
         for base in search_paths:
             filepath = base / filename
-            if not filepath.exists():
+            if not filepath.is_file():
                 continue
             try:
-                content = filepath.read_text(encoding="utf-8").strip()
+                content = read_text_bounded(
+                    filepath,
+                    MAX_PERSONALITY_FILE_BYTES,
+                ).strip()
                 if content:
                     parts.append(content)
                     break
-            except Exception:
+            except FileTooLargeError:
+                log.warning(
+                    "Ignoring %s because it exceeds the 64 KiB personality file limit",
+                    filename,
+                )
+            except (OSError, UnicodeError):
+                log.warning("Could not read personality file %s; trying fallback", filename)
                 continue
 
     if not parts:
