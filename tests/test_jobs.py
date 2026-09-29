@@ -124,8 +124,12 @@ def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
     stalled = store.get_job(job["run_id"])
     assert stalled["status"] == "stalled"
     assert store.diagnostics()["counts"]["stalled"] == 1
+    queued = _create(store, tmp_path / "repo")
+    assert store.claim_next(workspace=tmp_path / "repo") is None
     with pytest.raises(JobStateError, match="non-resumable lanes"):
         store.resume(job["run_id"])
+    store.request_cancel(job["run_id"])
+    assert store.claim_next(workspace=tmp_path / "repo")["run_id"] == queued["run_id"]
     store.close()
 
 

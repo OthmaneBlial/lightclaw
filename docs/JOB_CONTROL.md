@@ -5,6 +5,7 @@ LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in
 ## Guarantees
 
 - A SQLite partial unique index permits only one `running` or `cancel_requested` writer for a resolved workspace.
+- Stalled jobs also block queued work in their workspace until an operator cancels or resumes them.
 - Queued work is claimed by priority, then creation time.
 - Every lane declares `idempotent` and `resumable`; unsafe lanes are explicitly non-resumable.
 - Parallel lanes with overlapping owned path trees are rejected before execution. An overlap is allowed only when the DAG orders those lanes sequentially.

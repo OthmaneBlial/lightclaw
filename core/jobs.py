@@ -390,7 +390,7 @@ class JobStore:
                     self.db.commit()
                     return None
                 active = self.db.execute(
-                    "SELECT run_id FROM jobs WHERE workspace = ? AND status IN ('running', 'cancel_requested')",
+                    "SELECT run_id FROM jobs WHERE workspace = ? AND status IN ('running', 'cancel_requested', 'stalled')",
                     (row["workspace"],),
                 ).fetchone()
                 if active is not None:
