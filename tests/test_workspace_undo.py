@@ -52,6 +52,40 @@ def test_undo_refuses_unregistered_symlink_and_traversal(tmp_path: Path):
     assert (outside / "keep.txt").is_file()
 
 
+def test_task_metadata_directory_symlink_cannot_read_or_write_outside_root(tmp_path: Path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    owned = root / "20260823_120000_safe-task"
+    owned.mkdir()
+    register_task_workspace(root, owned, "safe task")
+
+    outside = tmp_path / "metadata-outside"
+    (root / ".lightclaw-meta").rename(outside)
+    (root / ".lightclaw-meta").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
+        resolve_owned_task(root, owned.name)
+
+    another = root / "20260823_120001_another-task"
+    another.mkdir()
+    with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
+        register_task_workspace(root, another, "another task")
+    assert not (outside / f"{another.name}.json").exists()
+
+
+def test_undo_rejects_oversized_task_ownership_record(tmp_path: Path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    owned = root / "20260823_120000_safe-task"
+    owned.mkdir()
+    register_task_workspace(root, owned, "safe task")
+    metadata_path = root / ".lightclaw-meta" / f"{owned.name}.json"
+    metadata_path.write_bytes(b" " * (1024 * 1024 + 1))
+
+    with pytest.raises(WorkspaceSafetyError, match="ownership record is unreadable"):
+        undo_owned_task(root, owned.name, apply=True)
+    assert owned.is_dir()
+
+
 def test_workspace_root_refuses_filesystem_root_and_symlink(tmp_path: Path):
     with pytest.raises(WorkspaceSafetyError, match="filesystem root"):
         validate_workspace_root(Path(Path.cwd().anchor))

@@ -11,6 +11,8 @@ import tempfile
 import time
 from pathlib import Path
 
+from .fs import read_json_object
+
 METADATA_DIRNAME = ".lightclaw-meta"
 TASK_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$")
 
@@ -20,6 +22,8 @@ class WorkspaceSafetyError(ValueError):
 
 
 def _atomic_private_json(path: Path, payload: dict[str, object]) -> None:
+    if path.parent.is_symlink():
+        raise WorkspaceSafetyError("task metadata directory must not be a symlink")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.parent.chmod(0o700)
     fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
@@ -117,12 +121,15 @@ def resolve_owned_task(root: str | Path, task_name: str) -> tuple[Path, Path, di
     if not TASK_NAME_PATTERN.fullmatch(name):
         raise WorkspaceSafetyError("task name must be a single safe workspace label")
 
-    metadata_path = root_path / METADATA_DIRNAME / f"{name}.json"
+    metadata_dir = root_path / METADATA_DIRNAME
+    if metadata_dir.is_symlink():
+        raise WorkspaceSafetyError("task ownership record directory must not be a symlink")
+    metadata_path = metadata_dir / f"{name}.json"
     if metadata_path.is_symlink() or not metadata_path.is_file():
         raise WorkspaceSafetyError("no LightClaw ownership record exists for this task")
     try:
-        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        metadata = read_json_object(metadata_path)
+    except (OSError, ValueError) as exc:
         raise WorkspaceSafetyError("task ownership record is unreadable") from exc
     if not isinstance(metadata, dict) or metadata.get("owner") != "lightclaw":
         raise WorkspaceSafetyError("task ownership record is invalid")
