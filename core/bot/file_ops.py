@@ -8,9 +8,18 @@ import re
 import time
 from pathlib import Path
 
+from ..fs import atomic_write_text
 from ..logging_setup import log
 from ..security import has_sensitive_content, is_sensitive_path
 from ..types import FileOperationResult
+
+
+def _write_workspace_text(target: Path, content: str) -> None:
+    try:
+        mode = target.stat().st_mode & 0o777
+    except FileNotFoundError:
+        mode = 0o600
+    atomic_write_text(target, content, mode=mode)
 
 
 class BotFileOpsMixin:
@@ -288,7 +297,7 @@ class BotFileOpsMixin:
 
             try:
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content, encoding="utf-8")
+                _write_workspace_text(target, content)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Save failed: {rel_path}]"
@@ -494,7 +503,7 @@ class BotFileOpsMixin:
                 return f"[No changes: {rel_path}]"
 
             try:
-                target.write_text(after, encoding="utf-8")
+                _write_workspace_text(target, after)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Edit failed: {rel_path}]"

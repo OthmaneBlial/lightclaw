@@ -119,6 +119,40 @@ async def test_model_file_blocks_cannot_overwrite_env_files(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_model_file_writes_are_atomic_and_preserve_existing_mode(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    source = workspace / "app.py"
+    source.write_text("print('original')\n", encoding="utf-8")
+    source.chmod(0o750)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+
+    operations, _ = await bot._process_file_blocks(
+        "```python:app.py\nprint('updated')\n```",
+        allow_file_writes=True,
+    )
+
+    assert operations[0].action == "updated"
+    assert source.read_text(encoding="utf-8") == "print('updated')"
+    assert source.stat().st_mode & 0o777 == 0o750
+
+    def fail_replace(_temporary, _destination):
+        raise OSError("fixture replace failure")
+
+    monkeypatch.setattr("core.fs.os.replace", fail_replace)
+    operations, _ = await bot._process_file_blocks(
+        "```python:app.py\nprint('partial')\n```",
+        allow_file_writes=True,
+    )
+
+    assert operations[0].action == "error"
+    assert source.read_text(encoding="utf-8") == "print('updated')"
+    assert source.stat().st_mode & 0o777 == 0o750
+    assert not list(workspace.glob(".app.py.*.tmp"))
+
+
+@pytest.mark.asyncio
 async def test_failed_sensitive_edit_is_not_retried_with_file_contents(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
