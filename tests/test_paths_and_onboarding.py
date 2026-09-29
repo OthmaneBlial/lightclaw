@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import stat
+from pathlib import Path
 from types import SimpleNamespace
 
-from core.paths import config_path, legacy_config_path, runtime_dir
+import pytest
+
+from core.paths import config_dir, config_path, legacy_config_path, runtime_dir
 from core.workspaces import register_task_workspace
 from lightclaw_cli import (
     _managed_uninstall_targets,
@@ -39,6 +42,54 @@ def test_app_specific_paths_with_explicit_home(tmp_path):
     assert config_path(tmp_path) == tmp_path / ".config" / "lightclaw" / "config.env"
     assert legacy_config_path(tmp_path) == tmp_path / ".env"
     assert runtime_dir(tmp_path) == tmp_path / ".lightclaw"
+
+
+def test_default_config_and_runtime_paths_use_mocked_home(tmp_path, monkeypatch):
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("LIGHTCLAW_CONFIG", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert config_path() == tmp_path / ".config" / "lightclaw" / "config.env"
+    assert runtime_dir() == tmp_path / ".lightclaw"
+
+
+def test_xdg_config_home_applies_only_without_explicit_home(tmp_path, monkeypatch):
+    xdg_home = tmp_path / "xdg"
+    explicit_home = tmp_path / "explicit"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_home))
+    monkeypatch.delenv("LIGHTCLAW_CONFIG", raising=False)
+
+    assert config_dir() == xdg_home / "lightclaw"
+    assert config_dir(explicit_home) == explicit_home / ".config" / "lightclaw"
+
+
+@pytest.mark.parametrize(
+    ("configured", "expected"),
+    [
+        ("relative/config.env", "relative/config.env"),
+        ("~/private/config.env", "home/private/config.env"),
+    ],
+)
+def test_lightclaw_config_override_resolves_relative_and_home_paths(
+    tmp_path, monkeypatch, configured, expected
+):
+    fake_home = tmp_path / "home"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("LIGHTCLAW_CONFIG", configured)
+
+    assert config_path() == (tmp_path / expected).resolve()
+
+
+def test_explicit_home_ignores_ambient_config_overrides(tmp_path, monkeypatch):
+    explicit_home = tmp_path / "chosen"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "ambient-xdg"))
+    monkeypatch.setenv("LIGHTCLAW_CONFIG", str(tmp_path / "ambient-config.env"))
+
+    assert config_path(explicit_home) == (
+        explicit_home / ".config" / "lightclaw" / "config.env"
+    )
+    assert runtime_dir(explicit_home) == explicit_home / ".lightclaw"
 
 
 def test_private_writer_is_atomic_private_and_backed_up(tmp_path):
