@@ -567,6 +567,7 @@ class DelegationExecutionMixin:
         workspace: Path | None = None,
         progress_cb: Callable[[str], Awaitable[None]] | None = None,
         capability_profile: str | None = None,
+        job_run_id: str | None = None,
     ) -> dict:
         workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()
         timeout_sec = max(1, int(self.config.local_agent_timeout_sec))
@@ -616,17 +617,29 @@ class DelegationExecutionMixin:
                 "timed_out": False,
             }
 
-        if run_input is not None and proc.stdin:
+        process_store = getattr(self, "jobs", None)
+        process_group_registered = False
+        if job_run_id and process_store is not None:
             try:
-                proc.stdin.write(run_input.encode("utf-8"))
-                await proc.stdin.drain()
-            except Exception:
-                pass
-            finally:
+                await asyncio.to_thread(
+                    process_store.register_process_group, job_run_id, proc.pid
+                )
+                process_group_registered = True
+            except Exception as e:
                 try:
-                    proc.stdin.close()
+                    os.killpg(proc.pid, signal.SIGKILL)
                 except Exception:
-                    pass
+                    proc.kill()
+                await proc.wait()
+                return {
+                    "ok": False,
+                    "exit_code": 1,
+                    "stdout": "",
+                    "stderr": f"could not register delegated process group: {e}",
+                    "summary": "",
+                    "elapsed": 0.0,
+                    "timed_out": False,
+                }
 
         state = self._new_progress_state()
         stdout_lines: list[str] = []
@@ -713,6 +726,17 @@ class DelegationExecutionMixin:
             proc.wait(),
         )
         try:
+            if run_input is not None and proc.stdin:
+                try:
+                    proc.stdin.write(run_input.encode("utf-8"))
+                    await proc.stdin.drain()
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
             await asyncio.wait_for(streams_task, timeout=timeout_sec)
         except asyncio.TimeoutError:
             timed_out = True
@@ -756,6 +780,15 @@ class DelegationExecutionMixin:
                     pass
                 except Exception:
                     pass
+            if process_group_registered:
+                try:
+                    await asyncio.to_thread(
+                        process_store.unregister_process_group,
+                        job_run_id,
+                        proc.pid,
+                    )
+                except Exception:
+                    log.exception("Delegated process group could not be unregistered")
 
         elapsed = time.monotonic() - started
         exit_code = 124 if timed_out else int(proc.returncode if proc.returncode is not None else 1)
@@ -796,6 +829,7 @@ class DelegationExecutionMixin:
         evidence_sink: dict[str, object] | None = None,
         manage_job: bool = True,
         initialize_artifact: bool = True,
+        process_owner_run_id: str | None = None,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -940,6 +974,9 @@ class DelegationExecutionMixin:
                 workspace=target_workspace,
                 progress_cb=progress_cb,
                 capability_profile=profile,
+                job_run_id=(process_owner_run_id or run_id)
+                if durable_store is not None or process_owner_run_id
+                else None,
             )
         except asyncio.CancelledError:
             if durable_store is not None:

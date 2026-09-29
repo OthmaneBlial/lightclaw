@@ -301,6 +301,7 @@ class CommandsAgentExecutionMixin:
                         evidence_sink=worker_evidence,
                         manage_job=False,
                         initialize_artifact=False,
+                        process_owner_run_id=run_id,
                     )
                     attempt_evidence.append(worker_evidence)
                 except Exception as e:

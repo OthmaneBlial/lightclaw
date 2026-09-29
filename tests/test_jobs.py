@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import os
+import signal
 import stat
+import subprocess
+import sys
+import time
 
 import pytest
 
@@ -164,6 +168,46 @@ def test_stale_heartbeat_keeps_workspace_locked_while_worker_lives(tmp_path):
     assert active["run_id"] in inspect_job_database(database)["stalled_run_ids"]
     assert store.get_job(queued["run_id"])["status"] == "queued"
     store.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="delegated process groups require POSIX")
+def test_stalled_recovery_kills_registered_orphan_process_group(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    job = _create(store, tmp_path / "repo")
+    store.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    child_marker = tmp_path / "child-ready"
+    child_result = tmp_path / "child-survived"
+    child_code = (
+        "import pathlib,signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        f"pathlib.Path({str(child_marker)!r}).write_text('ready'); time.sleep(1); "
+        f"pathlib.Path({str(child_result)!r}).write_text('bad')"
+    )
+    parent_code = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable, '-c', {child_code!r}]); time.sleep(30)"
+    )
+    process = subprocess.Popen([sys.executable, "-c", parent_code], start_new_session=True)
+    store.register_process_group(job["run_id"], process.pid)
+    try:
+        for _ in range(100):
+            if child_marker.exists():
+                break
+            time.sleep(0.02)
+        assert child_marker.exists()
+        assert store.recover_stalled() == [job["run_id"]]
+        assert store.get_job(job["run_id"])["status"] == "stalled"
+        assert store.db.execute(
+            "SELECT 1 FROM job_process_groups WHERE run_id = ?", (job["run_id"],)
+        ).fetchone() is None
+        time.sleep(1.2)
+        assert not child_result.exists()
+    finally:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        process.wait(timeout=5)
+        store.close()
 
 
 def test_jobs_cli_exposes_bounded_control_actions():

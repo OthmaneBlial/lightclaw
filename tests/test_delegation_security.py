@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.bot.delegation.execution import DelegationExecutionMixin
+from core.jobs import JobStore
 
 
 class ExecutionHarness(DelegationExecutionMixin):
@@ -137,3 +139,36 @@ async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_p
         await task
     await asyncio.sleep(2.3)
     assert not (tmp_path / "child-survived.txt").exists()
+
+
+def test_delegation_unregisters_process_group_after_completion(tmp_path: Path):
+    harness = TimeoutHarness()
+    harness.config.local_agent_timeout_sec = 5
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [sys.executable, "-c", "import time; time.sleep(.1); print('ok')"],
+        None,
+    )
+    harness.jobs = JobStore(tmp_path / "jobs.db")
+    job = harness.jobs.create_job(
+        workspace=tmp_path / "repo",
+        session_id="fixture",
+        goal="fixture",
+        approved_scope="fixture",
+        risk_level="low",
+        capability_profile="workspace-write",
+        plan=[{"label": "worker", "depends_on": [], "owned_paths": [], "idempotent": False, "resumable": False}],
+        status="queued",
+    )
+    harness.jobs.claim_next(workspace=tmp_path / "repo", worker_pid=os.getpid())
+    try:
+        result = asyncio.run(
+            harness._invoke_local_agent_streaming(
+                "codex", "fixture", workspace=tmp_path, job_run_id=job["run_id"]
+            )
+        )
+        assert result["ok"]
+        assert harness.jobs.db.execute(
+            "SELECT 1 FROM job_process_groups WHERE run_id = ?", (job["run_id"],)
+        ).fetchone() is None
+    finally:
+        harness.jobs.close()

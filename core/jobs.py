@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sqlite3
+import subprocess
 import threading
 import time
 import uuid
@@ -169,6 +171,12 @@ class JobStore:
                     recorded_at REAL NOT NULL,
                     kind TEXT NOT NULL,
                     payload_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS job_process_groups (
+                    run_id TEXT NOT NULL REFERENCES jobs(run_id) ON DELETE CASCADE,
+                    pgid INTEGER NOT NULL,
+                    start_token TEXT NOT NULL,
+                    PRIMARY KEY (run_id, pgid)
                 );
                 """
             )
@@ -419,8 +427,100 @@ class JobStore:
                 raise JobStateError("heartbeat requires a running job")
         return self.get_job(run_id)
 
+    def register_process_group(self, run_id: str, pgid: int) -> None:
+        if pgid <= 1:
+            raise JobStateError("invalid delegated process group")
+        start_token = self._process_start_token(pgid)
+        if not start_token:
+            raise JobStateError("could not identify delegated process group")
+        with self._lock, self.db:
+            row = self.db.execute(
+                "SELECT status FROM jobs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+            if row is None or row["status"] not in {"running", "cancel_requested"}:
+                raise JobStateError("process groups require an active job")
+            self.db.execute(
+                "INSERT OR IGNORE INTO job_process_groups(run_id, pgid, start_token) VALUES (?, ?, ?)",
+                (run_id, pgid, start_token),
+            )
+
+    def unregister_process_group(self, run_id: str, pgid: int) -> None:
+        with self._lock, self.db:
+            self.db.execute(
+                "DELETE FROM job_process_groups WHERE run_id = ? AND pgid = ?",
+                (run_id, pgid),
+            )
+
+    @staticmethod
+    def _process_start_token(pid: int) -> str:
+        stat_path = Path(f"/proc/{pid}/stat")
+        try:
+            if stat_path.is_file():
+                raw = stat_path.read_text(encoding="utf-8")
+                fields = raw[raw.rfind(")") + 2 :].split()
+                return fields[19]
+            result = subprocess.run(
+                ["/bin/ps", "-o", "lstart=", "-p", str(pid)],
+                capture_output=True,
+                check=False,
+                text=True,
+                timeout=2,
+            )
+            return result.stdout.strip() if result.returncode == 0 else ""
+        except (OSError, IndexError, subprocess.SubprocessError):
+            return ""
+
+    @staticmethod
+    def _terminate_process_group(pgid: int, start_token: str) -> bool:
+        if not JobStore._process_group_matches(pgid, start_token):
+            return not JobStore._process_group_exists(pgid)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            return False
+        return True
+
+    @staticmethod
+    def _process_group_matches(pgid: int, start_token: str) -> bool:
+        try:
+            return (
+                os.getpgid(pgid) == pgid
+                and JobStore._process_start_token(pgid) == start_token
+            )
+        except ProcessLookupError:
+            return False
+
+    @staticmethod
+    def _process_group_exists(pgid: int) -> bool:
+        try:
+            os.killpg(pgid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except OSError:
+            return True
+
+    def _stop_process_groups(self, run_id: str) -> bool:
+        with self._lock:
+            rows = self.db.execute(
+                "SELECT pgid, start_token FROM job_process_groups WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+        stopped = True
+        for row in rows:
+            pgid = int(row["pgid"])
+            if self._terminate_process_group(pgid, str(row["start_token"])):
+                self.unregister_process_group(run_id, pgid)
+            else:
+                stopped = False
+        return stopped
+
     def request_cancel(self, run_id: str) -> dict[str, object]:
         job = self.get_job(run_id)
+        if job["status"] == "stalled" and not self._stop_process_groups(run_id):
+            raise JobStateError("cannot cancel while delegated processes may still be running")
         if job["status"] in {"awaiting_approval", "queued", "paused", "stalled"}:
             return self._transition(run_id, {str(job["status"])}, "canceled", "canceled")
         if job["status"] == "running":
@@ -437,6 +537,8 @@ class JobStore:
         job = self.get_job(run_id)
         if str(job["status"]) not in RESUMABLE_STATUSES:
             raise JobStateError(f"cannot resume job in state {job['status']}")
+        if job["status"] == "stalled" and not self._stop_process_groups(run_id):
+            raise JobStateError("cannot resume while delegated processes may still be running")
         if not job["resumable"]:
             raise JobStateError("job is explicitly non-resumable")
         unsafe = [
@@ -481,6 +583,8 @@ class JobStore:
         job = self.get_job(run_id)
         if job["status"] not in {"failed", "paused", "stalled"}:
             raise JobStateError(f"cannot retry a lane while job is {job['status']}")
+        if job["status"] == "stalled" and not self._stop_process_groups(run_id):
+            raise JobStateError("cannot retry while delegated processes may still be running")
         lane = next((item for item in job["lanes"] if item["label"] == label), None)
         if lane is None:
             raise JobStateError(f"unknown lane: {label}")
@@ -531,20 +635,26 @@ class JobStore:
     def recover_stalled(self) -> list[str]:
         current = time.time()
         recovered: list[str] = []
-        with self._lock, self.db:
+        with self._lock:
             rows = self.db.execute(
-                "SELECT run_id, worker_pid FROM jobs WHERE status IN ('running', 'cancel_requested')"
+                "SELECT run_id, worker_pid, status FROM jobs WHERE status IN ('running', 'cancel_requested', 'stalled')"
             ).fetchall()
-            for row in rows:
-                if self._pid_alive(row["worker_pid"]):
-                    continue
-                reason = "worker process is absent"
+        for row in rows:
+            if self._pid_alive(row["worker_pid"]):
+                continue
+            groups_stopped = self._stop_process_groups(str(row["run_id"]))
+            if row["status"] == "stalled":
+                continue
+            reason = "worker process is absent"
+            if not groups_stopped:
+                reason += "; delegated process cleanup failed"
+            with self._lock, self.db:
                 self.db.execute(
                     "UPDATE jobs SET status = 'stalled', updated_at = ?, last_error = ? WHERE run_id = ?",
                     (current, reason, row["run_id"]),
                 )
                 self._event(row["run_id"], "stalled", {"reason": reason})
-                recovered.append(str(row["run_id"]))
+            recovered.append(str(row["run_id"]))
         return recovered
 
     def diagnostics(self) -> dict[str, object]:
