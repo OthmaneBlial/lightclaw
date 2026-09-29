@@ -100,6 +100,22 @@ def test_privileged_rate_limiter_uses_per_user_and_action_windows(monkeypatch):
     assert bot._privileged_rate_limited(7, "agent", limit=2, window_sec=60) is False
 
 
+def test_privileged_rate_limiter_bounds_public_user_churn(monkeypatch):
+    monkeypatch.setattr("core.bot.base.MAX_PRIVILEGED_RATE_LIMIT_KEYS", 8)
+    monkeypatch.setattr("core.bot.base.time.monotonic", lambda: 10.0)
+    bot = BotBaseMixin.__new__(BotBaseMixin)
+    bot._privileged_request_times = {}
+
+    for user_id in range(12):
+        assert bot._privileged_rate_limited(user_id, "agent", limit=2) is False
+
+    assert len(bot._privileged_request_times) == 8
+    assert bot._privileged_rate_limited(4, "agent", limit=2) is False
+    assert bot._privileged_rate_limited(12, "agent", limit=2) is False
+    assert ("5", "agent") not in bot._privileged_request_times
+    assert bot._privileged_rate_limited(4, "agent", limit=2) is True
+
+
 def test_workspace_candidates_rank_newest_files(tmp_path):
     bot = BotBaseMixin.__new__(BotBaseMixin)
     bot.config = SimpleNamespace(workspace_path=str(tmp_path))

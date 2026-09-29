@@ -24,6 +24,9 @@ from ..logging_setup import log
 from ..personality import load_personality
 from ..security import access_policy_label, is_sensitive_path
 
+# ponytail: bounded in-process LRU; use shared storage if public traffic exceeds this ceiling.
+MAX_PRIVILEGED_RATE_LIMIT_KEYS = 4096
+
 
 class BotBaseMixin:
     def __init__(self, config: Config):
@@ -180,12 +183,14 @@ class BotBaseMixin:
         key = (str(user_id), str(action))
         cutoff = now - max(1, int(window_sec))
         recent = [stamp for stamp in self._privileged_request_times.get(key, []) if stamp >= cutoff]
-        if len(recent) >= max(1, int(limit)):
-            self._privileged_request_times[key] = recent
-            return True
-        recent.append(now)
+        limited = len(recent) >= max(1, int(limit))
+        if not limited:
+            recent.append(now)
+        self._privileged_request_times.pop(key, None)
         self._privileged_request_times[key] = recent
-        return False
+        while len(self._privileged_request_times) > MAX_PRIVILEGED_RATE_LIMIT_KEYS:
+            self._privileged_request_times.pop(next(iter(self._privileged_request_times)))
+        return limited
 
     def _session_id_from_update(self, update: Update | None) -> str:
         if update and update.effective_chat:
