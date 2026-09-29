@@ -87,6 +87,7 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/clear")
+        self._invalidate_session_summary(session_id)
         self.memory.clear_session(session_id)
         self._session_summaries.pop(session_id, None)
         await self._reply_logged(
@@ -113,7 +114,9 @@ class CommandsBasicMixin:
 
         if args and args[0] in {"confirm", "yes", "now"}:
             if pending_until and now <= pending_until:
+                self._invalidate_active_summaries()
                 await asyncio.to_thread(self.memory.clear_all)
+                self._invalidate_active_summaries()
                 self._session_summaries.clear()
                 self._pending_wipe_confirm.pop(session_id, None)
                 await self._reply_logged(

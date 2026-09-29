@@ -49,6 +49,7 @@ class BotBaseMixin:
 
         # Per-session summaries (in-memory, persisted via memory.py)
         self._session_summaries: dict[str, str] = {}
+        self._summary_generation_by_session: dict[str, int] = {}
         # Lock to prevent concurrent summarization per session
         self._summarizing: set[str] = set()
         # Confirmation window for destructive memory wipe command (per chat).

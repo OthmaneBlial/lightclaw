@@ -32,13 +32,16 @@ class BotContextMixin:
         if session_id in self._summarizing:
             return
         self._summarizing.add(session_id)
+        generation = self._summary_generation_by_session.get(session_id, 0)
 
         try:
-            await self._summarize_session(session_id, recent)
+            await self._summarize_session(session_id, recent, generation)
         finally:
             self._summarizing.discard(session_id)
 
-    async def _summarize_session(self, session_id: str, history: list[dict]):
+    async def _summarize_session(
+        self, session_id: str, history: list[dict], generation: int
+    ):
         """Use the LLM to summarize older messages, keep last 4."""
         if len(history) <= 4:
             return
@@ -78,6 +81,8 @@ class BotContextMixin:
             )
             summary = self._sanitize_summary_for_prompt(summary)
             if summary and not self._is_provider_error_text(summary):
+                if generation != self._summary_generation_by_session.get(session_id, 0):
+                    return
                 self._session_summaries[session_id] = summary
                 self._clear_llm_backoff()
                 if os.getenv("LIGHTCLAW_CHAT_MODE", "").strip() == "1":
@@ -89,6 +94,14 @@ class BotContextMixin:
                 log.warning(f"[{session_id}] Skipped summary update due to provider error response")
         except Exception as e:
             log.error(f"Summarization failed: {e}")
+
+    def _invalidate_session_summary(self, session_id: str) -> None:
+        generations = self._summary_generation_by_session
+        generations[session_id] = generations.get(session_id, 0) + 1
+
+    def _invalidate_active_summaries(self) -> None:
+        for session_id in tuple(self._summarizing):
+            self._invalidate_session_summary(session_id)
 
     def _get_session_summary(self, session_id: str) -> str:
         """Get the stored summary for a session."""
