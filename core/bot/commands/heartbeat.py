@@ -11,9 +11,12 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from ...fs import FileTooLargeError, read_text_bounded
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import build_system_prompt, runtime_root_from_workspace
+
+MAX_HEARTBEAT_BYTES = 64 * 1024
 
 
 class CommandsHeartbeatMixin:
@@ -111,8 +114,17 @@ class CommandsHeartbeatMixin:
             return
 
         try:
-            heartbeat_body = heartbeat_path.read_text(encoding="utf-8").strip()
-        except Exception as e:
+            heartbeat_body = read_text_bounded(
+                heartbeat_path,
+                MAX_HEARTBEAT_BYTES,
+            ).strip()
+        except FileTooLargeError:
+            log.warning(
+                "[%s] HEARTBEAT.md exceeds the 64 KiB limit; scheduled run skipped",
+                session_id,
+            )
+            return
+        except (OSError, UnicodeError) as e:
             log.error(f"[{session_id}] Failed to read HEARTBEAT.md: {e}")
             return
 

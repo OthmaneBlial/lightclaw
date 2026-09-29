@@ -156,7 +156,8 @@ processes get a minimal environment that excludes Telegram/provider keys. Delega
 bounded per line and per stream; LightClaw flags truncation for review. Automatic edit retries omit
 common credential paths and files with detectable secrets; model-generated file blocks cannot
 write common credential paths and cap each chat-edited file at 2 MiB. Use a delegated local-agent
-task for larger files. Secret detection is heuristic. `lightclaw undo`
+task for larger files. Scheduled `HEARTBEAT.md` input is capped at 64 KiB; larger files are skipped.
+Secret detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.
 
 These controls do not protect the host after you explicitly enable `trusted-command`, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.

@@ -1,11 +1,40 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from telegram.error import NetworkError
 
 from core.bot import LightClawBot
+
+
+@pytest.mark.asyncio
+async def test_oversized_heartbeat_file_is_skipped_before_model_call(tmp_path, monkeypatch):
+    heartbeat = tmp_path / "HEARTBEAT.md"
+    heartbeat.write_bytes(b"x" * (64 * 1024 + 1))
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._heartbeat_file_path = lambda: heartbeat
+    bot._llm_backoff_active = lambda: False
+    bot.config = SimpleNamespace(memory_top_k=4)
+    bot.memory = SimpleNamespace(
+        recall=Mock(return_value=[]), format_memories_for_prompt=Mock(return_value="")
+    )
+    bot._filter_recalled_memories = lambda memories: memories
+    bot._get_session_summary = lambda _session_id: ""
+    bot.skills = SimpleNamespace(prompt_context=lambda _session_id: "")
+    bot.personality = object()
+    bot.llm = SimpleNamespace(chat=AsyncMock(return_value="NO_UPDATE"))
+    bot._is_provider_error_text = lambda _response: False
+    bot._clear_llm_backoff = Mock()
+    monkeypatch.setattr(
+        "core.bot.commands.heartbeat.build_system_prompt", lambda *_args: ""
+    )
+
+    await bot._run_heartbeat_once(None, "123")
+
+    bot.llm.chat.assert_not_awaited()
 
 
 @pytest.mark.asyncio
