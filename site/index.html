@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#07090a" />
     <meta
       name="description"
-      content="Control local Codex and Claude coding agents from Telegram. Review bounded plans, inspect diffs and tests, and keep private run receipts."
+      content="Supervise local Codex and Claude agents from Telegram. Review plans, approve scoped work, inspect diffs and tests, and keep private run receipts."
     />
     <link rel="canonical" href="https://othmaneblial.github.io/lightclaw/" />
-    <meta property="og:title" content="LightClaw — Control Codex and Claude from Telegram" />
+    <meta property="og:title" content="LightClaw — Supervise local coding agents from Telegram" />
     <meta
       property="og:description"
-      content="Review the scope before local agents run. Keep the checks, patch, private receipt, and scoped undo path after."
+      content="Approve a bounded plan before local agents run. Review tests, diffs, private receipts, and scoped undo details."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://othmaneblial.github.io/lightclaw/" />
@@ -23,11 +23,11 @@
     <meta property="og:image:height" content="640" />
     <meta property="og:image:alt" content="LightClaw mission flow from Telegram scope review to a verified patch and private run receipt" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="LightClaw — Control Codex and Claude from Telegram" />
-    <meta name="twitter:description" content="Review the scope before local agents run. Keep the checks, patch, private receipt, and scoped undo path after." />
+    <meta name="twitter:title" content="LightClaw — Supervise local coding agents from Telegram" />
+    <meta name="twitter:description" content="Approve a bounded plan before local agents run. Review tests, diffs, private receipts, and scoped undo details." />
     <meta name="twitter:image" content="https://othmaneblial.github.io/lightclaw/assets/social-preview.png" />
     <meta name="twitter:image:alt" content="LightClaw mission flow from Telegram scope review to a verified patch and private run receipt" />
-    <title>LightClaw — Control Codex and Claude from Telegram</title>
+    <title>LightClaw — Supervise local coding agents from Telegram</title>
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -45,7 +45,7 @@
             "@type": "SoftwareApplication",
             "name": "LightClaw",
             "url": "https://othmaneblial.github.io/lightclaw/",
-            "description": "Telegram control for reviewed, verified work by local Codex and Claude coding agents.",
+            "description": "Telegram supervision for reviewed work by local Codex and Claude coding agents, with bounded approvals and private run receipts.",
             "applicationCategory": "DeveloperApplication",
             "operatingSystem": ["macOS", "Linux"],
             "runtimePlatform": "Python 3.10-3.13",
@@ -325,7 +325,7 @@
           <article class="boundary-card reveal">
             <span class="boundary-tag safe">FAIL CLOSED</span>
             <h3>Owner access</h3>
-            <p>An empty Telegram allowlist blocks startup. Public mode requires a separate explicit acknowledgement.</p>
+            <p>Allowlisted bots accept commands only in private chats. Group chats share approval state, so they require explicit public mode and no user allowlist.</p>
           </article>
           <article class="boundary-card reveal">
             <span class="boundary-tag safe">MINIMAL ENV</span>

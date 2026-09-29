@@ -2,6 +2,8 @@
 
 > LightClaw is an alpha, self-hosted Telegram control surface for reviewed and verified work by local Codex and Claude coding agents. Telegram and configured hosted model providers remain external services. Workspaces and private run receipts stay local by default. The deterministic demo uses fixtures, costs zero, and does not prove live-provider quality. LightClaw never pushes or publishes a demo result.
 
+Allowlisted bots accept commands only in private Telegram chats because group members share session and approval state. Group use requires explicit public mode with no user allowlist.
+
 Canonical site: https://othmaneblial.github.io/lightclaw/
 Source: https://github.com/OthmaneBlial/lightclaw
 License: MIT

@@ -95,6 +95,12 @@ def test_site_has_complete_share_and_search_metadata() -> None:
     assert struct.unpack(">II", social[16:24]) == (1280, 640)
 
 
+def test_site_explains_allowlisted_group_chat_boundary() -> None:
+    html, _ = _document()
+    assert "Allowlisted bots accept commands only in private chats." in html
+    assert "require explicit public mode and no user allowlist" in html
+
+
 def test_site_discovery_files_are_canonical_and_bounded() -> None:
     sitemap = ET.parse(SITE / "sitemap.xml").getroot()
     namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}

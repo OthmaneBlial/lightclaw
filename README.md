@@ -143,11 +143,15 @@ Current capabilities include:
 - namespaced SQLite FTS5 lexical recall with retention, export, and selective delete;
 - permission-manifest skills with pinned provenance, hash review, and prompt-only activation;
 - voice transcription, scheduled jobs, heartbeat, Telegram, and terminal chat;
-- token-free fixture adapters used by the full CI matrix.
+- token-free fixture adapters covered by the canonical local quality suite.
 
 ## Security model
 
-An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes`. Delegated processes get a minimal environment that excludes Telegram/provider keys. `lightclaw undo` refuses paths that lack a LightClaw ownership record.
+An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Allowlisted mode accepts commands and callbacks
+only in private chats because group members share session and approval state. Group use requires
+intentionally public mode (`LIGHTCLAW_PUBLIC_BOT_ACK=yes`) with no user allowlist. Delegated
+processes get a minimal environment that excludes Telegram/provider keys. `lightclaw undo`
+refuses paths that lack a LightClaw ownership record.
 
 These controls do not protect the host after you explicitly enable `trusted-command`, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
 
@@ -213,9 +217,10 @@ python -m pip install -e '.[dev]'
 python scripts/quality.py
 ```
 
-This is the canonical local quality command. The GitHub workflow runs the key-free suite on
-Python 3.10–3.13 across Ubuntu and macOS, installs the wheel in a clean environment,
-audits dependencies, and replays all three deterministic stories. Read
+This is the canonical local quality command. The GitHub CI workflow is disabled; run this
+suite before pushing. CodeQL and OpenSSF Scorecard remain active on GitHub. The suite installs
+the wheel in a clean environment, audits dependencies, and replays all three deterministic
+stories. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), the [support routes](SUPPORT.md), and the
 [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 
