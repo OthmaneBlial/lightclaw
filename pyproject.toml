@@ -58,6 +58,7 @@ providers = [
   "openai>=2,<4",
 ]
 build = [
+  "build>=1.2,<2",
   "setuptools>=75",
   "wheel",
 ]

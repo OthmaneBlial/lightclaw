@@ -8,8 +8,11 @@ COPY . .
 RUN python -m venv /opt/lightclaw/.venv \
     && /opt/lightclaw/.venv/bin/python -m pip install --require-hashes -r requirements-pip.txt \
     && /opt/lightclaw/.venv/bin/python -m pip install --require-hashes -r requirements-runtime.txt \
-    && /opt/lightclaw/.venv/bin/python -m pip install --no-deps --no-build-isolation . \
-    && /opt/lightclaw/.venv/bin/python -m pip uninstall -y setuptools wheel packaging \
+    && /opt/lightclaw/.venv/bin/python -m build --wheel --no-isolation --outdir /tmp/lightclaw-dist \
+    && wheel_path="$(find /tmp/lightclaw-dist -maxdepth 1 -name '*.whl' -print -quit)" \
+    && /opt/lightclaw/.venv/bin/python -c 'import hashlib, pathlib, sys; wheel = pathlib.Path(sys.argv[1]); pathlib.Path("/tmp/lightclaw-wheel-requirements.txt").write_text(f"{wheel.resolve()} --hash=sha256:{hashlib.sha256(wheel.read_bytes()).hexdigest()}\n")' "$wheel_path" \
+    && /opt/lightclaw/.venv/bin/python -m pip install --require-hashes --no-deps -r /tmp/lightclaw-wheel-requirements.txt \
+    && /opt/lightclaw/.venv/bin/python -m pip uninstall -y build packaging pyproject-hooks setuptools wheel \
     && /opt/lightclaw/.venv/bin/python -m pip check \
     && /opt/lightclaw/.venv/bin/python -m pip uninstall -y pip
 

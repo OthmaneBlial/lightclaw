@@ -39,7 +39,6 @@ jobs:
         run: |
           python -m pip install --disable-pip-version-check --require-hashes -r requirements-pip.txt
           python -m pip install --disable-pip-version-check --require-hashes -r requirements-dev.txt
-          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation .
       - name: Verify release version
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -58,6 +57,13 @@ jobs:
         run: |
           package_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
           python -c 'from packaging.version import Version; import sys; version = Version(sys.argv[1]); assert version.is_prerelease or version.is_devrelease, "manual publication is prerelease-only"' "$package_version"
+      - name: Build and install hash-pinned release wheel
+        run: |
+          python -m build --no-isolation
+          python -m twine check dist/*
+          wheel_path="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          python -c 'import hashlib, pathlib, sys; wheel = pathlib.Path(sys.argv[1]); pathlib.Path("/tmp/lightclaw-wheel-requirements.txt").write_text(f"{wheel.resolve()} --hash=sha256:{hashlib.sha256(wheel.read_bytes()).hexdigest()}\n")' "$wheel_path"
+          python -m pip install --disable-pip-version-check --require-hashes --no-deps -r /tmp/lightclaw-wheel-requirements.txt
       - name: Run tests and deterministic stories
         run: |
           python -m pytest -q
@@ -68,10 +74,6 @@ jobs:
           lightclaw demo --scenario multi-agent --output "$demo_root/multi-agent" --json
           test -s "$demo_root/repo-task/phone-to-patch.json"
           test -s "$demo_root/repo-task/review/changes.patch"
-      - name: Build and inspect distributions
-        run: |
-          python -m build --no-isolation
-          python -m twine check dist/*
       - name: Measure release runtime footprint
         run: |
           wheel_path="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
