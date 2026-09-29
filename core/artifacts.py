@@ -138,16 +138,25 @@ def create_patch_bundle(
     root = Path(workspace).expanduser().resolve()
     output = Path(output_dir).expanduser().resolve()
     _require_git(root, "add", "-A")
-    status_text = _require_git(root, "status", "--porcelain=v1", "--untracked-files=all")
+    status = _git(root, "diff", "--cached", "--name-status", "-z", "--no-renames", "HEAD")
+    if status.returncode != 0:
+        detail = redact_text(status.stderr or status.stdout).strip()[-800:]
+        raise ArtifactError(detail or "could not inspect changed paths")
+    status_fields = status.stdout.split("\0")
+    if status_fields and not status_fields[-1]:
+        status_fields.pop()
+    if len(status_fields) % 2:
+        raise ArtifactError("Git returned malformed changed-path data")
+    if len(status_fields) > 1000:
+        raise ArtifactError("review artifacts support at most 500 changed paths; reduce the run scope")
     patch = _require_git(root, "diff", "--cached", "--binary", "--no-ext-diff", "HEAD", timeout=120)
     diff_stat = _require_git(root, "diff", "--cached", "--stat", "HEAD")
     branch = _require_git(root, "branch", "--show-current")
     base_commit = _require_git(root, "rev-parse", "HEAD")
-    changed_paths: list[dict[str, str]] = []
-    for line in status_text.splitlines()[:500]:
-        if len(line) < 4:
-            continue
-        changed_paths.append({"status": line[:2].strip() or "?", "path": line[3:]})
+    changed_paths = [
+        {"status": change[:1] or "?", "path": path}
+        for change, path in zip(status_fields[::2], status_fields[1::2], strict=True)
+    ]
     patch_path = output / "changes.patch"
     manifest_path = output / "artifact.json"
     _write_private(patch_path, patch + ("\n" if patch and not patch.endswith("\n") else ""))

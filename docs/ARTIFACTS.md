@@ -5,6 +5,8 @@ Every delegated code run starts from a local Git checkpoint on a `lightclaw/<run
 - `changes.patch`: a standard binary-safe Git patch;
 - `artifact.json`: the base commit, branch, changed paths, diff stat, and patch SHA-256.
 
+Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
+
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.
 
 ## Review a result

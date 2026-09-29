@@ -96,6 +96,29 @@ def test_patch_bundle_is_private_reproducible_and_locally_acceptable(tmp_path):
     assert _git(workspace, "remote") == ""
 
 
+def test_patch_bundle_preserves_unusual_git_paths(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    initialize_artifact_repository(workspace, "run-paths")
+    unusual_path = "line\nbreak "
+    (workspace / unusual_path).write_text("review this path\n", encoding="utf-8")
+
+    bundle = create_patch_bundle(workspace, tmp_path / "receipt", run_id="run-paths")
+
+    assert bundle["changed_paths"] == [{"status": "A", "path": unusual_path}]
+
+
+def test_patch_bundle_refuses_more_than_500_changed_paths(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    initialize_artifact_repository(workspace, "run-many-paths")
+    for index in range(501):
+        (workspace / f"file-{index:03}.txt").touch()
+
+    with pytest.raises(ArtifactError, match="at most 500 changed paths"):
+        create_patch_bundle(workspace, tmp_path / "receipt", run_id="run-many-paths")
+
+
 def test_reject_preserves_files_and_only_unstages(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
