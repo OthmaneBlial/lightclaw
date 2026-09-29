@@ -7,6 +7,7 @@ import re
 import secrets
 import tempfile
 import time
+from html import unescape
 from pathlib import Path
 
 from telegram import Update
@@ -44,37 +45,35 @@ class BotMessagingMixin:
 
     @staticmethod
     def _chunk_message(text: str, max_len: int = 3500) -> list[str]:
-        """Split a long message into chunks that fit Telegram's limit.
-
-        Splits at newline boundaries to avoid breaking HTML tags or words.
-        Uses 3500 instead of 4096 to leave room for HTML entity expansion
-        (< becomes &lt;, > becomes &gt;, etc. which can ~2-3x the size).
-        """
-        if len(text) <= max_len:
+        """Split Markdown into chunks below Telegram's UTF-16 text limit."""
+        if max_len < 1:
+            raise ValueError("max_len must be positive")
+        if not text or len(text.encode("utf-16-le")) // 2 <= max_len:
             return [text]
 
-        chunks = []
+        chunks: list[str] = []
         while text:
-            if len(text) <= max_len:
+            units = 0
+            safe_cut = 0
+            newline_cut = 0
+            for index, char in enumerate(text):
+                units += 2 if ord(char) > 0xFFFF else 1
+                if units > max_len:
+                    break
+                safe_cut = index + 1
+                if char == "\n":
+                    newline_cut = safe_cut
+            if safe_cut == len(text):
                 chunks.append(text)
                 break
-
-            # Find the last newline within the limit
-            split_at = text.rfind("\n", 0, max_len)
-            if split_at <= 0:
-                # No newline found — split at max_len (last resort)
-                split_at = max_len
-
+            split_at = newline_cut or safe_cut
             chunks.append(text[:split_at])
-            text = text[split_at:].lstrip("\n")
+            text = text[split_at:]
 
         return chunks
 
     async def _send_response(self, placeholder, update: Update, markdown_response: str):
-        """Send the response, chunking if needed, then convert to HTML.
-
-        Chunks BEFORE HTML conversion to account for entity expansion.
-        """
+        """Send bounded Markdown chunks after converting each one to HTML."""
         if len(markdown_response) > 6000 or self._is_large_code_leak(markdown_response):
             artifact = self._write_long_response_artifact(markdown_response)
             summary = (
@@ -103,10 +102,6 @@ class BotMessagingMixin:
             self._log_bot_message(session_id, markdown_chunk)
             # Convert each chunk to HTML separately
             html_chunk = markdown_to_telegram_html(markdown_chunk)
-
-            # Safety check: if HTML conversion made it too long, truncate
-            if len(html_chunk) > 4096:
-                html_chunk = html_chunk[:4050] + "..."
 
             if i == 0 and placeholder:
                 # First chunk: edit the placeholder
@@ -171,7 +166,7 @@ class BotMessagingMixin:
 
         # Fallback: strip HTML tags and send as plain text
         try:
-            plain = re.sub(r"<[^>]+>", "", text)
+            plain = unescape(re.sub(r"<[^>]+>", "", text))
             await send_fn(plain)
             return True
         except Exception as e:
