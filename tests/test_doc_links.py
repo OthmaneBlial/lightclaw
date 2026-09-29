@@ -1,4 +1,5 @@
 import subprocess
+import time
 from pathlib import Path
 
 from scripts.check_doc_links import check_repository
@@ -82,3 +83,11 @@ def test_malformed_external_url_reports_source_line_without_fetching(tmp_path):
     errors = check_repository(root)
     assert len(errors) == 2
     assert all(error.startswith("README.md:") and "malformed" in error for error in errors)
+
+
+def test_malformed_escaped_link_is_parsed_without_pathological_backtracking(tmp_path):
+    root = _tracked_repo(tmp_path, {"README.md": "[](" + r"\!" * 22})
+
+    started = time.monotonic()
+    assert check_repository(root) == []
+    assert time.monotonic() - started < 0.5

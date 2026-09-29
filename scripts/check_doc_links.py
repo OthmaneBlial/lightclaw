@@ -13,7 +13,8 @@ from urllib.parse import unquote, urlsplit
 FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 CLOSE_FENCE_RE = re.compile(r"^ {0,3}(`+|~+)\s*$")
 INLINE_CODE_RE = re.compile(r"`+[^`\n]*`+")
-LINK_RE = re.compile(r"!?\[[^\]]*\]\(\s*(<[^>\n]+>|(?:\\.|[^)\s])+)(?:\s+[^)]*)?\)")
+# Keep escaped characters and ordinary URL characters disjoint to avoid ReDoS.
+LINK_RE = re.compile(r"!?\[[^\]]*\]\(\s*(<[^>\n]+>|(?:\\.|[^)\\\s])+)(?:\s+[^)]*)?\)")
 REFERENCE_RE = re.compile(r"^\s*\[[^\]]+\]:\s*(<[^>\n]+>|\S+)")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$")
 
