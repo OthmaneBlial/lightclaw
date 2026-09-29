@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -167,6 +168,64 @@ def test_stale_heartbeat_keeps_workspace_locked_while_worker_lives(tmp_path):
     assert store.claim_next(workspace=workspace) is None
     assert active["run_id"] in inspect_job_database(database)["stalled_run_ids"]
     assert store.get_job(queued["run_id"])["status"] == "queued"
+    store.close()
+
+
+def test_recovery_detects_reused_worker_pid(tmp_path):
+    database = tmp_path / "jobs.db"
+    store = JobStore(database)
+    job = _create(store, tmp_path / "repo")
+    store.claim_next(workspace=tmp_path / "repo", worker_pid=os.getpid())
+    with store.db:
+        store.db.execute(
+            "UPDATE jobs SET worker_start_token = 'different-process' WHERE run_id = ?",
+            (job["run_id"],),
+        )
+
+    assert job["run_id"] in inspect_job_database(database)["stalled_run_ids"]
+    assert store.recover_stalled() == [job["run_id"]]
+    assert "replaced" in store.get_job(job["run_id"])["last_error"]
+    store.close()
+
+
+def test_legacy_job_database_migrates_worker_identity_column(tmp_path):
+    database = tmp_path / "jobs.db"
+    now = time.time()
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        CREATE TABLE jobs (
+            run_id TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL,
+            workspace TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            heartbeat_at REAL,
+            worker_pid INTEGER
+        );
+        """
+    )
+    connection.execute(
+        "INSERT INTO jobs(run_id, schema_version, workspace, status, created_at, updated_at, heartbeat_at, worker_pid) "
+        "VALUES ('legacy-run', 1, ?, 'running', ?, ?, ?, ?)",
+        (str(tmp_path / "repo"), now, now, now, os.getpid()),
+    )
+    connection.commit()
+    connection.close()
+
+    # Read-only diagnostics still support databases before the migration runs.
+    assert inspect_job_database(database)["stalled_run_ids"] == []
+    store = JobStore(database)
+    columns = {row["name"] for row in store.db.execute("PRAGMA table_info(jobs)")}
+    migrated = store.db.execute(
+        "SELECT schema_version, worker_start_token FROM jobs WHERE run_id = 'legacy-run'"
+    ).fetchone()
+    assert "worker_start_token" in columns
+    assert migrated["schema_version"] == 2
+    assert migrated["worker_start_token"] == ""
+    assert store.recover_stalled() == []
     store.close()
 
 

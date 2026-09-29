@@ -12,7 +12,7 @@ import time
 import uuid
 from pathlib import Path, PurePosixPath
 
-JOB_SCHEMA_VERSION = 1
+JOB_SCHEMA_VERSION = 2
 TERMINAL_STATUSES = frozenset({"canceled", "failed", "succeeded", "accepted", "rejected"})
 RESUMABLE_STATUSES = frozenset({"paused", "stalled", "failed"})
 
@@ -140,6 +140,7 @@ class JobStore:
                     retry_count INTEGER NOT NULL DEFAULT 0,
                     max_retries INTEGER NOT NULL DEFAULT 1,
                     worker_pid INTEGER,
+                    worker_start_token TEXT NOT NULL DEFAULT '',
                     created_at REAL NOT NULL,
                     updated_at REAL NOT NULL,
                     started_at REAL,
@@ -180,6 +181,14 @@ class JobStore:
                 );
                 """
             )
+            columns = {str(row["name"]) for row in self.db.execute("PRAGMA table_info(jobs)")}
+            if "worker_start_token" not in columns:
+                self.db.execute(
+                    "ALTER TABLE jobs ADD COLUMN worker_start_token TEXT NOT NULL DEFAULT ''"
+                )
+                self.db.execute(
+                    "UPDATE jobs SET schema_version = ?", (JOB_SCHEMA_VERSION,)
+                )
             self.db.commit()
         try:
             self.path.chmod(0o600)
@@ -405,11 +414,13 @@ class JobStore:
                     self.db.commit()
                     return None
                 now = time.time()
+                worker_pid = worker_pid or os.getpid()
+                worker_start_token = self._process_start_token(worker_pid)
                 self.db.execute(
-                    "UPDATE jobs SET status = 'running', worker_pid = ?, started_at = COALESCE(started_at, ?), heartbeat_at = ?, updated_at = ? WHERE run_id = ? AND status = 'queued'",
-                    (worker_pid or os.getpid(), now, now, now, row["run_id"]),
+                    "UPDATE jobs SET status = 'running', worker_pid = ?, worker_start_token = ?, started_at = COALESCE(started_at, ?), heartbeat_at = ?, updated_at = ? WHERE run_id = ? AND status = 'queued'",
+                    (worker_pid, worker_start_token, now, now, now, row["run_id"]),
                 )
-                self._event(row["run_id"], "claimed", {"worker_pid": worker_pid or os.getpid()})
+                self._event(row["run_id"], "claimed", {"worker_pid": worker_pid})
                 self.db.commit()
             except Exception:
                 self.db.rollback()
@@ -418,10 +429,13 @@ class JobStore:
 
     def heartbeat(self, run_id: str, *, worker_pid: int | None = None) -> dict[str, object]:
         now = time.time()
+        worker_start_token = (
+            self._process_start_token(worker_pid) if worker_pid is not None else None
+        )
         with self._lock, self.db:
             updated = self.db.execute(
-                "UPDATE jobs SET heartbeat_at = ?, updated_at = ?, worker_pid = COALESCE(?, worker_pid) WHERE run_id = ? AND status IN ('running', 'cancel_requested')",
-                (now, now, worker_pid, run_id),
+                "UPDATE jobs SET heartbeat_at = ?, updated_at = ?, worker_pid = COALESCE(?, worker_pid), worker_start_token = COALESCE(?, worker_start_token) WHERE run_id = ? AND status IN ('running', 'cancel_requested')",
+                (now, now, worker_pid, worker_start_token, run_id),
             )
             if updated.rowcount != 1:
                 raise JobStateError("heartbeat requires a running job")
@@ -632,20 +646,29 @@ class JobStore:
         except OSError:
             return False
 
+    @staticmethod
+    def _worker_process_alive(pid: int | None, start_token: str | None) -> bool:
+        if not JobStore._pid_alive(pid):
+            return False
+        if not start_token:
+            return True
+        current_token = JobStore._process_start_token(int(pid))
+        return not current_token or current_token == start_token
+
     def recover_stalled(self) -> list[str]:
         current = time.time()
         recovered: list[str] = []
         with self._lock:
             rows = self.db.execute(
-                "SELECT run_id, worker_pid, status FROM jobs WHERE status IN ('running', 'cancel_requested', 'stalled')"
+                "SELECT run_id, worker_pid, worker_start_token, status FROM jobs WHERE status IN ('running', 'cancel_requested', 'stalled')"
             ).fetchall()
         for row in rows:
-            if self._pid_alive(row["worker_pid"]):
+            if self._worker_process_alive(row["worker_pid"], row["worker_start_token"]):
                 continue
             groups_stopped = self._stop_process_groups(str(row["run_id"]))
             if row["status"] == "stalled":
                 continue
-            reason = "worker process is absent"
+            reason = "worker process is absent or replaced"
             if not groups_stopped:
                 reason += "; delegated process cleanup failed"
             with self._lock, self.db:
@@ -695,8 +718,15 @@ def inspect_job_database(db_path: str | Path, *, stall_after_seconds: int = 120)
                 "SELECT status, COUNT(*) AS count FROM jobs GROUP BY status ORDER BY status"
             ).fetchall()
         }
+        columns = {str(row["name"]) for row in db.execute("PRAGMA table_info(jobs)")}
+        worker_token_column = (
+            "worker_start_token" if "worker_start_token" in columns else "'' AS worker_start_token"
+        )
         active_rows = db.execute(
-            "SELECT run_id, workspace, status, heartbeat_at, worker_pid FROM jobs WHERE status IN ('running', 'cancel_requested', 'stalled') ORDER BY updated_at DESC LIMIT 20"
+            "SELECT run_id, workspace, status, heartbeat_at, worker_pid, "
+            f"{worker_token_column} FROM jobs "
+            "WHERE status IN ('running', 'cancel_requested', 'stalled') "
+            "ORDER BY updated_at DESC LIMIT 20"
         ).fetchall()
         db.close()
     except (OSError, sqlite3.Error) as exc:
@@ -717,7 +747,9 @@ def inspect_job_database(db_path: str | Path, *, stall_after_seconds: int = 120)
             stalled.append(str(row["run_id"]))
             continue
         heartbeat = float(row.get("heartbeat_at") or 0.0)
-        if heartbeat < cutoff or not JobStore._pid_alive(row.get("worker_pid")):
+        if heartbeat < cutoff or not JobStore._worker_process_alive(
+            row.get("worker_pid"), row.get("worker_start_token")
+        ):
             stalled.append(str(row["run_id"]))
     return {
         "schema_version": JOB_SCHEMA_VERSION,
