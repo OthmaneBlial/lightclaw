@@ -1,6 +1,11 @@
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
+from core.bot import LightClawBot
 from core.bot.file_ops import BotFileOpsMixin
+from core.types import FileOperationResult
 
 
 def _hunk(search, replace):
@@ -68,3 +73,87 @@ def test_chat_fence_stripping_keeps_surrounding_text():
 )
 def test_incomplete_html_detection(text, incomplete):
     assert BotFileOpsMixin._is_incomplete_html_text(text) is incomplete
+
+
+@pytest.mark.asyncio
+async def test_credential_files_and_contents_never_enter_automatic_edit_context(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".env").write_text("OPENAI_API_KEY=env-secret\n", encoding="utf-8")
+    (workspace / "settings.json").write_text(
+        '{"apiKey": "json-secret"}\n', encoding="utf-8"
+    )
+    (workspace / "README.md").write_text("safe context\n", encoding="utf-8")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    bot._last_file_by_session = {}
+    bot.llm = SimpleNamespace(chat=AsyncMock(return_value=""))
+
+    await bot._force_file_ops_pass("chat-1", "modify the app", "No changes yet.")
+
+    prompt = bot.llm.chat.await_args.args[0][0]["content"]
+    assert "safe context" in prompt
+    assert "env-secret" not in prompt
+    assert "json-secret" not in prompt
+    assert '"apiKey"' not in prompt
+
+
+@pytest.mark.asyncio
+async def test_model_file_blocks_cannot_overwrite_env_files(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    env_file = workspace / ".env"
+    env_file.write_text("OPENAI_API_KEY=keep-me\n", encoding="utf-8")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+
+    operations, _ = await bot._process_file_blocks(
+        "```env:.env\nOPENAI_API_KEY=replacement\n```",
+        allow_file_writes=True,
+    )
+
+    assert len(operations) == 1
+    assert operations[0].action == "error"
+    assert "credential-sensitive" in operations[0].detail
+    assert env_file.read_text(encoding="utf-8") == "OPENAI_API_KEY=keep-me\n"
+
+
+@pytest.mark.asyncio
+async def test_failed_sensitive_edit_is_not_retried_with_file_contents(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / ".env").write_text("OPENAI_API_KEY=env-secret\n", encoding="utf-8")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    bot.llm = SimpleNamespace(chat=AsyncMock())
+
+    operations, cleaned = await bot._retry_failed_edits(
+        "update .env",
+        "failed edit",
+        [FileOperationResult("error", ".env", "SEARCH text not found")],
+    )
+
+    assert operations == []
+    assert cleaned == ""
+    bot.llm.chat.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_html_repair_does_not_resend_detectable_credentials(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "index.html").write_text(
+        "<html><body>API_KEY=html-secret", encoding="utf-8"
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    bot.llm = SimpleNamespace(chat=AsyncMock())
+
+    repairs = await bot._repair_incomplete_html(
+        "chat-1", "repair the page", [FileOperationResult("created", "index.html")]
+    )
+
+    assert len(repairs) == 1
+    assert repairs[0].action == "error"
+    assert "may contain credentials" in repairs[0].detail
+    bot.llm.chat.assert_not_awaited()

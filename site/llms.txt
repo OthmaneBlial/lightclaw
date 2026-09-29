@@ -4,6 +4,8 @@
 
 Allowlisted bots accept commands only in private Telegram chats because group members share session and approval state. Group use requires explicit public mode with no user allowlist.
 
+Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
+
 Canonical site: https://othmaneblial.github.io/lightclaw/
 Source: https://github.com/OthmaneBlial/lightclaw
 License: MIT

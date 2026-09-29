@@ -101,6 +101,12 @@ def test_site_explains_allowlisted_group_chat_boundary() -> None:
     assert "require explicit public mode and no user allowlist" in html
 
 
+def test_site_discloses_credential_context_guards() -> None:
+    html, _ = _document()
+    assert "Automatic edit retries omit common credential paths" in html
+    assert "generated edits cannot write common credential paths" in html
+
+
 def test_site_discovery_files_are_canonical_and_bounded() -> None:
     sitemap = ET.parse(SITE / "sitemap.xml").getroot()
     namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}

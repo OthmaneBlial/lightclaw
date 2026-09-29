@@ -150,7 +150,9 @@ Current capabilities include:
 An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Allowlisted mode accepts commands and callbacks
 only in private chats because group members share session and approval state. Group use requires
 intentionally public mode (`LIGHTCLAW_PUBLIC_BOT_ACK=yes`) with no user allowlist. Delegated
-processes get a minimal environment that excludes Telegram/provider keys. `lightclaw undo`
+processes get a minimal environment that excludes Telegram/provider keys. Automatic edit retries
+omit common credential paths and files with detectable secrets; model-generated file blocks cannot
+write common credential paths. This detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.
 
 These controls do not protect the host after you explicitly enable `trusted-command`, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.

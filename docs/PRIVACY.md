@@ -17,6 +17,8 @@ explicitly sends a prompt to a chosen provider or performs a separate publicatio
 | Sanitized Run Card | explicit local destination after `run export --apply` | never |
 | Showcase entry | manually reviewed Git commit/pull request | only by that explicit action |
 
+During an edit requested in `/mode edit`, LightClaw may send bounded workspace file excerpts to the configured provider for a retry or repair pass. Common credential paths and file contents matching current secret-detection patterns are omitted; detection is heuristic.
+
 Private receipts may contain goals, commands, workspace-relative details, recovery context,
 and timestamps. They are mode `0600` and are not suitable for direct publication. The Run
 Card exporter uses an allowlist and omits commands, handoffs, checkpoints, undo paths, and
@@ -30,4 +32,3 @@ automated sanitizer can prove anonymity, so a maintainer also reviews the full c
 GitHub Actions artifacts are restricted to package distributions, coverage, security
 results, and generated benchmark/runtime evidence. A regression test rejects workflow
 artifact blocks that mention receipts, prompts, runtime homes, workspaces, or repositories.
-

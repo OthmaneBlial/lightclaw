@@ -27,12 +27,33 @@ SAFE_DELEGATED_ENV_KEYS = frozenset(
 )
 
 SENSITIVE_NAME_RE = re.compile(
-    r"(?i)(?:api[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|"
+    r"(?i)(?:api[_-]?key|access[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|"
     r"bot[_-]?token|password|passwd|secret|credential|private[_-]?key)"
 )
 SENSITIVE_ASSIGNMENT_RE = re.compile(
-    r"(?i)\b([A-Z0-9_.-]*(?:API[_-]?KEY|TOKEN|PASSWORD|PASSWD|SECRET|CREDENTIAL)"
-    r"[A-Z0-9_.-]*)(\s*[:=]\s*)([^\s,;]+)"
+    r"(?i)([\"']?)([A-Z0-9_.-]*(?:API[_-]?KEY|ACCESS[_-]?KEY|TOKEN|PASSWORD|PASSWD|SECRET|CREDENTIAL)"
+    r"[A-Z0-9_.-]*)([\"']?)(\s*[:=]\s*)([\"']?)([^\s,;}\"']+)([\"']?)"
+)
+SENSITIVE_PATH_DIRECTORIES = frozenset({".aws", ".docker", ".gnupg", ".kube", ".ssh", "credentials", "secrets"})
+SENSITIVE_PATH_NAMES = frozenset(
+    {
+        ".netrc",
+        ".npmrc",
+        ".pypirc",
+        "application_default_credentials.json",
+        "credentials.json",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
+        "id_rsa",
+    }
+)
+SENSITIVE_KEY_SUFFIXES = (".jks", ".key", ".keystore", ".p12", ".pem", ".pfx")
+SENSITIVE_DATA_SUFFIXES = (".conf", ".config", ".ini", ".json", ".toml", ".yaml", ".yml")
+SENSITIVE_PATH_MARKER_RE = re.compile(
+    r"(?i)(?:^|[._-])(?:api[_-]?keys?|access[_-]?keys?|auth(?:[_-]?token)?|access[_-]?token|"
+    r"refresh[_-]?token|bot[_-]?token|credentials?|password|passwd|secrets?|token|"
+    r"private[_-]?keys?)(?:$|[._-])"
 )
 BEARER_RE = re.compile(r"(?i)\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}")
 TELEGRAM_TOKEN_RE = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b")
@@ -71,10 +92,35 @@ def redact_text(text: str, known_values: Mapping[str, str] | None = None) -> str
                 continue
             if len(secret) >= 4:
                 cleaned = cleaned.replace(secret, "[REDACTED]")
-    cleaned = SENSITIVE_ASSIGNMENT_RE.sub(r"\1\2[REDACTED]", cleaned)
+    cleaned = SENSITIVE_ASSIGNMENT_RE.sub(r"\1\2\3\4\5[REDACTED]\7", cleaned)
     cleaned = BEARER_RE.sub(r"\1[REDACTED]", cleaned)
     cleaned = TELEGRAM_TOKEN_RE.sub("[REDACTED_TELEGRAM_TOKEN]", cleaned)
     return cleaned
+
+
+def is_sensitive_path(path: str) -> bool:
+    """Recognize common credential paths before including file contents in prompts."""
+    parts = [part.lower() for part in str(path).replace("\\", "/").split("/") if part]
+    if any(part in SENSITIVE_PATH_DIRECTORIES for part in parts):
+        return True
+    name = parts[-1] if parts else ""
+    if (
+        name in SENSITIVE_PATH_NAMES
+        or name == ".env"
+        or name.startswith(".env.")
+        or name.endswith(".env")
+        or name.endswith(SENSITIVE_KEY_SUFFIXES)
+    ):
+        return True
+    return bool(
+        name.endswith(SENSITIVE_DATA_SUFFIXES) and SENSITIVE_PATH_MARKER_RE.search(name)
+    )
+
+
+def has_sensitive_content(text: str) -> bool:
+    """Return True when current credential redaction rules detect secret-like text."""
+    source = str(text or "")
+    return redact_text(source) != source
 
 
 def access_policy_label(allowed_users: list[str], public_ack: bool) -> str:

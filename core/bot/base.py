@@ -22,7 +22,7 @@ from ..constants import STRICT_LOCAL_AGENT_DENY_PATTERNS
 from ..jobs import JobStore
 from ..logging_setup import log
 from ..personality import load_personality
-from ..security import access_policy_label
+from ..security import access_policy_label, is_sensitive_path
 
 
 class BotBaseMixin:
@@ -317,14 +317,20 @@ class BotBaseMixin:
         # 1) Explicit file mention in user text.
         for mention in self._extract_file_mentions(user_text):
             target, rel_path, err = self._resolve_workspace_path(mention)
-            if not err and target and rel_path:
+            if not err and target and rel_path and not is_sensitive_path(rel_path):
                 candidates.append(rel_path)
 
         # 2) Last touched file in this chat.
         last = self._last_file_by_session.get(session_id)
         if last:
             target, rel_path, err = self._resolve_workspace_path(last)
-            if not err and target and rel_path and target.exists():
+            if (
+                not err
+                and target
+                and rel_path
+                and not is_sensitive_path(rel_path)
+                and target.exists()
+            ):
                 candidates.append(rel_path)
 
         # 3) Most recently modified workspace files.
@@ -333,7 +339,8 @@ class BotBaseMixin:
         def recent_files():
             for path in workspace.rglob("*"):
                 try:
-                    if path.is_file():
+                    rel_path = path.relative_to(workspace).as_posix()
+                    if path.is_file() and not is_sensitive_path(rel_path):
                         yield path.stat().st_mtime, path
                 except OSError:
                     continue

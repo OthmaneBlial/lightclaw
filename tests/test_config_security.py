@@ -5,7 +5,13 @@ from types import SimpleNamespace
 
 from config import Config, load_config
 from core.bot.base import BotBaseMixin
-from core.security import access_policy_label, delegated_process_env, redact_text
+from core.security import (
+    access_policy_label,
+    delegated_process_env,
+    has_sensitive_content,
+    is_sensitive_path,
+    redact_text,
+)
 
 
 def test_config_defaults_fail_closed_and_sandboxed():
@@ -110,6 +116,20 @@ def test_workspace_candidates_rank_newest_files(tmp_path):
     ]
 
 
+def test_recent_credentials_do_not_hide_safe_workspace_candidates(tmp_path):
+    bot = BotBaseMixin.__new__(BotBaseMixin)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot._last_file_by_session = {}
+    for index in range(25):
+        path = tmp_path / f".env.secret-{index:02}.local"
+        path.write_text("TOKEN=private\n", encoding="utf-8")
+        os.utime(path, (100 + index, 100 + index))
+    (tmp_path / "safe.txt").write_text("safe\n", encoding="utf-8")
+    os.utime(tmp_path / "safe.txt", (1, 1))
+
+    assert bot._collect_workspace_candidates("", "chat-1", limit=1) == ["safe.txt"]
+
+
 def test_delegated_environment_is_allowlisted_and_secret_free():
     source = {
         "PATH": "/usr/bin",
@@ -152,3 +172,14 @@ def test_redaction_covers_assignments_bearer_tokens_and_known_values():
     assert "123456789:" not in redacted
     assert "custom-value" not in redacted
     assert redacted.count("REDACTED") >= 4
+
+
+def test_sensitive_context_detection_covers_credential_paths_and_json_keys():
+    assert is_sensitive_path(".env.local")
+    assert is_sensitive_path(".ssh/id_ed25519")
+    assert is_sensitive_path("config/credentials.json")
+    assert not is_sensitive_path("src/auth.py")
+    assert has_sensitive_content('{"apiKey": "json-secret"}')
+    assert has_sensitive_content('AWS_ACCESS_KEY_ID="AKIAEXAMPLE"')
+    assert not has_sensitive_content('print("ordinary code")')
+    assert "json-secret" not in redact_text('{"apiKey": "json-secret"}')

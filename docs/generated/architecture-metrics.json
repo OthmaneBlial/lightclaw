@@ -14,9 +14,9 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 93,
-      "line": 221,
-      "lines": 445,
+      "branch_points": 95,
+      "line": 222,
+      "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
     },
@@ -128,9 +128,9 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "branch_points": 93,
-      "line": 221,
-      "lines": 445,
+      "branch_points": 95,
+      "line": 222,
+      "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
     },
@@ -237,7 +237,7 @@
       "path": "skills.py"
     },
     {
-      "lines": 934,
+      "lines": 977,
       "path": "core/bot/file_ops.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 18523,
+  "runtime_lines": 18619,
   "schema_version": 1
 }

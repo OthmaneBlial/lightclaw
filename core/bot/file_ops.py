@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from ..logging_setup import log
+from ..security import has_sensitive_content, is_sensitive_path
 from ..types import FileOperationResult
 
 
@@ -269,6 +270,13 @@ class BotFileOpsMixin:
             if path_err or target is None or rel_path is None:
                 operations.append(FileOperationResult("error", display_path, path_err or "invalid path"))
                 return f"[Save failed: {display_path}]"
+            if is_sensitive_path(rel_path):
+                operations.append(
+                    FileOperationResult(
+                        "error", rel_path, "credential-sensitive paths cannot be changed by model-generated file blocks"
+                    )
+                )
+                return f"[Save blocked: {rel_path}]"
 
             before = None
             if target.exists():
@@ -458,6 +466,13 @@ class BotFileOpsMixin:
             if path_err or target is None or rel_path is None:
                 operations.append(FileOperationResult("error", display_path, path_err or "invalid path"))
                 return f"[Edit failed: {display_path}]"
+            if is_sensitive_path(rel_path):
+                operations.append(
+                    FileOperationResult(
+                        "error", rel_path, "credential-sensitive paths cannot be changed by model-generated file blocks"
+                    )
+                )
+                return f"[Edit blocked: {rel_path}]"
 
             if not target.exists():
                 operations.append(FileOperationResult("error", rel_path, "file not found"))
@@ -692,11 +707,15 @@ class BotFileOpsMixin:
             target, rel_path, path_err = self._resolve_workspace_path(op.path)
             if path_err or target is None or rel_path is None:
                 continue
+            if is_sensitive_path(rel_path):
+                continue
             if not target.exists():
                 continue
             try:
                 content = target.read_text(encoding="utf-8")
             except Exception:
+                continue
+            if has_sensitive_content(content):
                 continue
 
             # Keep retry prompt bounded.
@@ -768,7 +787,11 @@ class BotFileOpsMixin:
         """Force a file operation pass when the model returned prose/no-op."""
         target_files = self._collect_workspace_candidates(user_text, session_id, limit=4)
         snippets: list[str] = []
+        sensitive_files_omitted = False
         for rel_path in target_files:
+            if is_sensitive_path(rel_path):
+                sensitive_files_omitted = True
+                continue
             target, _, err = self._resolve_workspace_path(rel_path)
             if err or target is None or not target.exists():
                 continue
@@ -776,17 +799,27 @@ class BotFileOpsMixin:
                 content = target.read_text(encoding="utf-8")
             except Exception:
                 continue
+            if has_sensitive_content(content):
+                sensitive_files_omitted = True
+                continue
             shown = content[:14000]
             if len(content) > 14000:
                 shown += "\n... [truncated]"
             snippets.append(f"### {rel_path}\n```text\n{shown}\n```")
 
         joined_snippets = "\n\n".join(snippets)
+        if sensitive_files_omitted and not snippets:
+            return [], (
+                "Automatic edit retry skipped because workspace candidates may contain credentials. "
+                "Share a sanitized excerpt or edit that file locally."
+            )
         file_context = (
             f"Current candidate workspace files:\n{joined_snippets}"
             if snippets
             else "Current candidate workspace files:\n(none yet - create new files in workspace as needed)"
         )
+        if sensitive_files_omitted:
+            file_context += "\nPotentially credential-bearing files were omitted; do not recreate or rewrite them."
 
         forced_system = (
             "You are a file operation engine for LightClaw. "
@@ -859,11 +892,21 @@ class BotFileOpsMixin:
 
             max_attempts = 3
             repaired = False
+            repair_skipped = False
 
             for attempt in range(1, max_attempts + 1):
                 try:
                     content = target.read_text(encoding="utf-8")
                 except Exception:
+                    break
+
+                if is_sensitive_path(rel_path) or has_sensitive_content(content):
+                    repair_skipped = True
+                    repair_ops.append(
+                        FileOperationResult(
+                            "error", rel_path, "HTML repair skipped because the file may contain credentials"
+                        )
+                    )
                     break
 
                 if not self._is_incomplete_html_text(content):
@@ -920,7 +963,7 @@ class BotFileOpsMixin:
                     repaired = True
                     break
 
-            if not repaired:
+            if not repaired and not repair_skipped:
                 repair_ops.append(
                     FileOperationResult(
                         "error",
