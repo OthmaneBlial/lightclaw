@@ -396,7 +396,13 @@ class CommandsAgentRouterMixin:
 
             async def _delegation_progress_update(text: str):
                 try:
-                    await progress.edit_text(text)
+                    run_id = self._active_run_ids_by_session.get(session_id)
+                    await progress.edit_text(
+                        text,
+                        reply_markup=(
+                            self._inline_cancel_keyboard(run_id) if run_id else None
+                        ),
+                    )
                 except Exception:
                     pass
 
@@ -466,7 +472,13 @@ class CommandsAgentRouterMixin:
 
             async def _delegation_progress_update(text: str):
                 try:
-                    await progress.edit_text(text)
+                    run_id = self._active_run_ids_by_session.get(session_id)
+                    await progress.edit_text(
+                        text,
+                        reply_markup=(
+                            self._inline_cancel_keyboard(run_id) if run_id else None
+                        ),
+                    )
                 except Exception:
                     pass
 
@@ -518,7 +530,13 @@ class CommandsAgentRouterMixin:
 
         async def _delegation_progress_update(text: str):
             try:
-                await progress.edit_text(text)
+                run_id = self._active_run_ids_by_session.get(session_id)
+                await progress.edit_text(
+                    text,
+                    reply_markup=(
+                        self._inline_cancel_keyboard(run_id) if run_id else None
+                    ),
+                )
             except Exception:
                 pass
 

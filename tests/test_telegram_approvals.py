@@ -4,11 +4,12 @@ import asyncio
 import json
 import stat
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from core.bot import LightClawBot
+from core.jobs import JobStore
 
 
 def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
@@ -60,14 +61,18 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
         f"lc:plan:approve:{approval_id}",
         f"lc:plan:edit:{approval_id}",
         f"lc:plan:deny:{approval_id}",
-        "lc:run:cancel",
     } <= set(plan_data)
     assert {
         f"lc:run:diff:{run_token}",
         f"lc:run:accept:{run_token}",
         f"lc:run:retry:{run_token}:builder",
-        "lc:run:cancel",
     } <= set(result_data)
+    cancel_data = [
+        button.callback_data
+        for row in bot._inline_cancel_keyboard(run_id).inline_keyboard
+        for button in row
+    ]
+    assert cancel_data == [f"lc:run:cancel:{run_token}"]
 
 
 @pytest.mark.asyncio
@@ -264,6 +269,150 @@ async def test_stale_result_button_cannot_accept_a_newer_run():
     await bot.handle_run_action(update, SimpleNamespace())
 
     bot._accept_last_run_result.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_stale_cancel_button_cannot_cancel_a_newer_active_run():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._active_run_ids_by_session = {"456": "new-run"}
+    cancel_task = Mock()
+    bot._active_run_tasks_by_session = {"456": cancel_task}
+    bot._reply_logged = AsyncMock()
+    old_token = bot._run_action_token("old-run")
+    query = SimpleNamespace(
+        data=f"lc:run:cancel:{old_token}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    cancel_task.cancel.assert_not_called()
+    bot._reply_logged.assert_awaited_once()
+    assert "no longer active" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_active_cancel_button_requests_the_matching_run():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "active-run"
+    bot.is_update_allowed = lambda _update: True
+    bot._active_run_ids_by_session = {"456": run_id}
+    waiting = asyncio.Event()
+    task = asyncio.create_task(waiting.wait())
+    bot._active_run_tasks_by_session = {"456": task}
+    canceled: list[str] = []
+    bot.jobs = SimpleNamespace(request_cancel=lambda candidate: canceled.append(candidate))
+    bot._reply_logged = AsyncMock()
+    query = SimpleNamespace(
+        data=f"lc:run:cancel:{bot._run_action_token(run_id)}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    assert canceled == [run_id]
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_multi_plan_ttl_sec = 900
+    bot._set_pending_multi_plan(
+        "456",
+        {
+            "goal": "fixture multi run",
+            "workers": [("builder", "codex"), ("reviewer", "claude")],
+            "plan_payload": {"workers": []},
+        },
+    )
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot._active_run_ids_by_session = {}
+    bot._active_worker_tasks_by_run = {}
+    bot._active_run_heartbeats_by_run = {}
+    worker_started = asyncio.Event()
+    worker_cleaned = asyncio.Event()
+    never = asyncio.Event()
+    run_id_holder: list[str] = []
+    heartbeat_holder: list[asyncio.Task] = []
+
+    async def fake_execute_multi_agent_plan(**kwargs):
+        run_id = kwargs["run_id"]
+        run_id_holder.append(run_id)
+        bot.jobs.create_job(
+            workspace=tmp_path / "repo",
+            session_id="456",
+            goal="fixture multi run",
+            approved_scope="fixture",
+            risk_level="medium",
+            capability_profile="workspace-write",
+            plan=[
+                {
+                    "label": "builder",
+                    "depends_on": [],
+                    "owned_paths": [],
+                    "idempotent": False,
+                    "resumable": False,
+                }
+            ],
+            status="queued",
+            run_id=run_id,
+        )
+        bot.jobs.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+        bot.jobs.update_lane(run_id, "builder", "running")
+        bot._active_run_ids_by_session["456"] = run_id
+
+        async def worker():
+            worker_started.set()
+            try:
+                await never.wait()
+            finally:
+                worker_cleaned.set()
+
+        async def heartbeat():
+            await never.wait()
+
+        worker_task = asyncio.create_task(worker())
+        heartbeat_task = asyncio.create_task(heartbeat())
+        bot._active_worker_tasks_by_run[run_id] = {worker_task}
+        bot._active_run_heartbeats_by_run[run_id] = heartbeat_task
+        heartbeat_holder.append(heartbeat_task)
+        await never.wait()
+
+    bot._execute_multi_agent_plan = fake_execute_multi_agent_plan
+    execution = asyncio.create_task(
+        bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+    )
+    await worker_started.wait()
+    execution.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+
+    job = bot.jobs.get_job(run_id_holder[0])
+    assert job["status"] == "canceled"
+    assert job["lanes"][0]["status"] == "canceled"
+    assert worker_cleaned.is_set()
+    assert heartbeat_holder[0].cancelled()
+    assert "456" not in bot._active_run_ids_by_session
+    bot.jobs.close()
 
 
 @pytest.mark.asyncio

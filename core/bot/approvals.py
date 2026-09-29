@@ -63,7 +63,6 @@ class BotApprovalsMixin:
                         "Deny", callback_data=f"lc:plan:deny:{approval_id}"
                     ),
                 ],
-                [InlineKeyboardButton("Cancel active run", callback_data="lc:run:cancel")],
             ]
         )
 
@@ -88,6 +87,13 @@ class BotApprovalsMixin:
         return hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:16]
 
     @staticmethod
+    def _inline_cancel_keyboard(run_id: str) -> InlineKeyboardMarkup:
+        token = BotApprovalsMixin._run_action_token(run_id)
+        return InlineKeyboardMarkup(
+            [[InlineKeyboardButton("Cancel run", callback_data=f"lc:run:cancel:{token}")]]
+        )
+
+    @staticmethod
     def _inline_result_keyboard(
         run_id: str,
         failed_lanes: list[str] | None = None,
@@ -106,7 +112,6 @@ class BotApprovalsMixin:
                 InlineKeyboardButton(
                     "Reject result", callback_data=f"lc:run:reject:{run_token}"
                 ),
-                InlineKeyboardButton("Cancel active run", callback_data="lc:run:cancel"),
             ],
         ]
         if failed_lanes:
@@ -328,13 +333,23 @@ class BotApprovalsMixin:
             await self._execute_approved_plan_action(update, context, session_id)
             return
 
-        if action == "lc:run:cancel":
-            run_id = self._active_run_ids_by_session.get(session_id) or self._last_run_ids_by_session.get(session_id)
-            if run_id:
-                try:
-                    await asyncio.to_thread(self.jobs.request_cancel, run_id)
-                except JobStateError:
-                    pass
+        if action.startswith("lc:run:cancel:"):
+            parts = action.split(":")
+            run_id = self._active_run_ids_by_session.get(session_id)
+            if (
+                len(parts) != 4
+                or not run_id
+                or not re.fullmatch(r"[0-9a-f]{16}", parts[3])
+                or not secrets.compare_digest(parts[3], self._run_action_token(run_id))
+            ):
+                await self._reply_logged(
+                    proxy, "This cancel button belongs to a run that is no longer active."
+                )
+                return
+            try:
+                await asyncio.to_thread(self.jobs.request_cancel, run_id)
+            except JobStateError:
+                pass
             task = self._active_run_tasks_by_session.get(session_id)
             if task and task is not asyncio.current_task():
                 task.cancel()

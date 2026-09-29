@@ -51,13 +51,52 @@ class CommandsAgentExecutionMixin:
             return
 
         self._clear_pending_multi_plan(session_id)
-        await self._execute_multi_agent_plan(
-            update=update,
-            session_id=session_id,
-            goal=goal,
-            workers=resolved_workers,
-            plan_payload=plan_payload,
-        )
+        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
+        try:
+            await self._execute_multi_agent_plan(
+                update=update,
+                session_id=session_id,
+                goal=goal,
+                workers=resolved_workers,
+                plan_payload=plan_payload,
+                run_id=run_id,
+            )
+        except asyncio.CancelledError:
+            worker_tasks = list(self._active_worker_tasks_by_run.pop(run_id, {}))
+            for task in worker_tasks:
+                task.cancel()
+            await asyncio.gather(*worker_tasks, return_exceptions=True)
+            heartbeat = self._active_run_heartbeats_by_run.pop(run_id, None)
+            if heartbeat:
+                heartbeat.cancel()
+                try:
+                    await heartbeat
+                except asyncio.CancelledError:
+                    pass
+            try:
+                job = await asyncio.to_thread(self.jobs.get_job, run_id)
+                for lane in job["lanes"]:
+                    if lane["status"] in {"queued", "running"}:
+                        await asyncio.to_thread(
+                            self.jobs.update_lane,
+                            run_id,
+                            str(lane["label"]),
+                            "canceled",
+                        )
+                if job["status"] in {"running", "cancel_requested"}:
+                    await asyncio.to_thread(self.jobs.mark_canceled, run_id)
+                elif job["status"] in {"queued", "awaiting_approval", "paused", "stalled"}:
+                    await asyncio.to_thread(self.jobs.request_cancel, run_id)
+            except JobStateError:
+                pass
+            if self._active_run_ids_by_session.get(session_id) == run_id:
+                self._active_run_ids_by_session.pop(session_id, None)
+            raise
+
+    def _release_multi_run_tracking(self, session_id: str, run_id: str) -> None:
+        self._active_worker_tasks_by_run.pop(run_id, None)
+        if self._active_run_ids_by_session.get(session_id) == run_id:
+            self._active_run_ids_by_session.pop(session_id, None)
 
 
     async def _execute_multi_agent_plan(
@@ -67,12 +106,12 @@ class CommandsAgentExecutionMixin:
         goal: str,
         workers: list[tuple[str, str]],
         plan_payload: dict[str, object],
+        run_id: str,
     ):
         run_started_clock = time.monotonic()
         run_started_at = self._utc_now()
         multi_workspace = await asyncio.to_thread(self._create_task_workspace, goal)
         multi_workspace_label = self._workspace_rel_label(multi_workspace)
-        run_id = f"multi-{time.time_ns()}-{session_id[-6:]}"
         agents_path = await asyncio.to_thread(
             self._write_agents_plan_file, multi_workspace, plan_payload
         )
@@ -246,6 +285,7 @@ class CommandsAgentExecutionMixin:
                     return
 
         durable_heartbeat = asyncio.create_task(_multi_job_heartbeat())
+        self._active_run_heartbeats_by_run[run_id] = durable_heartbeat
 
         async def _run_worker(index: int, label: str, agent: str, progress_msg):
             tag = self._multi_agent_tag(label, agent, index)
@@ -260,7 +300,10 @@ class CommandsAgentExecutionMixin:
 
             async def _worker_progress_update(text: str):
                 try:
-                    await progress_msg.edit_text(f"{tag}\n{text}")
+                    await progress_msg.edit_text(
+                        f"{tag}\n{text}",
+                        reply_markup=self._inline_cancel_keyboard(run_id),
+                    )
                 except Exception:
                     pass
 
@@ -385,6 +428,7 @@ class CommandsAgentExecutionMixin:
         index_by_label = {label: idx for idx, (label, _) in enumerate(workers)}
         wait_status_by_label: dict[str, str] = {}
         running: dict[asyncio.Task[Any], str] = {}
+        self._active_worker_tasks_by_run[run_id] = running
 
         async def _set_worker_status(label: str, status_text: str):
             if wait_status_by_label.get(label) == status_text:
@@ -505,6 +549,8 @@ class CommandsAgentExecutionMixin:
                     completed_ok.add(label)
                 else:
                     failed.add(label)
+
+        self._release_multi_run_tracking(session_id, run_id)
 
         after_multi = await asyncio.to_thread(
             self._snapshot_workspace_state, multi_workspace
@@ -725,6 +771,7 @@ class CommandsAgentExecutionMixin:
             await durable_heartbeat
         except asyncio.CancelledError:
             pass
+        self._active_run_heartbeats_by_run.pop(run_id, None)
         if self._active_run_ids_by_session.get(session_id) == run_id:
             self._active_run_ids_by_session.pop(session_id, None)
 
