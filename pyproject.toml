@@ -57,6 +57,10 @@ providers = [
   "google-genai>=2,<3",
   "openai>=2,<4",
 ]
+build = [
+  "setuptools>=75",
+  "wheel",
+]
 dev = [
   "anthropic>=1,<2",
   "build>=1.2,<2",
@@ -68,6 +72,12 @@ dev = [
   "pytest-cov>=6,<8",
   "ruff>=0.9,<1",
   "tomli>=2,<3; python_version < '3.11'",
+]
+
+[dependency-groups]
+release = [
+  "packaging>=25,<27",
+  "twine>=6,<7",
 ]
 
 [project.urls]

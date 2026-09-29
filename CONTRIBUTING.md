@@ -103,6 +103,20 @@ python -m pip install -e '.[dev]'
 python scripts/quality.py
 ```
 
+To reproduce automated dependency versions, install `requirements-pip.txt` and
+`requirements-dev.txt` with `--require-hashes`, then install the checkout with
+`--no-deps --no-build-isolation`.
+After changing dependency declarations, regenerate both locks with:
+
+```bash
+printf 'pip>=26,<27\n' | uv pip compile - --universal --python-version 3.10 --generate-hashes --no-header -o requirements-pip.txt
+uv pip compile pyproject.toml --all-extras --group release --no-emit-package lightclaw-ai --universal --python-version 3.10 --generate-hashes --no-header -o requirements-dev.txt
+uv pip compile pyproject.toml --extra providers --extra build --no-emit-package lightclaw-ai --universal --python-version 3.10 --generate-hashes --no-header -o requirements-runtime.txt
+```
+
+The locks target Python 3.10, the lowest supported version, and include hashes for universal
+platform resolution.
+
 It checks lint, generated provider/architecture contracts, runtime budgets, the safe-skill
 fixture, tracked Markdown links and anchors, the full test suite, package construction, and
 installed wheel data files. CI adds the supported OS/Python matrix, coverage evidence,

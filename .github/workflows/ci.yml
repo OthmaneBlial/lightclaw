@@ -26,8 +26,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install project and test tools
-        run: python -m pip install --disable-pip-version-check -e '.[dev]'
+          cache-dependency-path: requirements-dev.txt
+      - name: Install locked project and test tools
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements-pip.txt
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements-dev.txt
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
       - name: Run tests
         run: python -m pytest -q
 
@@ -42,8 +46,12 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - name: Install project and quality tools
-        run: python -m pip install --disable-pip-version-check -e '.[dev]'
+          cache-dependency-path: requirements-dev.txt
+      - name: Install locked project and quality tools
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements-pip.txt
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements-dev.txt
+          python -m pip install --disable-pip-version-check --no-deps --no-build-isolation -e .
       - name: Lint
         run: ruff check config.py lightclaw_cli.py main.py memory.py providers.py skills.py core tests
       - name: Check Markdown links and anchors
@@ -87,11 +95,11 @@ jobs:
       - name: Audit Python dependencies
         run: pip-audit --skip-editable
       - name: Build wheel and source distribution
-        run: python -m build
+        run: python -m build --no-isolation
       - name: Smoke-test built wheel in a clean environment
         run: |
           python -m venv /tmp/lightclaw-wheel-smoke
-          /tmp/lightclaw-wheel-smoke/bin/python -m pip install dist/*.whl
+          /tmp/lightclaw-wheel-smoke/bin/python -m pip install --no-deps dist/*.whl
           /tmp/lightclaw-wheel-smoke/bin/python "$GITHUB_WORKSPACE/scripts/check_installed_wheel_data.py"
           /tmp/lightclaw-wheel-smoke/bin/lightclaw --help
       - name: Upload coverage report

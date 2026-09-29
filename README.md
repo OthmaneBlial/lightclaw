@@ -223,7 +223,9 @@ python scripts/quality.py
 This is the canonical local quality command. The GitHub CI workflow is disabled; run this
 suite before pushing. CodeQL and OpenSSF Scorecard remain active on GitHub. The suite installs
 the wheel in a clean environment, audits dependencies, and replays all three deterministic
-stories. Read
+stories. To use automation's exact hashed dependencies, install `requirements-pip.txt` and
+`requirements-dev.txt` with `--require-hashes`, then install the checkout with
+`--no-deps --no-build-isolation`. Read
 [CONTRIBUTING.md](CONTRIBUTING.md), the [support routes](SUPPORT.md), and the
 [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 

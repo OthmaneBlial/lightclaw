@@ -38,6 +38,9 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Added universal hash locks for CI, release, showcase, and container dependencies;
+  Dependabot updates the Python locks, Docker images, and GitHub Actions pins.
+
 - Alpha reporting now uses conservative GitHub form defaults, captures the exact Python
   version without a preselected value, and makes the external qualification call prominent.
 - GitHub workflows use the current Node 24 action generations for checkout, Python setup,
