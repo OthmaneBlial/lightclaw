@@ -2,7 +2,7 @@
   "direct_dependencies": [
     "httpx==0.28.1",
     "python-dotenv==1.2.3",
-    "python-telegram-bot>=21,<23"
+    "python-telegram-bot>=21.5,<23"
   ],
   "direct_dependency_count": 3,
   "highest_branch_functions": [
@@ -78,7 +78,7 @@
     },
     {
       "branch_points": 46,
-      "line": 224,
+      "line": 226,
       "lines": 186,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -192,7 +192,7 @@
     },
     {
       "branch_points": 46,
-      "line": 224,
+      "line": 226,
       "lines": 186,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -262,15 +262,15 @@
     },
     {
       "lines": 522,
+      "path": "core/bot/approvals.py"
+    },
+    {
+      "lines": 522,
       "path": "core/bot/delegation/tasks.py"
     },
     {
       "lines": 512,
       "path": "core/bot/handlers.py"
-    },
-    {
-      "lines": 502,
-      "path": "core/bot/approvals.py"
     },
     {
       "lines": 484,
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18913,
+  "runtime_lines": 18933,
   "schema_version": 1
 }

@@ -40,7 +40,7 @@ classifiers = [
 dependencies = [
   "httpx==0.28.1",
   "python-dotenv==1.2.3",
-  "python-telegram-bot>=21,<23",
+  "python-telegram-bot>=21.5,<23",
 ]
 
 [project.optional-dependencies]

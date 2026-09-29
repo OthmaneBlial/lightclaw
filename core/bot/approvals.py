@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
@@ -18,6 +18,8 @@ from ..artifacts import ArtifactError, accept_artifact, reject_artifact
 from ..jobs import JobStateError
 from ..markdown import _escape_html
 from ..receipts import read_receipt
+
+MAX_TELEGRAM_DOCUMENT_BYTES = 50_000_000
 
 
 class BotApprovalsMixin:
@@ -450,14 +452,32 @@ class BotApprovalsMixin:
                 review_lines.append(f"- {status[:24]}: {path}")
             if len(changed_files) > 12:
                 review_lines.append(f"- and {len(changed_files) - 12} more files")
-        if patch_path and patch_path.is_file() and update.message:
+        patch_size: int | None = None
+        if patch_path and update.message:
+            try:
+                if patch_path.is_file() and not patch_path.is_symlink():
+                    patch_size = patch_path.stat().st_size
+            except OSError:
+                pass
+
+        if patch_path and patch_size is not None and patch_size > MAX_TELEGRAM_DOCUMENT_BYTES:
+            review_lines.append(
+                f"Full patch is too large to attach through Telegram; review it locally: `{patch_path}`"
+            )
+            await self._reply_logged(update, "\n".join(review_lines))
+            return
+
+        if patch_path and patch_size is not None and update.message:
             review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
             await self._reply_logged(update, "\n".join(review_lines))
             try:
                 with patch_path.open("rb") as handle:
                     await update.message.reply_document(
-                        document=handle,
-                        filename=f"{receipt.get('run_id', 'lightclaw')}.patch",
+                        document=InputFile(
+                            handle,
+                            filename=f"{receipt.get('run_id', 'lightclaw')}.patch",
+                            read_file_handle=False,
+                        ),
                         caption="Private review patch — nothing has been accepted or pushed.",
                     )
             except Exception:

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from telegram import InputFile
 
 from core.bot import LightClawBot
 from core.jobs import JobStore
@@ -480,7 +481,11 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
     async def send_summary(_update, text):
         events.append(("summary", text))
 
-    async def send_patch(**_kwargs):
+    async def send_patch(**kwargs):
+        document = kwargs["document"]
+        assert isinstance(document, InputFile)
+        assert not document.input_file_content.closed
+        assert not isinstance(document.input_file_content, bytes)
         events.append(("patch", ""))
 
     bot = LightClawBot.__new__(LightClawBot)
@@ -496,6 +501,37 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
     assert "src/main.py" in events[0][1]
     assert "nothing has been accepted or pushed" in events[0][1]
     message.reply_document.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_view_diff_skips_patch_larger_than_telegram_upload_limit(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.bot.approvals.MAX_TELEGRAM_DOCUMENT_BYTES", 8)
+    patch_path = tmp_path / "changes.patch"
+    patch_path.write_bytes(b"x" * 9)
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(
+        json.dumps(
+            {
+                "run_id": "run-large-patch",
+                "diff_summary": "1 file changed",
+                "file_changes": [],
+                "artifacts": [str(patch_path)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._last_run_receipts_by_session = {"456": str(receipt_path)}
+    bot._reply_logged = AsyncMock()
+    message = SimpleNamespace(reply_document=AsyncMock())
+
+    await bot._send_last_run_diff(
+        SimpleNamespace(message=message), "456", "run-large-patch"
+    )
+
+    message.reply_document.assert_not_awaited()
+    assert "too large to attach" in bot._reply_logged.await_args.args[1]
+    assert patch_path.as_posix() in bot._reply_logged.await_args.args[1]
 
 
 @pytest.mark.asyncio
