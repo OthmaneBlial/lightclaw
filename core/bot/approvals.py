@@ -226,7 +226,7 @@ class BotApprovalsMixin:
         query = update.callback_query
         if not query or not update.effective_user or not update.effective_chat:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             await query.answer("Not authorized", show_alert=True)
             return
         await query.answer()

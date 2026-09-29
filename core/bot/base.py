@@ -110,6 +110,19 @@ class BotBaseMixin:
             return str(user_id) in self.config.telegram_allowed_users
         return bool(self.config.telegram_public_bot_ack)
 
+    def is_update_allowed(self, update: Update | None) -> bool:
+        """Keep allowlisted sessions private; public mode explicitly permits groups."""
+        if not update or not update.effective_user or not update.effective_chat:
+            return False
+        if not self.is_allowed(update.effective_user.id):
+            return False
+        if update.effective_chat.type == "private":
+            return True
+        return bool(
+            self.config.telegram_public_bot_ack
+            and not self.config.telegram_allowed_users
+        )
+
     def _access_policy_label(self) -> str:
         return access_policy_label(
             self.config.telegram_allowed_users,

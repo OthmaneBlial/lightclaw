@@ -79,7 +79,7 @@ def redact_text(text: str, known_values: Mapping[str, str] | None = None) -> str
 
 def access_policy_label(allowed_users: list[str], public_ack: bool) -> str:
     if allowed_users:
-        return f"restricted ({len(allowed_users)} allowed user(s))"
+        return f"restricted ({len(allowed_users)} allowed user(s); private chats only)"
     if public_ack:
         return "public (explicit override)"
     return "blocked (no owner configured)"

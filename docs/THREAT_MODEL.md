@@ -19,7 +19,8 @@ LightClaw memory and task workspaces are local by default. Model inference is no
 
 | Threat | Current control | Residual risk |
 |---|---|---|
-| Unauthorized Telegram user | Numeric allowlist fails closed; an explicit public acknowledgement is required; privileged commands are rate-limited | A compromised allowed Telegram account remains authorized |
+| Unauthorized Telegram user | Numeric allowlist fails closed; allowlisted accounts work only in private chats; public chat access requires an explicit acknowledgement; privileged commands are rate-limited | A compromised allowed Telegram account remains authorized |
+| Group chat data disclosure | Group chats are rejected in allowlisted mode because members share the conversation and approval state | The explicit public override permits group chats; every group member can see bot replies and interact with shared state |
 | Prompt injection | Human plan/privilege confirmation, restrictive capability profiles, bounded task workspaces | A model can still make harmful changes inside granted scope |
 | Secret theft by delegated worker | Minimal environment allowlist; credential redaction in logs/results; no parent environment copy | Secrets already stored in readable workspace files remain visible to a worker |
 | Workspace escape | Resolved non-symlink root, per-task direct child directory, external ownership record, external CLI sandbox flags | Trusted host execution intentionally removes this protection |

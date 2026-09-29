@@ -20,7 +20,7 @@ class BotHandlersMixin:
     async def cmd_show(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         session_id = self._session_id_from_update(update)
@@ -81,7 +81,7 @@ class BotHandlersMixin:
         """Handle voice messages — download, transcribe, then process as text."""
         if not update.effective_user or not update.message or not update.message.voice:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         voice = update.message.voice
@@ -138,7 +138,7 @@ class BotHandlersMixin:
         """Handle photo messages — note the image and process caption."""
         if not update.effective_user or not update.message or not update.message.photo:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         caption = update.message.caption or ""
@@ -152,7 +152,7 @@ class BotHandlersMixin:
         """Handle document messages."""
         if not update.effective_user or not update.message or not update.message.document:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         doc = update.message.document
@@ -168,7 +168,7 @@ class BotHandlersMixin:
         """Handle text messages — the main conversational agent loop."""
         if not update.effective_user or not update.message or not update.message.text:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         await self._process_user_message(update, context, update.message.text)

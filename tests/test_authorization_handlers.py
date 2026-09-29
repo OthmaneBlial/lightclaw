@@ -25,6 +25,7 @@ HANDLERS = (
     "handle_photo",
     "handle_document",
     "handle_message",
+    "handle_run_action",
 )
 
 
@@ -42,8 +43,13 @@ async def test_unauthorized_user_cannot_reach_any_telegram_handler(handler_name:
     )
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=987654),
-        effective_chat=SimpleNamespace(id=123456),
+        effective_chat=SimpleNamespace(id=123456, type="private"),
         message=message,
+        callback_query=SimpleNamespace(
+            data="lc:run:cancel",
+            answer=AsyncMock(),
+            message=message,
+        ),
     )
     context = SimpleNamespace(args=[], bot=SimpleNamespace())
 
@@ -51,3 +57,34 @@ async def test_unauthorized_user_cannot_reach_any_telegram_handler(handler_name:
 
     assert result is None
     message.reply_text.assert_not_awaited()
+
+
+@pytest.mark.parametrize("handler_name", HANDLERS)
+async def test_allowed_user_cannot_use_authorized_bot_from_group_chat(handler_name: str):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["987654"])
+    message = SimpleNamespace(
+        text="hello",
+        voice=SimpleNamespace(),
+        photo=[SimpleNamespace()],
+        document=SimpleNamespace(file_name="private.txt"),
+        caption="",
+        reply_text=AsyncMock(),
+    )
+    query = SimpleNamespace(data="lc:run:cancel", answer=AsyncMock(), message=message)
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=987654),
+        effective_chat=SimpleNamespace(id=-123456, type="group"),
+        message=message,
+        callback_query=query,
+    )
+    context = SimpleNamespace(args=[], bot=SimpleNamespace())
+
+    result = await getattr(bot, handler_name)(update, context)
+
+    assert result is None
+    message.reply_text.assert_not_awaited()
+    if handler_name == "handle_run_action":
+        query.answer.assert_awaited_once_with("Not authorized", show_alert=True)
+    else:
+        query.answer.assert_not_awaited()

@@ -259,7 +259,7 @@ class CommandsHeartbeatMixin:
     async def cmd_heartbeat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
         if self._privileged_rate_limited(update.effective_user.id, "heartbeat", limit=10):
             await self._reply_logged(

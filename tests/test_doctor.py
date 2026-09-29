@@ -26,7 +26,9 @@ def test_doctor_report_is_secret_safe_and_shows_access_policy(tmp_path, monkeypa
     serialized = json.dumps(report)
 
     assert report["overall"] in {"ok", "warning"}
-    assert report["lightclaw"]["access_policy"] == "restricted (1 allowed user(s))"
+    assert report["lightclaw"]["access_policy"] == (
+        "restricted (1 allowed user(s); private chats only)"
+    )
     assert "super-secret-value" not in serialized
     assert "telegram-secret-value" not in serialized
     assert "Access policy: restricted" in render_doctor_text(report)

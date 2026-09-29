@@ -73,7 +73,7 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
 async def test_voice_transcription_waits_for_explicit_approval(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
-    bot.is_allowed = lambda _user_id: True
+    bot.is_update_allowed = lambda _update: True
     bot._pending_voice_goal_by_session = {}
     bot._reply_logged = AsyncMock()
     bot._process_user_message = AsyncMock()
@@ -84,7 +84,7 @@ async def test_voice_transcription_waits_for_explicit_approval(monkeypatch):
     message = SimpleNamespace(voice=voice, caption="", reply_text=AsyncMock())
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=123),
-        effective_chat=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
         message=message,
     )
     context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
@@ -108,7 +108,7 @@ async def test_voice_transcription_waits_for_explicit_approval(monkeypatch):
 @pytest.mark.asyncio
 async def test_high_risk_callback_requires_ordered_second_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
-    bot.is_allowed = lambda _user_id: True
+    bot.is_update_allowed = lambda _update: True
     pending = {
         "approval_id": "0123456789abcdef",
         "review": {
@@ -128,7 +128,7 @@ async def test_high_risk_callback_requires_ordered_second_confirmation():
     update = SimpleNamespace(
         callback_query=query,
         effective_user=SimpleNamespace(id=123),
-        effective_chat=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
         effective_message=query.message,
     )
     context = SimpleNamespace()
@@ -163,7 +163,7 @@ async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
     bot._classify_pending_multi_reply = lambda _text: "confirm"
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=456), effective_user=None
+        effective_chat=SimpleNamespace(id=456, type="private"), effective_user=None
     )
 
     await bot._process_user_message(update, SimpleNamespace(), "yes")
@@ -177,7 +177,7 @@ async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
 @pytest.mark.asyncio
 async def test_stale_or_unknown_plan_callback_cannot_execute():
     bot = LightClawBot.__new__(LightClawBot)
-    bot.is_allowed = lambda _user_id: True
+    bot.is_update_allowed = lambda _update: True
     bot._pending_multi_plan_by_session = {}
     bot._pending_multi_plan_ttl_sec = 900
     old_plan = bot._set_pending_multi_plan(
@@ -197,7 +197,7 @@ async def test_stale_or_unknown_plan_callback_cannot_execute():
     update = SimpleNamespace(
         callback_query=query,
         effective_user=SimpleNamespace(id=123),
-        effective_chat=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
         effective_message=query.message,
     )
 
@@ -211,7 +211,7 @@ async def test_stale_or_unknown_plan_callback_cannot_execute():
 @pytest.mark.asyncio
 async def test_stale_voice_approval_cannot_process_replacement_transcription():
     bot = LightClawBot.__new__(LightClawBot)
-    bot.is_allowed = lambda _user_id: True
+    bot.is_update_allowed = lambda _update: True
     pending = {
         "456": {
             "approval_id": "0123456789abcdef",
@@ -230,7 +230,7 @@ async def test_stale_voice_approval_cannot_process_replacement_transcription():
     update = SimpleNamespace(
         callback_query=query,
         effective_user=SimpleNamespace(id=123),
-        effective_chat=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
         effective_message=query.message,
     )
 
@@ -243,7 +243,7 @@ async def test_stale_voice_approval_cannot_process_replacement_transcription():
 @pytest.mark.asyncio
 async def test_stale_result_button_cannot_accept_a_newer_run():
     bot = LightClawBot.__new__(LightClawBot)
-    bot.is_allowed = lambda _user_id: True
+    bot.is_update_allowed = lambda _update: True
     bot._last_run_ids_by_session = {"456": "new-run"}
     bot._reply_logged = AsyncMock()
     bot._accept_last_run_result = AsyncMock()
@@ -256,7 +256,7 @@ async def test_stale_result_button_cannot_accept_a_newer_run():
     update = SimpleNamespace(
         callback_query=query,
         effective_user=SimpleNamespace(id=123),
-        effective_chat=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
         effective_message=query.message,
     )
 
@@ -269,7 +269,7 @@ async def test_stale_result_button_cannot_accept_a_newer_run():
 async def test_duplicate_result_taps_only_run_one_acceptance():
     bot = LightClawBot.__new__(LightClawBot)
     run_id = "run-17"
-    bot.is_allowed = lambda _user_id: True
+    bot.is_update_allowed = lambda _update: True
     bot._last_run_ids_by_session = {"456": run_id}
     bot._result_actions_in_flight = set()
     bot._reply_logged = AsyncMock()
@@ -291,7 +291,7 @@ async def test_duplicate_result_taps_only_run_one_acceptance():
         return SimpleNamespace(
             callback_query=query,
             effective_user=SimpleNamespace(id=123),
-            effective_chat=SimpleNamespace(id=456),
+            effective_chat=SimpleNamespace(id=456, type="private"),
             effective_message=query.message,
         )
 
@@ -310,7 +310,7 @@ async def test_long_result_is_private_file_artifact_not_chat_wall(tmp_path):
     bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
     message = SimpleNamespace(reply_document=AsyncMock(), reply_text=AsyncMock())
     update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
         message=message,
     )
 

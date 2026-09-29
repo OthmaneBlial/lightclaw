@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from config import Config, load_config
 from core.bot.base import BotBaseMixin
 from core.security import access_policy_label, delegated_process_env, redact_text
@@ -38,10 +40,45 @@ def test_bot_authorization_fails_closed_and_honors_allowlist():
     assert bot.is_allowed(123) is False
 
 
+def test_update_authorization_restricts_allowlisted_users_to_private_chats():
+    bot = BotBaseMixin.__new__(BotBaseMixin)
+    bot.config = Config(telegram_allowed_users=["123"])
+    user = SimpleNamespace(id=123)
+    private = SimpleNamespace(
+        effective_user=user, effective_chat=SimpleNamespace(type="private")
+    )
+    group = SimpleNamespace(
+        effective_user=user, effective_chat=SimpleNamespace(type="group")
+    )
+    missing_chat = SimpleNamespace(effective_user=user, effective_chat=None)
+
+    assert bot.is_update_allowed(private) is True
+    assert bot.is_update_allowed(group) is False
+    assert bot.is_update_allowed(missing_chat) is False
+
+
+def test_public_override_allows_group_chats_but_allowlist_does_not():
+    bot = BotBaseMixin.__new__(BotBaseMixin)
+    group = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(type="supergroup"),
+    )
+
+    bot.config = Config(telegram_public_bot_ack=True)
+    assert bot.is_update_allowed(group) is True
+
+    bot.config = Config(
+        telegram_allowed_users=["123"], telegram_public_bot_ack=True
+    )
+    assert bot.is_update_allowed(group) is False
+
+
 def test_access_policy_labels_do_not_expose_user_ids():
     assert access_policy_label([], False) == "blocked (no owner configured)"
     assert access_policy_label([], True) == "public (explicit override)"
-    assert access_policy_label(["123", "456"], False) == "restricted (2 allowed user(s))"
+    assert access_policy_label(["123", "456"], False) == (
+        "restricted (2 allowed user(s); private chats only)"
+    )
 
 
 def test_privileged_rate_limiter_uses_per_user_and_action_windows(monkeypatch):

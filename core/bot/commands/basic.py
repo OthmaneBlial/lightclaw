@@ -16,7 +16,7 @@ class CommandsBasicMixin:
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         session_id = self._session_id_from_update(update)
@@ -47,7 +47,7 @@ class CommandsBasicMixin:
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         session_id = self._session_id_from_update(update)
@@ -76,7 +76,7 @@ class CommandsBasicMixin:
     async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
         if self._privileged_rate_limited(update.effective_user.id, "wipe-memory", limit=4):
             await self._reply_logged(
@@ -100,7 +100,7 @@ class CommandsBasicMixin:
         """Dangerous command: wipe all memory after explicit confirmation."""
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         session_id = self._session_id_from_update(update)
@@ -146,7 +146,7 @@ class CommandsBasicMixin:
     async def cmd_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         session_id = self._session_id_from_update(update)
@@ -167,7 +167,7 @@ class CommandsBasicMixin:
     async def cmd_recall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         query = " ".join(context.args) if context.args else ""
@@ -199,7 +199,7 @@ class CommandsBasicMixin:
     async def cmd_mode(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
-        if not self.is_allowed(update.effective_user.id):
+        if not self.is_update_allowed(update):
             return
 
         session_id = self._session_id_from_update(update)

@@ -66,6 +66,8 @@ Configuration files are written with mode `0600`. An existing config is kept unl
 
 At least one numeric `TELEGRAM_ALLOWED_USERS` ID is required. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and should still be isolated from sensitive host data.
 
+With an allowlist, LightClaw accepts commands and callbacks only in private chats. Group chats share conversation and approval state across members, so they are available only when the bot is intentionally public with `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and no user allowlist.
+
 ## Optional container
 
 Build the pinned Python 3.13 image locally:
