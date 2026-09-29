@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import stat
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -262,6 +263,45 @@ async def test_stale_result_button_cannot_accept_a_newer_run():
     await bot.handle_run_action(update, SimpleNamespace())
 
     bot._accept_last_run_result.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_result_taps_only_run_one_acceptance():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "run-17"
+    bot.is_allowed = lambda _user_id: True
+    bot._last_run_ids_by_session = {"456": run_id}
+    bot._result_actions_in_flight = set()
+    bot._reply_logged = AsyncMock()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def accept(*_args):
+        started.set()
+        await release.wait()
+
+    bot._accept_last_run_result = AsyncMock(side_effect=accept)
+
+    def make_update():
+        query = SimpleNamespace(
+            data=f"lc:run:accept:{bot._run_action_token(run_id)}",
+            answer=AsyncMock(),
+            message=SimpleNamespace(),
+        )
+        return SimpleNamespace(
+            callback_query=query,
+            effective_user=SimpleNamespace(id=123),
+            effective_chat=SimpleNamespace(id=456),
+            effective_message=query.message,
+        )
+
+    first = asyncio.create_task(bot.handle_run_action(make_update(), SimpleNamespace()))
+    await started.wait()
+    await bot.handle_run_action(make_update(), SimpleNamespace())
+    assert bot._accept_last_run_result.await_count == 1
+    release.set()
+    await first
+    assert bot._result_actions_in_flight == set()
 
 
 @pytest.mark.asyncio

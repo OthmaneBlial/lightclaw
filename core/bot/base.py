@@ -92,6 +92,7 @@ class BotBaseMixin:
         self._last_run_ids_by_session: dict[str, str] = {}
         self._last_run_receipts_by_session: dict[str, str] = {}
         self._last_run_workspaces_by_session: dict[str, str] = {}
+        self._result_actions_in_flight: set[str] = set()
         # Sliding-window limiter for high-authority Telegram commands.
         self._privileged_request_times: dict[tuple[str, str], list[float]] = {}
         # Compiled strict-mode deny patterns for delegated local-agent tasks.

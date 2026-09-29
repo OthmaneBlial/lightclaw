@@ -361,25 +361,40 @@ class BotApprovalsMixin:
                 )
                 return
             decision = parts[2]
-            if decision == "retry":
-                label = parts[4]
-                if not re.fullmatch(r"[a-z0-9_-]{1,24}", label):
-                    await self._reply_logged(proxy, "Unknown or expired retry action.")
-                    return
-                try:
-                    job = await asyncio.to_thread(self.jobs.retry_lane, run_id, label)
-                except JobStateError as exc:
-                    await self._reply_logged(proxy, f"Retry refused: {_escape_html(str(exc))}")
-                    return
-                await self._reply_logged(
-                    proxy, f"Queued bounded retry for `{label}` in `{job['run_id']}`."
-                )
-            elif decision == "diff":
+            label = parts[4] if decision == "retry" else ""
+            if decision == "retry" and not re.fullmatch(r"[a-z0-9_-]{1,24}", label):
+                await self._reply_logged(proxy, "Unknown or expired retry action.")
+                return
+            if decision == "diff":
                 await self._send_last_run_diff(proxy, session_id, run_id)
-            elif decision == "accept":
-                await self._accept_last_run_result(proxy, session_id, run_id)
-            else:
-                await self._reject_last_run_result(proxy, session_id, run_id)
+                return
+            if run_id in self._result_actions_in_flight:
+                await self._reply_logged(
+                    proxy, "A result action for this run is already in progress."
+                )
+                return
+            self._result_actions_in_flight.add(run_id)
+            try:
+                if decision == "retry":
+                    try:
+                        job = await asyncio.to_thread(
+                            self.jobs.retry_lane, run_id, label
+                        )
+                    except JobStateError as exc:
+                        await self._reply_logged(
+                            proxy, f"Retry refused: {_escape_html(str(exc))}"
+                        )
+                        return
+                    await self._reply_logged(
+                        proxy,
+                        f"Queued bounded retry for `{label}` in `{job['run_id']}`.",
+                    )
+                elif decision == "accept":
+                    await self._accept_last_run_result(proxy, session_id, run_id)
+                else:
+                    await self._reject_last_run_result(proxy, session_id, run_id)
+            finally:
+                self._result_actions_in_flight.discard(run_id)
             return
 
         await self._reply_logged(proxy, "Unknown or expired LightClaw action.")

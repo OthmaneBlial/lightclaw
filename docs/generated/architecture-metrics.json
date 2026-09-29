@@ -77,18 +77,18 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
+      "branch_points": 46,
+      "line": 225,
+      "lines": 176,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 43,
       "line": 143,
       "lines": 73,
       "name": "validate_skill_manifest",
       "path": "skills.py"
-    },
-    {
-      "branch_points": 42,
-      "line": 225,
-      "lines": 161,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 38,
@@ -191,6 +191,13 @@
       "path": "core/bot/commands/cron.py"
     },
     {
+      "branch_points": 46,
+      "line": 225,
+      "lines": 176,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 9,
       "line": 78,
       "lines": 169,
@@ -210,13 +217,6 @@
       "lines": 168,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
-    },
-    {
-      "branch_points": 25,
-      "line": 31,
-      "lines": 167,
-      "name": "_build_multi_agent_worker_task",
-      "path": "core/bot/delegation/tasks.py"
     }
   ],
   "largest_modules": [
@@ -269,18 +269,18 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 465,
-      "path": "core/bot/commands/cron.py"
+      "lines": 469,
+      "path": "core/bot/approvals.py"
     },
     {
-      "lines": 454,
-      "path": "core/bot/approvals.py"
+      "lines": 465,
+      "path": "core/bot/commands/cron.py"
     },
     {
       "lines": 440,
       "path": "core/llm/client.py"
     }
   ],
-  "runtime_lines": 18193,
+  "runtime_lines": 18209,
   "schema_version": 1
 }
