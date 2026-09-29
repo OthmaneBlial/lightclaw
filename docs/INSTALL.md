@@ -1,6 +1,6 @@
 # Install, Upgrade, and Uninstall
 
-LightClaw requires Python 3.10–3.13 on macOS or Linux. The package distribution is named `lightclaw-ai`; the installed command is `lightclaw`.
+LightClaw requires Python 3.10–3.14 on macOS or Linux. The package distribution is named `lightclaw-ai`; the installed command is `lightclaw`.
 
 ## Install from the repository
 

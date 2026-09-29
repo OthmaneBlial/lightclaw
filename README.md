@@ -93,6 +93,8 @@ provider cost, model quality, or availability. Reproduce them from [`bench/`](be
 
 ## Safe installation
 
+Supports Python 3.10–3.14 on macOS and Linux.
+
 Use an isolated tool environment and install only the SDK for the provider you
 actually use. OpenAI, xAI, DeepSeek, and Z-AI share the `openai` transport extra:
 

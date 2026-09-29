@@ -5,7 +5,7 @@ credentials, network calls, or an existing repository. Times are guidance, not a
 
 ## Minute 0–1: clone and isolate
 
-Use macOS or Ubuntu/Linux with Python 3.10–3.13 and Git:
+Use macOS or Ubuntu/Linux with Python 3.10–3.14 and Git:
 
 ```bash
 git clone https://github.com/OthmaneBlial/lightclaw.git
