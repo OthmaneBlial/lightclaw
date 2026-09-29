@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 import stat
 
 import pytest
 
-from core.jobs import JobConflictError, JobStateError, JobStore
+from core.jobs import JobConflictError, JobStateError, JobStore, inspect_job_database
 from lightclaw_cli import build_parser
 
 
@@ -118,13 +119,33 @@ def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
     claimed = store.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
     assert claimed["status"] == "running"
 
-    recovered = store.recover_stalled(now=float(claimed["heartbeat_at"]) + 121)
+    recovered = store.recover_stalled()
     assert recovered == [job["run_id"]]
     stalled = store.get_job(job["run_id"])
     assert stalled["status"] == "stalled"
     assert store.diagnostics()["counts"]["stalled"] == 1
     with pytest.raises(JobStateError, match="non-resumable lanes"):
         store.resume(job["run_id"])
+    store.close()
+
+
+def test_stale_heartbeat_keeps_workspace_locked_while_worker_lives(tmp_path):
+    database = tmp_path / "jobs.db"
+    workspace = tmp_path / "repo"
+    store = JobStore(database)
+    active = _create(store, workspace)
+    store.claim_next(workspace=workspace, worker_pid=os.getpid())
+    queued = _create(store, workspace)
+    with store.db:
+        store.db.execute(
+            "UPDATE jobs SET heartbeat_at = 0 WHERE run_id = ?", (active["run_id"],)
+        )
+
+    assert store.recover_stalled() == []
+    assert store.get_job(active["run_id"])["status"] == "running"
+    assert store.claim_next(workspace=workspace) is None
+    assert active["run_id"] in inspect_job_database(database)["stalled_run_ids"]
+    assert store.get_job(queued["run_id"])["status"] == "queued"
     store.close()
 
 

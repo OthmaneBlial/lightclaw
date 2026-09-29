@@ -521,19 +521,17 @@ class JobStore:
         except OSError:
             return False
 
-    def recover_stalled(self, *, stall_after_seconds: int = 120, now: float | None = None) -> list[str]:
-        current = float(now if now is not None else time.time())
-        cutoff = current - max(1, int(stall_after_seconds))
+    def recover_stalled(self) -> list[str]:
+        current = time.time()
         recovered: list[str] = []
         with self._lock, self.db:
             rows = self.db.execute(
-                "SELECT run_id, worker_pid, heartbeat_at FROM jobs WHERE status IN ('running', 'cancel_requested')"
+                "SELECT run_id, worker_pid FROM jobs WHERE status IN ('running', 'cancel_requested')"
             ).fetchall()
             for row in rows:
-                heartbeat = float(row["heartbeat_at"] or 0.0)
-                if heartbeat >= cutoff and self._pid_alive(row["worker_pid"]):
+                if self._pid_alive(row["worker_pid"]):
                     continue
-                reason = "worker process is absent" if not self._pid_alive(row["worker_pid"]) else "heartbeat is stale"
+                reason = "worker process is absent"
                 self.db.execute(
                     "UPDATE jobs SET status = 'stalled', updated_at = ?, last_error = ? WHERE run_id = ?",
                     (current, reason, row["run_id"]),
