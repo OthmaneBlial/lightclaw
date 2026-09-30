@@ -21,9 +21,9 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 86,
+      "branch_points": 85,
       "line": 39,
-      "lines": 494,
+      "lines": 496,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -36,7 +36,7 @@
     },
     {
       "branch_points": 61,
-      "line": 232,
+      "line": 234,
       "lines": 348,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
@@ -71,7 +71,7 @@
     },
     {
       "branch_points": 48,
-      "line": 252,
+      "line": 251,
       "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -121,9 +121,9 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 86,
+      "branch_points": 85,
       "line": 39,
-      "lines": 494,
+      "lines": 496,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -143,7 +143,7 @@
     },
     {
       "branch_points": 61,
-      "line": 232,
+      "line": 234,
       "lines": 348,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
@@ -199,7 +199,7 @@
     },
     {
       "branch_points": 48,
-      "line": 252,
+      "line": 251,
       "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -261,15 +261,15 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 585,
+      "lines": 587,
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 581,
+      "lines": 583,
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 551,
+      "lines": 550,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19916,
+  "runtime_lines": 19934,
   "schema_version": 1
 }

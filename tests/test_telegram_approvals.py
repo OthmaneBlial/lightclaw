@@ -149,6 +149,26 @@ def test_plan_with_hidden_commands_cannot_be_approved():
     assert commands[5] in bot._render_plan_review(reviewable)
 
 
+def test_pending_plan_expires_when_either_clock_reaches_deadline(monkeypatch):
+    clock = {"wall": 1_000.0, "monotonic": 10.0}
+    monkeypatch.setattr("core.bot.base.time.time", lambda: clock["wall"])
+    monkeypatch.setattr("core.bot.base.time.monotonic", lambda: clock["monotonic"])
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_multi_plan_ttl_sec = 900
+
+    wall_jump_plan = bot._set_pending_multi_plan("wall-jump", {}, ttl_sec=30)
+    clock["wall"] = 800.0
+    clock["monotonic"] = float(wall_jump_plan["expires_monotonic"]) + 1
+    assert bot._get_pending_multi_plan("wall-jump") is None
+
+    clock["wall"] = 2_000.0
+    clock["monotonic"] = 100.0
+    sleep_plan = bot._set_pending_multi_plan("sleep", {}, ttl_sec=30)
+    clock["wall"] = float(sleep_plan["expires_at"]) + 1
+    assert bot._get_pending_multi_plan("sleep") is None
+
+
 @pytest.mark.asyncio
 async def test_hidden_plan_command_callback_is_refused():
     bot = LightClawBot.__new__(LightClawBot)
@@ -494,6 +514,69 @@ async def test_stale_voice_approval_cannot_process_replacement_transcription():
 
     bot._process_user_message.assert_not_awaited()
     assert pending["456"]["text"] == "new transcription"
+
+
+@pytest.mark.asyncio
+async def test_expired_voice_approval_does_not_process_transcription():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._pending_voice_goal_by_session = {
+        "456": {
+            "approval_id": "0123456789abcdef",
+            "text": "expired transcription",
+            "expires_at": 10**20,
+            "expires_monotonic": 0,
+        }
+    }
+    bot._reply_logged = AsyncMock()
+    bot._process_user_message = AsyncMock()
+    query = SimpleNamespace(
+        data="lc:voice:approve:0123456789abcdef",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    bot._process_user_message.assert_not_awaited()
+    assert "456" not in bot._pending_voice_goal_by_session
+    assert "expired" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+async def test_expired_trusted_confirmation_does_not_start_host_run():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "456"
+    bot._log_user_message = Mock()
+    bot._pending_trusted_agent_run_by_session = {
+        "456": {
+            "agent": "codex",
+            "task": "delete an external path",
+            "expires_at": 10**20,
+            "expires_monotonic": 0,
+        }
+    }
+    bot._reply_logged = AsyncMock()
+    bot._execute_one_shot_delegation = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_agent(update, SimpleNamespace(args=["trusted", "confirm"]))
+
+    bot._execute_one_shot_delegation.assert_not_awaited()
+    assert "456" not in bot._pending_trusted_agent_run_by_session
+    assert "no pending" in bot._reply_logged.await_args.args[1].lower()
 
 
 @pytest.mark.asyncio

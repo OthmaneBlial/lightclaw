@@ -416,15 +416,29 @@ class BotBaseMixin:
         item["approval_id"] = secrets.token_hex(8)
         item["created_at"] = now
         item["expires_at"] = now + ttl
+        item["expires_monotonic"] = time.monotonic() + ttl
         self._pending_multi_plan_by_session[session_id] = item
         return item
+
+    @staticmethod
+    def _pending_confirmation_expired(pending: dict[str, object]) -> bool:
+        try:
+            wall_deadline = float(pending.get("expires_at", 0) or 0)
+            monotonic_deadline = float(pending.get("expires_monotonic", 0) or 0)
+        except (TypeError, ValueError):
+            return True
+        return (
+            wall_deadline <= 0
+            or monotonic_deadline <= 0
+            or time.time() >= wall_deadline
+            or time.monotonic() >= monotonic_deadline
+        )
 
     def _get_pending_multi_plan(self, session_id: str) -> dict[str, object] | None:
         entry = self._pending_multi_plan_by_session.get(session_id)
         if not entry:
             return None
-        expires_at = float(entry.get("expires_at", 0.0) or 0.0)
-        if expires_at <= 0 or time.time() > expires_at:
+        if self._pending_confirmation_expired(entry):
             self._pending_multi_plan_by_session.pop(session_id, None)
             return None
         return entry
@@ -433,8 +447,9 @@ class BotBaseMixin:
         entry = self._get_pending_multi_plan(session_id)
         if not entry:
             return 0
-        expires_at = float(entry.get("expires_at", 0.0) or 0.0)
-        return max(0, int(expires_at - time.time()))
+        wall_left = float(entry["expires_at"]) - time.time()
+        monotonic_left = float(entry["expires_monotonic"]) - time.monotonic()
+        return max(0, int(min(wall_left, monotonic_left)))
 
     def _clear_pending_multi_plan(self, session_id: str) -> dict[str, object] | None:
         return self._pending_multi_plan_by_session.pop(session_id, None)

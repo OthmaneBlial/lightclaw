@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import re
 import secrets
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -280,7 +279,7 @@ class BotApprovalsMixin:
                 )
                 return
             self._pending_voice_goal_by_session.pop(session_id, None)
-            if float(pending.get("expires_at", 0)) < time.time():
+            if self._pending_confirmation_expired(pending):
                 await self._reply_logged(proxy, "Voice transcription expired; send it again.")
                 return
             if decision == "approve":

@@ -158,11 +158,13 @@ class BotHandlersMixin:
                 user_text = f"{caption}\n{user_text}"
             log.info("Voice message transcribed and awaiting approval")
             approval_id = secrets.token_hex(8)
+            now = time.time()
             self._pending_voice_goal_by_session[session_id] = {
                 "text": user_text,
                 "transcription": text,
                 "approval_id": approval_id,
-                "expires_at": time.time() + 10 * 60,
+                "expires_at": now + 10 * 60,
+                "expires_monotonic": time.monotonic() + 10 * 60,
             }
             await self._reply_logged(
                 update,

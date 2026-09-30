@@ -334,7 +334,7 @@ class CommandsAgentRouterMixin:
             profile = "observe" if sub == "observe" else "trusted-command"
             if sub == "trusted" and len(args) >= 2 and args[1].lower() == "confirm":
                 pending = self._pending_trusted_agent_run_by_session.get(session_id)
-                if not pending or float(pending.get("expires_at") or 0) < time.time():
+                if not pending or self._pending_confirmation_expired(pending):
                     self._pending_trusted_agent_run_by_session.pop(session_id, None)
                     await self._reply_logged(
                         update,
@@ -372,10 +372,12 @@ class CommandsAgentRouterMixin:
                 return
 
             if sub == "trusted":
+                now = time.time()
                 self._pending_trusted_agent_run_by_session[session_id] = {
                     "agent": agent,
                     "task": task,
-                    "expires_at": time.time() + 90,
+                    "expires_at": now + 90,
+                    "expires_monotonic": time.monotonic() + 90,
                 }
                 await self._reply_logged(
                     update,
