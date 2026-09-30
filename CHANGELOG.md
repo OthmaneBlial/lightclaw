@@ -66,7 +66,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Fixed
 
-- Retry buttons now preserve valid 32-character worker labels.
+- Retry buttons and callback validation now preserve valid 32-character worker labels.
 - Scoped task undo now uses descriptor-anchored deletion on Python 3.10 without following symlinks.
 - Acceptance commands now bound streamed output, stop on cancellation, and register process
   groups for restart recovery.

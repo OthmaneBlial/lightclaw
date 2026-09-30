@@ -381,6 +381,33 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
 
 
 @pytest.mark.asyncio
+async def test_32_character_retry_button_reaches_job_store():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id, label = "multi-run-42", "a" + "b" * 31
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "456"
+    bot._last_run_ids_by_session = {"456": run_id}
+    bot._result_actions_in_flight = set()
+    bot.jobs = SimpleNamespace(retry_lane=Mock(return_value={"run_id": "retry-1"}))
+    bot._reply_logged = AsyncMock()
+    query = SimpleNamespace(
+        data=f"lc:run:retry:{bot._run_action_token(run_id)}:{label}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    bot.jobs.retry_lane.assert_called_once_with(run_id, label)
+
+
+@pytest.mark.asyncio
 async def test_voice_transcription_survives_typing_failure_and_waits_for_approval(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")

@@ -411,7 +411,7 @@ class BotApprovalsMixin:
                 return
             decision = parts[2]
             label = parts[4] if decision == "retry" else ""
-            if decision == "retry" and not re.fullmatch(r"[a-z0-9_-]{1,24}", label):
+            if decision == "retry" and not re.fullmatch(r"[a-z0-9_-]{1,32}", label):
                 await self._reply_logged(proxy, "Unknown or expired retry action.")
                 return
             if decision == "diff":
