@@ -17,6 +17,8 @@ explicitly sends a prompt to a chosen provider or performs a separate publicatio
 | Sanitized Run Card | explicit local destination after `run export --apply` | never |
 | Showcase entry | manually reviewed Git commit/pull request | only by that explicit action |
 
+Optional JSONL logs use owner-only files. LightClaw rejects a symlink at the configured log file path.
+
 During an edit requested in `/mode edit`, LightClaw may send bounded workspace file excerpts to the configured provider for a retry or repair pass. Common credential paths and file contents matching current secret-detection patterns are omitted; detection is heuristic.
 
 Private receipts may contain goals, commands, workspace-relative details, recovery context,

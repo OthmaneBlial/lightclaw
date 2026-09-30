@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,20 @@ class _SecretRedactionFilter(logging.Filter):
         elif record.exc_text:
             record.exc_text = redact_text(record.exc_text, known_values)
         return True
+
+
+class _PrivateFileHandler(logging.FileHandler):
+    def _open(self):
+        flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
+        fd = os.open(self.baseFilename, flags, 0o600)
+        try:
+            if not stat.S_ISREG(os.fstat(fd).st_mode):
+                raise OSError(f"JSONL log path is not a regular file: {self.baseFilename}")
+            os.fchmod(fd, 0o600)
+        except BaseException:
+            os.close(fd)
+            raise
+        return os.fdopen(fd, self.mode, encoding=self.encoding, errors=self.errors)
 
 
 logging.basicConfig(
@@ -136,8 +151,8 @@ def configure_optional_json_logging(runtime_root: str | Path | None = None) -> P
         if isinstance(handler, logging.FileHandler) and Path(handler.baseFilename).resolve() == path:
             return path
 
-    path.parent.mkdir(parents=True, exist_ok=True)
-    file_handler = logging.FileHandler(path, mode="a", encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    file_handler = _PrivateFileHandler(path, mode="a", encoding="utf-8")
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(_JsonLogFormatter())
     logger.addHandler(file_handler)

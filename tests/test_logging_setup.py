@@ -1,5 +1,6 @@
 import json
 import logging
+import stat
 
 import pytest
 
@@ -52,6 +53,8 @@ def test_jsonl_schema_channel_inference_and_idempotent_setup(
 
     assert configure_optional_json_logging(tmp_path) == path
     assert configure_optional_json_logging(tmp_path) == path
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
     handlers = [
         handler
         for handler in isolated_lightclaw_logger.handlers
@@ -96,3 +99,28 @@ def test_jsonl_redacts_environment_secrets_from_messages_and_tracebacks(
     assert secret not in caplog.text
     assert "[REDACTED]" in entry["message"]
     assert "[REDACTED]" in entry["exception"]
+
+
+def test_jsonl_logging_secures_existing_file_and_rejects_symlinks(
+    tmp_path, monkeypatch, isolated_lightclaw_logger
+):
+    _clear_logging_environment(monkeypatch)
+    path = tmp_path / "existing.jsonl"
+    path.write_text("existing entry\n", encoding="utf-8")
+    path.chmod(0o644)
+    monkeypatch.setenv("JSON_LOG_ENABLED", "1")
+    monkeypatch.setenv("JSON_LOG_PATH", str(path))
+
+    configure_optional_json_logging(tmp_path)
+
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    target = tmp_path / "target.jsonl"
+    target.write_text("leave unchanged\n", encoding="utf-8")
+    link = tmp_path / "linked.jsonl"
+    link.symlink_to(target)
+    monkeypatch.setenv("JSON_LOG_PATH", str(link))
+
+    with pytest.raises(OSError):
+        configure_optional_json_logging(tmp_path)
+
+    assert target.read_text(encoding="utf-8") == "leave unchanged\n"
