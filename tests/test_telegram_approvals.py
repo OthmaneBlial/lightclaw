@@ -103,6 +103,27 @@ def test_plan_expected_outputs_are_visible_and_trigger_second_confirmation():
     assert "outputs: Publish the production release" in preview
 
 
+@pytest.mark.parametrize("worker_action", ["Rotate API keys", "Merge release branch"])
+def test_key_changes_and_merges_trigger_second_confirmation(worker_action: str):
+    bot = LightClawBot.__new__(LightClawBot)
+    pending = bot._decorate_pending_plan(
+        {
+            "goal": "Improve documentation",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "role": "documentation",
+                        "responsibilities": ["Update API documentation"],
+                        "expected_outputs": [worker_action],
+                    }
+                ]
+            },
+        }
+    )
+
+    assert pending["review"]["second_confirmation_required"] is True
+
+
 def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     bot = LightClawBot.__new__(LightClawBot)
     responsibilities = ["Update the API", "Add regression coverage"]

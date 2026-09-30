@@ -25,8 +25,8 @@ MAX_REVIEWED_COMMANDS = 6
 class BotApprovalsMixin:
     _SECOND_CONFIRM_PATTERNS = (
         r"\b(delete|remove|destroy|drop|truncate|wipe|reset|clean)\b",
-        r"\b(push|publish|release|deploy|production|open\s+(?:a\s+)?pr)\b",
-        r"\b(token|credential|password|secret|api[_ -]?key|permission)\b",
+        r"\b(push|publish|release|deploy|production|merge|open\s+(?:a\s+)?pr)\b",
+        r"\b(tokens?|credentials?|passwords?|secrets?|permissions?|(?:api|access|private)[_ -]?keys?)\b",
         r"\b(outside|external|system|home directory|/etc/)\b",
     )
 
