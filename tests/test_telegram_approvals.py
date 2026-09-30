@@ -94,7 +94,7 @@ async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
     assert calls[-1].kwargs["reply_markup"] is not None
 
 
-def test_plan_with_hidden_commands_cannot_be_approved():
+def test_plan_with_unreviewed_commands_cannot_be_approved():
     bot = LightClawBot.__new__(LightClawBot)
     approval_id = "0123456789abcdef"
     commands = [f"python -m pytest tests/test_{index}.py" for index in range(7)]
@@ -117,7 +117,11 @@ def test_plan_with_hidden_commands_cannot_be_approved():
     pending["approval_id"] = approval_id
     review = pending["review"]
     assert review["approval_blocked"] is True
-    assert "commands are hidden from review" in bot._render_plan_review(pending)
+    rendered = bot._render_plan_review(pending)
+    assert commands[0] in rendered and commands[5] in rendered
+    assert commands[6] not in rendered
+    assert "first 6 commands shown" in rendered
+    assert "edit to review all" in rendered
     keyboard_data = {
         button.callback_data
         for row in bot._inline_plan_keyboard(

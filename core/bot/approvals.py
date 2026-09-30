@@ -223,7 +223,7 @@ class BotApprovalsMixin:
             lines.append("⚠️ Publishing, credentials, destructive language, or external scope triggered a second confirmation.")
         if review.get("approval_blocked"):
             lines.append(
-                "⛔ Approval disabled: commands are hidden from review. Edit the plan to expose all commands."
+                f"⛔ Blocked: first {MAX_REVIEWED_COMMANDS} commands shown; edit to review all."
             )
         return "\n".join(lines)
 
