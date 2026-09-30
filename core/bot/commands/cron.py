@@ -20,6 +20,7 @@ from ...fs import read_json_object
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import runtime_root_from_workspace
+from ..messaging import _TelegramHTMLChunker
 
 
 class CronStoreReadError(RuntimeError):
@@ -333,7 +334,10 @@ class CommandsCronMixin:
         if sub in {"list", "ls", "show", "status"}:
             async with self._cron_lock:
                 text = self._render_cron_list(session_id)
-            await self._reply_logged(update, text, parse_mode=ParseMode.HTML)
+            chunks = _TelegramHTMLChunker(max_len=3000)
+            chunks.feed(text)
+            for chunk in chunks.finish():
+                await self._reply_logged(update, chunk, parse_mode=ParseMode.HTML)
             return
 
         if sub in {"add", "create"}:

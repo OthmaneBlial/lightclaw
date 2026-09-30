@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from datetime import datetime
+from html import unescape
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from telegram.error import NetworkError, RetryAfter
+from telegram.constants import ParseMode
+from telegram.error import BadRequest, NetworkError, RetryAfter
 
 from config import Config
+from core.bot import LightClawBot
 from core.bot.base import BotBaseMixin
 from core.bot.commands.cron import CommandsCronMixin
 from core.bot.messaging import BotMessagingMixin
@@ -18,6 +22,50 @@ from core.bot.messaging import BotMessagingMixin
 class CronHarness(CommandsCronMixin, BotMessagingMixin, BotBaseMixin):
     def __init__(self):
         self.config = Config(telegram_allowed_users=["123"])
+
+
+@pytest.mark.asyncio
+async def test_cron_list_delivers_all_jobs_in_bounded_messages(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["123"])
+    bot._cron_lock = asyncio.Lock()
+    bot._privileged_request_times = {}
+    bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = Mock()
+    bot._log_bot_message = Mock()
+    texts = [f"Reminder {i}: " + "🐾<&" * 600 for i in range(2)]
+    bot._write_cron_store({"jobs": [
+        {
+            "id": f"job-{i}", "chat_id": "123", "mode": "at",
+            "text": text, "next_run_at": time.time() + 60,
+        }
+        for i, text in enumerate(texts)
+    ]})
+    delivered = []
+
+    async def reply_text(text, parse_mode=None, **_kwargs):
+        assert parse_mode == ParseMode.HTML
+        plain = unescape(re.sub(r"<[^>]+>", "", text))
+        if len(plain.encode("utf-16-le")) // 2 > 4096:
+            raise BadRequest("Message is too long")
+        delivered.append(plain)
+
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(reply_text=reply_text),
+    )
+
+    await bot.cmd_cron(update, SimpleNamespace(args=["list"], bot=SimpleNamespace()))
+
+    assert len(delivered) > 1
+    assert all(len(text.encode("utf-16-le")) // 2 <= 3000 for text in delivered)
+    result = "".join(delivered)
+    for i, text in enumerate(texts):
+        assert result.count(f"job-{i}") == 1
+        assert text in result
+    assert "/cron remove <id>" in result
 
 
 @pytest.mark.asyncio
