@@ -67,6 +67,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Scoped task undo now uses descriptor-anchored deletion on Python 3.10 without following symlinks.
 - Acceptance commands now bound streamed output, stop on cancellation, and register process
   groups for restart recovery.
+- Delegation progress updates now redact credential-like output before sending it to Telegram.
 
 ## [0.1.0] - Unreleased
 

@@ -109,6 +109,18 @@ def test_invalid_profile_falls_back_to_workspace_sandbox(tmp_path: Path):
     assert command[command.index("--sandbox") + 1] == "workspace-write"
 
 
+def test_progress_summary_redacts_agent_emitted_credentials():
+    harness = ExecutionHarness()
+    state = harness._new_progress_state()
+    secret = "sk-test-secret-value"
+    state["last_activity"] = f"command output: OPENAI_API_KEY={secret}"
+
+    rendered = harness._render_progress_summary("codex", state, 1, heartbeat=False)
+
+    assert secret not in rendered
+    assert "[REDACTED]" in rendered
+
+
 def test_receipt_output_refuses_symlinked_private_metadata_subdirectory(tmp_path: Path):
     root = tmp_path / "workspace"
     (root / ".lightclaw-meta").mkdir(parents=True)

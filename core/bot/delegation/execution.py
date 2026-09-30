@@ -291,7 +291,7 @@ class DelegationExecutionMixin:
 
     @staticmethod
     def _short_progress_text(text: str, max_chars: int = 180) -> str:
-        cleaned = re.sub(r"\s+", " ", (text or "").strip())
+        cleaned = re.sub(r"\s+", " ", redact_text(text).strip())
         if len(cleaned) <= max_chars:
             return cleaned
         return cleaned[: max_chars - 3].rstrip() + "..."
