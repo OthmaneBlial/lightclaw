@@ -71,7 +71,7 @@ def _check_artifact_git_metadata(root_fd: int) -> None:
 def _git(workspace: Path, *args: str, timeout: int = 30, trusted_repository: bool = False) -> subprocess.CompletedProcess[str]:
     try:
         if args and args[0] == "diff":
-            args = ("diff", "--no-ext-diff", "--no-textconv", *args[1:])
+            args = ("diff", "--no-ext-diff", "--no-textconv", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", *args[1:])
         # Empty value also disables legacy pathname-based filesystem monitors.
         git_options = () if trusted_repository else ("-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=", "-c", "commit.gpgSign=false")
         with directory_command_at(workspace, (), "git", *git_options, "--git-dir=.git", "--work-tree=.", "-C", ".", *args) as (command, pass_fds):

@@ -39,6 +39,9 @@ Artifact comparisons disable external diff drivers and text conversion with
 cannot run during change detection, statistics, or patch generation, nor hide raw changes by
 converting different files into identical text. Binary patches retain the actual staged bytes
 and can be applied with Git; stored driver settings remain available for manual review.
+Generated patches always use the standard `a/` and `b/` path prefixes, and comparisons suppress
+terminal color codes. User settings such as `diff.noprefix`, mnemonic or custom prefixes, and
+forced color cannot break patch application or add ANSI escapes to Telegram summaries and receipts.
 
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 

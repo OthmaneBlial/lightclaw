@@ -314,6 +314,38 @@ def test_task_commits_do_not_invoke_configured_signing_program(tmp_path, phase):
     assert signer.exists()
 
 
+@pytest.mark.parametrize("prefix_settings", [
+    {"diff.noprefix": "true"},
+    {"diff.mnemonicPrefix": "true"},
+    {"diff.srcPrefix": "custom-before/", "diff.dstPrefix": "custom-after/"},
+])
+def test_review_patch_keeps_standard_prefixes_and_plain_statistics(tmp_path, prefix_settings):
+    task = tmp_path / "task"
+    task.mkdir()
+    files = {"result.txt": (b"old\n", b"new\n"), "data.bin": (b"old\0raw\n", b"new\0raw\n")}
+    for name, (before, _) in files.items():
+        (task / name).write_bytes(before)
+    initialize_artifact_repository(task, "patch-format-test")
+    settings = {**prefix_settings, "color.ui": "always"}
+    for key, value in settings.items():
+        _git(task, "config", key, value)
+    for name, (_, after) in files.items():
+        (task / name).write_bytes(after)
+
+    bundle = create_patch_bundle(task, tmp_path / "review", run_id="patch-format-test")
+    patch = Path(bundle["patch"])
+
+    assert "diff --git a/result.txt b/result.txt" in patch.read_text()
+    assert "diff --git a/data.bin b/data.bin" in patch.read_text()
+    assert "\x1b[" not in patch.read_text()
+    assert "\x1b[" not in bundle["diff_stat"]
+    _git(task, "apply", "--reverse", str(patch))
+    assert all((task / name).read_bytes() == before for name, (before, _) in files.items())
+    _git(task, "apply", str(patch))
+    assert all((task / name).read_bytes() == after for name, (_, after) in files.items())
+    assert all(_git(task, "config", "--get", key) == value for key, value in settings.items())
+
+
 @pytest.mark.parametrize("phase", ["before_open", "launch"])
 def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeypatch, phase):
     workspace = tmp_path / "workspace"
