@@ -142,7 +142,7 @@ Current capabilities include:
 - OpenAI, xAI, Anthropic, Gemini, DeepSeek, and Z-AI routing;
 - Codex and Claude delegation profiles: `observe`, `workspace-write`, `trusted-command`;
 - DAG planning, owned paths, JSON handoffs, acceptance checks, and bounded repair;
-- reviewable artifacts, plan-hash-bound selective local apply, and optional PR previews;
+- reviewable artifacts, plan-hash-bound selective apply that stages sources and backs up targets before replacement, and optional PR previews;
 - namespaced SQLite FTS5 lexical recall with retention, export, and selective delete;
 - permission-manifest skills with pinned provenance, hash review, and prompt-only activation;
 - voice transcription, scheduled jobs, heartbeat, Telegram, and terminal chat;
