@@ -5,6 +5,8 @@ import json
 import stat
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -20,7 +22,7 @@ from core.artifacts import (
     reject_artifact,
 )
 from core.receipts import write_receipt
-from lightclaw_cli import build_parser
+from lightclaw_cli import build_parser, cmd_artifact
 
 
 def _git(root: Path, *args: str) -> str:
@@ -239,6 +241,17 @@ def test_pr_preview_contains_receipt_evidence_and_requires_exact_confirmation(tm
     (workspace / "health.py").write_text("STATUS = 'ok'\n", encoding="utf-8")
     create_patch_bundle(workspace, tmp_path / "artifact", run_id="run-pr")
     receipt_path, _, _ = write_receipt(_receipt("run-pr"), tmp_path / "receipt")
+    other_receipt_path, _, _ = write_receipt(
+        _receipt("another-run"), tmp_path / "another-receipt"
+    )
+
+    with pytest.raises(ArtifactError, match="different run"):
+        build_pull_request_preview(
+            workspace,
+            other_receipt_path,
+            run_id="run-pr",
+            title="Add a health check",
+        )
 
     unaccepted = build_pull_request_preview(
         workspace,
@@ -304,3 +317,42 @@ def test_artifact_cli_defaults_to_preview_and_exposes_publish_confirmation():
     assert parsed.base == "develop"
     assert parsed.confirm_publish == "run-123"
     assert parsed.apply is False
+
+
+@pytest.mark.parametrize("apply", [False, True])
+def test_artifact_pr_requires_durable_acceptance(tmp_path, monkeypatch, capsys, apply):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    config = SimpleNamespace(
+        memory_db_path=str(tmp_path / "memory.db"), workspace_path=str(workspace)
+    )
+
+    class JobStoreStub:
+        def __init__(self, _path):
+            pass
+
+        def get_job(self, _run_id):
+            return {"workspace": str(workspace), "status": "succeeded"}
+
+        def close(self):
+            pass
+
+    preview = Mock(return_value={"ready_to_publish": True, "run_id": "run-123"})
+    publish = Mock(return_value={"published": True})
+    monkeypatch.setenv("LIGHTCLAW_HOME", "")
+    monkeypatch.setenv("LIGHTCLAW_CONFIG", "")
+    monkeypatch.setattr("config.load_config", lambda: config)
+    monkeypatch.setattr("core.jobs.JobStore", JobStoreStub)
+    monkeypatch.setattr("core.artifacts.build_pull_request_preview", preview)
+    monkeypatch.setattr("core.artifacts.publish_pull_request", publish)
+
+    argv = ["artifact", "pr", "run-123", "--home", str(tmp_path / "home")]
+    if apply:
+        argv.extend(["--apply", "--confirm-publish", "run-123"])
+
+    result = cmd_artifact(build_parser().parse_args(argv))
+
+    assert result == 2
+    assert "accepted local artifact" in capsys.readouterr().out
+    preview.assert_not_called()
+    publish.assert_not_called()

@@ -326,6 +326,8 @@ def build_pull_request_preview(
         receipt = read_receipt(receipt_file)
     except ValueError as exc:
         raise ArtifactError("private receipt is missing or invalid") from exc
+    if str(receipt.get("run_id") or "") != run_id:
+        raise ArtifactError("private receipt belongs to a different run")
     branch = _safe_git_ref(_require_git(root, "branch", "--show-current"), "branch")
     base = _safe_git_ref(base, "base branch")
     remote = _require_git(root, "remote", "get-url", "origin")

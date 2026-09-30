@@ -171,7 +171,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1648,
+      "line": 1650,
       "lines": 245,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -221,7 +221,7 @@
   ],
   "largest_modules": [
     {
-      "lines": 1902,
+      "lines": 1904,
       "path": "lightclaw_cli.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 18977,
+  "runtime_lines": 18981,
   "schema_version": 1
 }

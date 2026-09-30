@@ -1588,6 +1588,8 @@ def cmd_artifact(args: argparse.Namespace) -> int:
                 apply=bool(args.apply),
             )
         elif action == "pr":
+            if job["status"] != "accepted":
+                raise ArtifactError("PR preview requires an accepted local artifact")
             preview = build_pull_request_preview(
                 workspace,
                 receipt,
