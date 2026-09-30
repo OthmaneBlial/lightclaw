@@ -19,7 +19,12 @@ from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
 from .agents import DelegationAgentsMixin
 from .streams import BoundedStreamCapture
-from .workspace import await_task_completion, await_thread_completion, create_subprocess_at
+from .workspace import (
+    await_task_completion,
+    await_thread_completion,
+    create_subprocess_at,
+    stop_process_tree,
+)
 
 
 class DelegationExecutionMixin:
@@ -529,32 +534,13 @@ class DelegationExecutionMixin:
             }
 
         started = time.monotonic()
-        async def terminate_process_tree(*, force: bool = False) -> None:
-            if proc.stdin:
-                proc.stdin.close()
-            if not force:
-                try:
-                    os.killpg(proc.pid, signal.SIGTERM)
-                except Exception:
-                    if proc.returncode is None:
-                        proc.terminate()
-                await asyncio.sleep(0.2)
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except Exception:
-                if proc.returncode is None:
-                    proc.kill()
-            await proc.wait()
-
         async def terminate_before_streaming(*, force: bool = False) -> None:
             async def drain(stream):
                 while await stream.read(65536):
                     pass
 
             await asyncio.gather(
-                terminate_process_tree(force=force), drain(proc.stdout), drain(proc.stderr)
+                stop_process_tree(proc, force=force), drain(proc.stdout), drain(proc.stderr)
             )
 
         creation_task = asyncio.create_task(
@@ -724,7 +710,7 @@ class DelegationExecutionMixin:
             await asyncio.gather(streams_task, return_exceptions=True)
             stderr_capture.append_line(f"Timed out after {timeout_sec}s")
         except asyncio.CancelledError:
-            cleanup_task = asyncio.create_task(terminate_process_tree())
+            cleanup_task = asyncio.create_task(stop_process_tree(proc))
             try:
                 await await_task_completion(cleanup_task)
             finally:
@@ -734,7 +720,7 @@ class DelegationExecutionMixin:
             raise
         except Exception as exc:
             io_failed = True
-            await terminate_process_tree()
+            await stop_process_tree(proc)
             await asyncio.gather(streams_task, return_exceptions=True)
             stderr_capture.append_line(f"Agent output stream failed: {exc}")
         finally:

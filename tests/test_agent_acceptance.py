@@ -362,6 +362,56 @@ def test_stalled_recovery_kills_acceptance_command_group(tmp_path):
         store.close()
 
 
+@pytest.mark.skipif(os.name != "posix", reason="process-group signals require POSIX")
+def test_acceptance_timeout_falls_back_when_group_signals_fail(tmp_path, monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    signal_calls = []
+
+    async def launch(*_args, **_kwargs):
+        stdout = asyncio.StreamReader()
+        stderr = asyncio.StreamReader()
+        stdout.feed_eof()
+        stderr.feed_eof()
+        exited = asyncio.Event()
+        process = SimpleNamespace(
+            pid=123, returncode=None, stdin=None, stdout=stdout, stderr=stderr
+        )
+
+        async def wait():
+            await exited.wait()
+            return process.returncode
+
+        def terminate():
+            signal_calls.append("terminate")
+
+        def kill():
+            signal_calls.append("kill")
+            process.returncode = -9
+            exited.set()
+
+        process.wait = wait
+        process.terminate = terminate
+        process.kill = kill
+        return process
+
+    def deny_group_signal(_pid, _signal):
+        raise PermissionError("group signal unavailable")
+
+    monkeypatch.setattr(
+        "core.bot.commands.agent_acceptance.create_subprocess_at", launch
+    )
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.os.killpg", deny_group_signal
+    )
+
+    failure = bot._run_multi_acceptance_command(
+        tmp_path, {"command": "python -c pass", "timeout_sec": 1}
+    )
+
+    assert "timed out after 1s" in failure
+    assert signal_calls == ["terminate", "kill"]
+
+
 @pytest.mark.skipif(os.name != "posix", reason="acceptance process groups require POSIX")
 def test_acceptance_timeout_kills_descendant_processes(tmp_path):
     marker = tmp_path / "orphan-finished"

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import signal
 import sqlite3
 import time
+from contextlib import suppress
 from pathlib import Path
 
 from ...artifacts import ArtifactError, initialize_artifact_repository
@@ -49,6 +52,33 @@ async def create_subprocess_at(root, parts: tuple[str, ...], *argv: str, **kwarg
         return await asyncio.create_subprocess_exec(
             *command, pass_fds=pass_fds, **kwargs,
         )
+
+
+async def stop_process_tree(process, *, force: bool = False, wait_task=None) -> None:
+    if process.stdin:
+        process.stdin.close()
+
+    def signal_group(sig, fallback):
+        try:
+            os.killpg(process.pid, sig)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            with suppress(ProcessLookupError):
+                fallback()
+
+    if os.name == "posix":
+        if not force:
+            signal_group(signal.SIGTERM, process.terminate)
+            await asyncio.sleep(0.2)
+        signal_group(signal.SIGKILL, process.kill)
+    elif process.returncode is None:
+        process.kill() if force else process.terminate()
+        if not force:
+            await asyncio.sleep(0.2)
+            if process.returncode is None:
+                process.kill()
+    await (wait_task if wait_task is not None else process.wait())
 
 
 class DelegationWorkspaceMixin:

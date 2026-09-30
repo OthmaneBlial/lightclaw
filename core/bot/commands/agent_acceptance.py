@@ -6,7 +6,6 @@ import asyncio
 import os
 import re
 import shlex
-import signal
 import stat
 import threading
 from pathlib import Path
@@ -17,7 +16,7 @@ from ...fs import FileTooLargeError, open_directory_at, read_json_object
 from ...logging_setup import log
 from ...security import delegated_process_env
 from ..delegation.streams import BoundedStreamCapture
-from ..delegation.workspace import create_subprocess_at
+from ..delegation.workspace import create_subprocess_at, stop_process_tree
 
 MAX_MULTI_HANDOFF_JSON_BYTES = 1024 * 1024
 
@@ -388,21 +387,6 @@ class CommandsAgentAcceptanceMixin:
                 asyncio.create_task(wait_for_cancel()) if cancel_event else None
             )
 
-            async def stop_process_group() -> None:
-                if os.name == "posix":
-                    try:
-                        os.killpg(process.pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                    await asyncio.sleep(0.2)
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                elif process.returncode is None:
-                    process.kill()
-                await wait_task
-
             process_store = getattr(self, "jobs", None)
             group_registered = False
             if job_run_id and process_store is not None and os.name == "posix":
@@ -413,7 +397,7 @@ class CommandsAgentAcceptanceMixin:
                         process.pid,
                     )
                 except Exception as e:
-                    await stop_process_group()
+                    await stop_process_tree(process, wait_task=wait_task)
                     try:
                         await asyncio.to_thread(
                             process_store.unregister_process_group,
@@ -452,7 +436,7 @@ class CommandsAgentAcceptanceMixin:
                         stream_error = e
 
                 if canceled or timed_out or stream_error:
-                    await stop_process_group()
+                    await stop_process_tree(process, wait_task=wait_task)
                     try:
                         await asyncio.wait_for(
                             asyncio.gather(*stream_tasks), timeout=1
