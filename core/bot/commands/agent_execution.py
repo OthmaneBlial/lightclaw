@@ -363,6 +363,7 @@ class CommandsAgentExecutionMixin:
                 self.jobs.claim_next,
                 workspace=multi_workspace,
                 worker_pid=None,
+                run_id=run_id,
             )
         except (JobConflictError, JobStateError) as exc:
             await self._reply_logged(
@@ -375,7 +376,7 @@ class CommandsAgentExecutionMixin:
         if not claimed_job or claimed_job["run_id"] != run_id:
             await self._reply_logged(
                 update,
-                f"⏳ Run <code>{_escape_html(run_id)}</code> is queued behind the active workspace writer.",
+                f"⏳ Run <code>{_escape_html(run_id)}</code> is queued behind another run in this workspace.",
                 parse_mode=ParseMode.HTML,
             )
             return

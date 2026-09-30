@@ -957,9 +957,10 @@ class DelegationExecutionMixin:
                     durable_store.claim_next,
                     workspace=target_workspace,
                     worker_pid=os.getpid(),
+                    run_id=run_id,
                 )
                 if not claimed or claimed["run_id"] != durable["run_id"]:
-                    return f"⏳ Delegation queued as `{run_id}`; another writer owns this workspace."
+                    return f"⏳ Delegation queued as `{run_id}`; another run is ahead of it or owns this workspace."
                 self._active_run_ids_by_session[session_id] = run_id
                 current_run_task = asyncio.current_task()
                 if current_run_task:

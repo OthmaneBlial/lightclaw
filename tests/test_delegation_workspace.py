@@ -10,12 +10,59 @@ import pytest
 
 from core.bot import LightClawBot
 from core.bot.delegation.workspace import DelegationWorkspaceMixin
+from core.jobs import JobStore
 from core.workspaces import WorkspaceSafetyError
 
 
 class WorkspaceHarness(DelegationWorkspaceMixin):
     def __init__(self, workspace_path: Path):
         self.config = SimpleNamespace(workspace_path=str(workspace_path))
+
+
+@pytest.mark.asyncio
+async def test_new_delegation_does_not_claim_another_sessions_queued_job(tmp_path):
+    workspace = tmp_path / "repo"
+    store = JobStore(tmp_path / "jobs.db")
+    older = store.create_job(
+        workspace=workspace,
+        session_id="other-chat",
+        goal="older reviewed task",
+        approved_scope="fixture",
+        risk_level="low",
+        capability_profile="workspace-write",
+        plan=[],
+        status="queued",
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(tmp_path),
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot.jobs = store
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+
+    async def checkpoint(*_args, **_kwargs):
+        return {}
+
+    async def refuse_launch(*_args, **_kwargs):
+        raise AssertionError("queued delegation must not launch an agent")
+
+    bot._prepare_task_workspace_checkpoint = checkpoint
+    bot._invoke_local_agent_streaming = refuse_launch
+    try:
+        result = await bot._run_local_agent_task_impl(
+            "new-chat", "codex", "new reviewed task", workspace_dir=workspace
+        )
+        assert "queued" in result
+        assert store.get_job(older["run_id"])["status"] == "queued"
+        jobs = store.list_jobs(workspace=workspace)
+        assert len(jobs) == 2
+        assert all(job["status"] == "queued" for job in jobs)
+        assert bot._active_run_ids_by_session == {}
+    finally:
+        store.close()
 
 
 @pytest.mark.parametrize("swap", ["leaf", "parent"])

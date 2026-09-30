@@ -411,7 +411,7 @@ class JobStore:
             self._event(run_id, event, {"from": current_status, "to": target})
         return self.get_job(run_id)
 
-    def claim_next(self, *, workspace: str | Path | None = None, worker_pid: int | None = None) -> dict[str, object] | None:
+    def claim_next(self, *, workspace: str | Path | None = None, worker_pid: int | None = None, run_id: str | None = None) -> dict[str, object] | None:
         with self._lock:
             self.db.execute("BEGIN IMMEDIATE")
             try:
@@ -424,7 +424,7 @@ class JobStore:
                     f"SELECT run_id, workspace FROM jobs WHERE {clause} ORDER BY priority DESC, created_at ASC LIMIT 1",
                     params,
                 ).fetchone()
-                if row is None:
+                if row is None or (run_id is not None and row["run_id"] != run_id):
                     self.db.commit()
                     return None
                 active = self.db.execute(

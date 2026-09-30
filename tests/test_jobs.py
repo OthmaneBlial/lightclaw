@@ -339,7 +339,9 @@ def test_priority_queue_and_one_active_writer_per_workspace(tmp_path):
     low = _create(store, workspace, priority=1)
     high = _create(store, workspace, priority=50)
 
-    claimed = store.claim_next(workspace=workspace, worker_pid=12345)
+    assert store.claim_next(workspace=workspace, run_id=low["run_id"]) is None
+    assert all(job["status"] == "queued" for job in store.list_jobs())
+    claimed = store.claim_next(workspace=workspace, worker_pid=12345, run_id=high["run_id"])
     assert claimed["run_id"] == high["run_id"]
     assert store.claim_next(workspace=workspace, worker_pid=12346) is None
     store.finish(high["run_id"], succeeded=True)
