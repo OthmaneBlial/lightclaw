@@ -23,6 +23,7 @@ def test_config_defaults_fail_closed_and_sandboxed():
     assert cfg.telegram_public_bot_ack is False
     assert cfg.local_agent_safety_mode == "strict"
     assert cfg.local_agent_capability_profile == "workspace-write"
+    assert cfg.heartbeat_interval_min == 15
 
 
 def test_config_parses_explicit_public_override(monkeypatch):
@@ -37,7 +38,12 @@ def test_config_parses_explicit_public_override(monkeypatch):
 
 @pytest.mark.parametrize(
     "name",
-    ["PROVIDER_TIMEOUT_SEC", "MEMORY_TOP_K", "LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS"],
+    [
+        "PROVIDER_TIMEOUT_SEC",
+        "MEMORY_TOP_K",
+        "LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS",
+        "HEARTBEAT_INTERVAL_MIN",
+    ],
 )
 def test_invalid_integer_setting_names_the_configuration_key(monkeypatch, name):
     monkeypatch.setenv(name, "not-an-integer")
@@ -45,6 +51,12 @@ def test_invalid_integer_setting_names_the_configuration_key(monkeypatch, name):
     with pytest.raises(ValueError, match=f"^{name} must be an integer$") as exc:
         load_config()
     assert "not-an-integer" not in str(exc.value)
+
+
+def test_heartbeat_interval_has_five_minute_minimum(monkeypatch):
+    monkeypatch.setenv("HEARTBEAT_INTERVAL_MIN", "2")
+
+    assert load_config().heartbeat_interval_min == 5
 
 
 def test_deepseek_default_and_cli_choices_use_current_api_ids(monkeypatch):

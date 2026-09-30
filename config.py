@@ -161,6 +161,7 @@ class Config:
     telegram_bot_token: str = ""
     telegram_allowed_users: list[str] = field(default_factory=list)
     telegram_public_bot_ack: bool = False
+    heartbeat_interval_min: int = 15
 
     # Memory
     memory_db_path: str = ".lightclaw/lightclaw.db"
@@ -237,6 +238,7 @@ def load_config() -> Config:
             os.getenv("LIGHTCLAW_PUBLIC_BOT_ACK", "no"),
             default=False,
         ),
+        heartbeat_interval_min=_int_env("HEARTBEAT_INTERVAL_MIN", 15),
         memory_db_path=os.getenv("MEMORY_DB_PATH", ".lightclaw/lightclaw.db"),
         memory_top_k=_int_env("MEMORY_TOP_K", 5),
         memory_retention_days=_int_env("MEMORY_RETENTION_DAYS", 90),
@@ -291,6 +293,7 @@ def load_config() -> Config:
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
     cfg.provider_timeout_sec = max(1, min(600, int(cfg.provider_timeout_sec)))
     cfg.provider_max_retries = max(0, min(4, int(cfg.provider_max_retries)))
+    cfg.heartbeat_interval_min = max(5, int(cfg.heartbeat_interval_min))
     cfg.memory_top_k = max(1, min(50, int(cfg.memory_top_k)))
     cfg.memory_retention_days = max(1, min(3_650, int(cfg.memory_retention_days)))
     cfg.memory_max_interactions = max(100, min(1_000_000, int(cfg.memory_max_interactions)))

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import heapq
-import os
 import re
 import secrets
 import time
@@ -69,15 +68,8 @@ class BotBaseMixin:
         # Throttle repeated Telegram polling conflict warnings.
         self._last_telegram_conflict_log_at: float = 0.0
         # Optional HEARTBEAT scheduler state (disabled by default).
-        heartbeat_minutes = 15
-        try:
-            heartbeat_minutes = int(
-                (os.getenv("HEARTBEAT_INTERVAL_MIN", "15") or "15").strip()
-            )
-        except Exception:
-            heartbeat_minutes = 15
         self._heartbeat_enabled: bool = False
-        self._heartbeat_interval_sec: int = max(5, heartbeat_minutes) * 60
+        self._heartbeat_interval_sec: int = max(5, config.heartbeat_interval_min) * 60
         self._heartbeat_last_chat_id: str = ""
         self._heartbeat_last_run_at: float = 0.0
         self._heartbeat_task = None
