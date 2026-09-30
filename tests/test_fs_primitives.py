@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -205,6 +206,40 @@ def test_json_reader_rejects_dangling_symlink_instead_of_using_default(tmp_path)
     assert not target.exists()
 
 
+@pytest.mark.parametrize("replacement", ["symlink", "fifo"])
+def test_json_reader_rejects_file_swapped_before_open(tmp_path, monkeypatch, replacement):
+    path = tmp_path / "state.json"
+    outside = tmp_path / "outside.json"
+    path.write_text('{"value":"approved"}', encoding="utf-8")
+    outside.write_text('{"value":"outside"}', encoding="utf-8")
+    original_io_open = io.open
+    original_os_open = os.open
+
+    def swap():
+        path.unlink()
+        if replacement == "symlink":
+            path.symlink_to(outside)
+        else:
+            os.mkfifo(path)
+
+    def legacy_open(file, *args, **kwargs):
+        if Path(file) == path:
+            swap()
+            if replacement == "fifo":
+                pytest.fail("JSON reader attempted a blocking FIFO open")
+        return original_io_open(file, *args, **kwargs)
+
+    def descriptor_open(file, *args, **kwargs):
+        if file == path.name and kwargs.get("dir_fd") is not None:
+            swap()
+        return original_os_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(io, "open", legacy_open)
+    monkeypatch.setattr(os, "open", descriptor_open)
+    with pytest.raises(OSError, match="symlink|regular file"):
+        read_json_object(path, default={"value": "missing"})
+
+
 def test_json_reader_rejects_oversize_and_non_object(tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     path.write_text(json.dumps([1, 2]), encoding="utf-8")
@@ -213,13 +248,24 @@ def test_json_reader_rejects_oversize_and_non_object(tmp_path, monkeypatch):
     path.write_text('{"long":"value"}', encoding="utf-8")
 
     read_requests = []
-    original_open = Path.open
+    original_open = os.fdopen
 
-    def probe_open(candidate, *args, **kwargs):
-        handle = original_open(candidate, *args, **kwargs)
-        return _ReadProbe(handle, read_requests) if candidate == path else handle
+    def probe_open(file_fd, *args, **kwargs):
+        return _ReadProbe(original_open(file_fd, *args, **kwargs), read_requests)
 
-    monkeypatch.setattr(Path, "open", probe_open)
-    with pytest.raises(OSError, match="size limit"):
+    monkeypatch.setattr(os, "fdopen", probe_open)
+    with pytest.raises(FileTooLargeError):
         read_json_object(path, max_bytes=4)
     assert read_requests == [5]
+
+
+def test_json_reader_keeps_missing_defaults_and_parent_aliases(tmp_path):
+    default = {"jobs": []}
+    missing = read_json_object(tmp_path / "missing" / "state.json", default=default)
+    assert missing == default and missing is not default
+    real_parent = tmp_path / "real"
+    real_parent.mkdir()
+    (real_parent / "state.json").write_text('{"value":"approved"}', encoding="utf-8")
+    alias = tmp_path / "alias"
+    alias.symlink_to(real_parent, target_is_directory=True)
+    assert read_json_object(alias / "state.json") == {"value": "approved"}

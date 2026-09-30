@@ -346,19 +346,11 @@ def read_json_object(
 ) -> dict[str, Any]:
     """Read one bounded, non-symlink JSON object or return a copied default."""
     source = Path(path)
-    fallback = dict(default or {})
-    if source.is_symlink():
-        raise OSError("JSON state path must be a regular non-symlink file")
-    if not source.exists():
-        return fallback
-    if not source.is_file():
-        raise OSError("JSON state path must be a regular non-symlink file")
-    limit = max(1, int(max_bytes))
-    with source.open("rb") as handle:
-        raw = handle.read(limit + 1)
-    if len(raw) > limit:
-        raise FileTooLargeError("JSON state exceeds the size limit")
-    loaded = json.loads(raw.decode("utf-8"))
+    try:
+        content = read_text_bounded_at(source.parent.resolve(), source.name, max_bytes)
+    except FileNotFoundError:
+        return dict(default or {})
+    loaded = json.loads(content)
     if not isinstance(loaded, dict):
         raise ValueError("JSON state must contain an object")
     return loaded

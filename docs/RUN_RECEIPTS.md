@@ -8,6 +8,8 @@ The receipt records the approved goal and scope, risk/capability, DAG and worker
 
 The JSON `schema_version` is stable and the CLI refuses incomplete receipts. Keep the private receipt local because it may contain workspace paths, commands, handoffs, and recovery context.
 
+Receipt reads are bounded and use an opened regular-file descriptor. A file replaced by a symlink or named pipe before opening is rejected, preventing redirected reads and pipe waits.
+
 ## Preview a sanitized Run Card
 
 ```bash
