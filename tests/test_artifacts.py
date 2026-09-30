@@ -792,6 +792,84 @@ def test_pr_preview_contains_receipt_evidence_and_requires_exact_confirmation(tm
         publish_pull_request(preview, confirmation="wrong-run")
 
 
+@pytest.mark.parametrize("outcome", ["success", "failure", "timeout"])
+def test_pr_creation_keeps_body_private_and_preserves_outside_files(tmp_path, monkeypatch, outcome):
+    import sys
+
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    for root in (workspace, outside):
+        (root / ".git").mkdir(parents=True)
+    sentinel = outside / ".git" / "lightclaw-pr-body.md"
+    sentinel.write_text("unrelated private file")
+    run = subprocess.run
+    bodies = []
+    permissions = []
+
+    def fake_git(_root, *args, **kwargs):
+        return ".git/lightclaw-pr-body.md" if args[0] == "rev-parse" else ""
+
+    def fake_gh(command, **kwargs):
+        if command[:3] == ["gh", "auth", "status"]:
+            return subprocess.CompletedProcess(command, 0, "", "")
+        body = Path(command[command.index("--body-file") + 1])
+        bodies.append(body)
+        permissions.append((stat.S_IMODE(body.stat().st_mode), stat.S_IMODE(body.parent.stat().st_mode)))
+        workspace.rename(tmp_path / "original")
+        workspace.symlink_to(outside, target_is_directory=True)
+        if outcome == "timeout":
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+        program = (
+            "import sys;from pathlib import Path;"
+            "Path('marker').write_text(Path(sys.argv[1]).read_text());"
+            "print('fixture rejected',file=sys.stderr) if int(sys.argv[2]) else print('https://example.invalid/pr/1');"
+            "sys.exit(int(sys.argv[2]))"
+        )
+        local_command = [sys.executable, "-c", program, str(body), str(int(outcome == "failure"))]
+        return run([*command[:command.index("gh")], *local_command], **kwargs)
+
+    monkeypatch.setattr(artifact_module, "_require_git", fake_git)
+    monkeypatch.setattr(subprocess, "run", fake_gh)
+    preview = {
+        "run_id": "fixture", "workspace": str(workspace), "branch": "fixture",
+        "body": "reviewed body", "ready_to_publish": True,
+    }
+    if outcome != "success":
+        error = "fixture rejected" if outcome == "failure" else "creation could not run"
+        with pytest.raises(ArtifactError, match=error):
+            publish_pull_request(preview, confirmation="fixture")
+    else:
+        result = publish_pull_request(preview, confirmation="fixture")
+        assert result["url"] == "https://example.invalid/pr/1"
+    assert sentinel.read_text() == "unrelated private file"
+    assert not (outside / "marker").exists()
+    marker = tmp_path / "original" / "marker"
+    if outcome == "timeout":
+        assert not marker.exists()
+    else:
+        assert marker.read_text() == "reviewed body"
+    assert bodies and all(not body.exists() for body in bodies)
+    assert all(file_mode & 0o077 == parent_mode & 0o077 == 0 for file_mode, parent_mode in permissions)
+
+
+def test_pr_creation_rejects_replaced_workspace_before_push(tmp_path, monkeypatch):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    workspace = tmp_path / "workspace"
+    workspace.symlink_to(outside, target_is_directory=True)
+
+    def auth_only(command, **kwargs):
+        assert command[:3] == ["gh", "auth", "status"], "replaced workspace must not run Git"
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(subprocess, "run", auth_only)
+    with pytest.raises(ArtifactError, match="git command could not run"):
+        publish_pull_request({
+            "run_id": "fixture", "workspace": str(workspace), "branch": "fixture",
+            "body": "reviewed body", "ready_to_publish": True,
+        }, confirmation="fixture")
+
+
 def test_pr_preview_rejects_oversized_receipt(tmp_path, monkeypatch):
     monkeypatch.setattr("core.receipts.MAX_RECEIPT_BYTES", 8)
     workspace = tmp_path / "workspace"

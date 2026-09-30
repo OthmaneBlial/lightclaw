@@ -78,6 +78,8 @@ lightclaw artifact pr <run-id> \
 
 Only that final command pushes the isolated branch and opens a pull request. There is no implicit push, PR, release, package publication, or other external write.
 
+PR creation uses an opened repository directory and an owner-only temporary body file outside the repository. Its body file is removed after success, failure, or timeout; cleanup never unlinks a path in a replaced workspace. A workspace symlink present before publication is refused before Git push.
+
 ## Deterministic proof
 
 `lightclaw demo --scenario repo-task` replays a recorded phone/Telegram request and approval, creates a baseline repository, applies a bounded health-check change, runs a real unit test, and returns `phone-to-patch.json`, a valid private receipt, `review/changes.patch`, and `review/artifact.json`. It needs no Telegram account, model, token, network, or hidden manual step.

@@ -728,7 +728,7 @@ def publish_pull_request(
         raise ArtifactError("PR publication requires the exact run id confirmation")
     if preview.get("ready_to_publish") is not True:
         raise ArtifactError("PR publication requires a clean, accepted local artifact commit")
-    root = Path(str(preview.get("workspace") or "")).resolve()
+    root = Path(str(preview.get("workspace") or "")).absolute()
     branch = str(preview.get("branch") or "")
     base = str(preview.get("base") or "main")
     title = str(preview.get("title") or "LightClaw result")
@@ -743,13 +743,12 @@ def publish_pull_request(
     if auth.returncode != 0:
         raise ArtifactError("gh CLI is not authenticated")
     _require_git(root, "push", "--set-upstream", "origin", branch, timeout=180)
-    body_file = Path(_require_git(root, "rev-parse", "--git-path", "lightclaw-pr-body.md"))
-    if not body_file.is_absolute():
-        body_file = (root / body_file).resolve()
-    _write_private(body_file, str(preview.get("body") or ""))
-    try:
-        created = subprocess.run(
-            [
+    with tempfile.TemporaryDirectory(prefix="lightclaw-pr-") as temporary:
+        body_file = Path(temporary) / "body.md"
+        _write_private(body_file, str(preview.get("body") or ""))
+        try:
+            with directory_command_at(
+                root, (),
                 "gh",
                 "pr",
                 "create",
@@ -761,16 +760,18 @@ def publish_pull_request(
                 title,
                 "--body-file",
                 body_file.as_posix(),
-            ],
-            cwd=root,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=120,
-            env=delegated_process_env(),
-        )
-    finally:
-        body_file.unlink(missing_ok=True)
+            ) as (command, pass_fds):
+                created = subprocess.run(
+                    command,
+                    pass_fds=pass_fds,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    timeout=120,
+                    env=delegated_process_env(),
+                )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ArtifactError("GitHub pull request creation could not run") from exc
     if created.returncode != 0:
         raise ArtifactError(redact_text(created.stderr or created.stdout).strip()[-800:])
     result = dict(preview)
