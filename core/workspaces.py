@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import os
 import re
 import shutil
@@ -9,7 +10,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from .fs import atomic_write_json, read_json_object
+from .fs import atomic_write_json, open_directory_at, read_json_object
 from .security import delegated_process_env
 
 METADATA_DIRNAME = ".lightclaw-meta"
@@ -57,21 +58,20 @@ def validate_workspace_root(raw_root: str | Path) -> Path:
 
 def ensure_private_workspace_dir(root: str | Path, *parts: str) -> Path:
     """Create a private workspace directory without following symlinks."""
-    current = validate_workspace_root(root)
     for part in parts:
         if part in {"", ".", ".."} or "/" in part or "\\" in part:
             raise WorkspaceSafetyError("private workspace path contains an unsafe directory name")
-        current = current / part
-        if current.is_symlink():
-            raise WorkspaceSafetyError("private workspace directory must not be a symlink")
-        try:
-            current.mkdir(mode=0o700)
-        except FileExistsError:
-            pass
-        if current.is_symlink() or not current.is_dir():
-            raise WorkspaceSafetyError("private workspace path must contain real directories")
-        _chmod_private_directory(current)
-    return current
+    current = validate_workspace_root(root)
+    try:
+        directory_fd = open_directory_at(current, tuple(parts), create=True, private=True)
+    except OSError as exc:
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise WorkspaceSafetyError(
+                "private workspace path must contain real directories and must not be a symlink"
+            ) from exc
+        raise
+    os.close(directory_fd)
+    return current.joinpath(*parts)
 
 
 def capture_git_checkpoint(workspace: Path) -> dict[str, object]:

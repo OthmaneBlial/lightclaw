@@ -93,7 +93,7 @@ def test_task_metadata_directory_symlink_cannot_read_or_write_outside_root(tmp_p
     assert not (outside / f"{another.name}.json").exists()
 
 
-def test_private_workspace_dir_does_not_chmod_swapped_symlink_target(
+def test_private_workspace_dir_does_not_open_swapped_symlink_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
     root = tmp_path / "workspace"
@@ -102,19 +102,22 @@ def test_private_workspace_dir_does_not_chmod_swapped_symlink_target(
     victim = tmp_path / "victim"
     victim.mkdir()
     victim.chmod(0o755)
-    chmod = os.chmod
+    open_file = os.open
+    swapped = False
 
-    def swap_then_chmod(path, mode, *, dir_fd=None, follow_symlinks=True):
-        target = Path(path)
-        if target == private:
-            target.rmdir()
-            target.symlink_to(victim, target_is_directory=True)
-        return chmod(path, mode, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+    def swap_then_open(path, flags, *args, **kwargs):
+        nonlocal swapped
+        if path == "private" and kwargs.get("dir_fd") is not None and not swapped:
+            swapped = True
+            private.rmdir()
+            private.symlink_to(victim, target_is_directory=True)
+        return open_file(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr("core.workspaces.os.chmod", swap_then_chmod)
+    monkeypatch.setattr("core.fs.os.open", swap_then_open)
     with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
         ensure_private_workspace_dir(root, "private")
 
+    assert swapped
     assert victim.stat().st_mode & 0o777 == 0o755
 
 

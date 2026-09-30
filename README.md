@@ -158,8 +158,10 @@ Delegated CLI output is bounded per line and per stream; LightClaw flags truncat
 Automatic edit retries omit
 common credential paths and files with detectable secrets; model-generated file blocks cannot
 write common credential paths, reject symlinked workspace paths during reads and writes, and cap
-each chat-edited file at 2 MiB. Writes replace files atomically. Use a delegated local-agent task
-for larger files. Scheduled `HEARTBEAT.md` input is capped at 64 KiB; larger files are skipped.
+each chat-edited file at 2 MiB. Private metadata, receipt, and message directories are created
+through no-follow directory descriptors with owner-only permissions. Writes replace files
+atomically. Use a delegated local-agent task for larger files. Scheduled `HEARTBEAT.md` input is
+capped at 64 KiB; larger files are skipped.
 Acceptance commands are user-approved host processes, not sandboxed by LightClaw; review them and
 use OS/container isolation for untrusted repositories. Secret detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.
