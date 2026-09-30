@@ -295,6 +295,15 @@ class BotHandlersMixin:
         if pending_multi:
             decision = self._classify_pending_multi_reply(user_text)
             if decision == "confirm":
+                reply = getattr(getattr(update, "message", None), "reply_to_message", None)
+                message_id = getattr(reply, "message_id", None)
+                if type(message_id) is not int or message_id <= 0 or message_id != pending_multi.get("review_message_id"):
+                    await self._reply_logged(
+                        update,
+                        "Reply yes directly to the final message of the current complete plan review, "
+                        "use its Approve button, or copy /agent multi confirm <review-id> from it.",
+                    )
+                    return
                 review = (
                     pending_multi.get("review")
                     if isinstance(pending_multi.get("review"), dict)

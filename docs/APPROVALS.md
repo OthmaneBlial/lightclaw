@@ -25,6 +25,13 @@ Buttons, slash commands, and text confirmations cannot execute or prime a second
 confirmation until every part of the plan review has been sent. Failed or interrupted
 review delivery discards that plan and preserves any newer request in the chat.
 
+Approvals identify the reviewed plan. Use its Approve button, copy
+`/agent multi confirm <review-id>` from that review, or reply `yes` directly to
+its final message in Telegram. Replies to older reviews cannot approve a replacement.
+The former bare `/agent multi confirm` and an unbound `yes` now return guidance
+without executing or recording an approval. Terminal `yes` still confirms the latest
+fully printed review by passing its ID to the command handler.
+
 `command_succeeds` checks run as host subprocesses after approval. They receive a minimal environment and an in-workspace working directory, but LightClaw does not add an operating-system sandbox around them. Review each command; use OS/container isolation for untrusted repositories.
 
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.

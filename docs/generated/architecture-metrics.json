@@ -7,18 +7,18 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
+      "branch_points": 99,
+      "line": 67,
+      "lines": 561,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
       "branch_points": 97,
       "line": 223,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
-    },
-    {
-      "branch_points": 96,
-      "line": 66,
-      "lines": 551,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 93,
@@ -35,9 +35,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 69,
+      "branch_points": 71,
       "line": 269,
-      "lines": 355,
+      "lines": 364,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -58,7 +58,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 337,
+      "lines": 339,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -121,9 +121,9 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 96,
-      "line": 66,
-      "lines": 551,
+      "branch_points": 99,
+      "line": 67,
+      "lines": 561,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -142,16 +142,16 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 69,
+      "branch_points": 71,
       "line": 269,
-      "lines": 355,
+      "lines": 364,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 337,
+      "lines": 339,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -178,7 +178,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1655,
+      "line": 1657,
       "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -221,11 +221,11 @@
   ],
   "largest_modules": [
     {
-      "lines": 1913,
+      "lines": 1915,
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1281,
+      "lines": 1282,
       "path": "core/bot/delegation/planning.py"
     },
     {
@@ -261,7 +261,7 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 669,
+      "lines": 680,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -269,7 +269,7 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 625,
+      "lines": 634,
       "path": "core/bot/handlers.py"
     },
     {
@@ -277,10 +277,10 @@
       "path": "core/bot/base.py"
     },
     {
-      "lines": 530,
+      "lines": 531,
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 21061,
+  "runtime_lines": 21086,
   "schema_version": 1
 }

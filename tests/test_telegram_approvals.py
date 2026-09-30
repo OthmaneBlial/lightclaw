@@ -455,12 +455,17 @@ async def test_text_confirmation_refuses_hidden_commands():
     bot._session_id_from_update = lambda _update: "456"
     bot._log_user_message = Mock()
     bot._get_pending_multi_plan = lambda _session: {
+        "review_delivered": True,
+        "review_message_id": 42,
         "review": {"approval_blocked": True}
     }
     bot._classify_pending_multi_reply = lambda _text: "confirm"
     bot._reply_logged = AsyncMock()
     bot._execute_pending_multi_plan = AsyncMock()
-    update = SimpleNamespace(effective_chat=SimpleNamespace(id=456))
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=456),
+        message=SimpleNamespace(reply_to_message=SimpleNamespace(message_id=42)),
+    )
 
     await bot._process_user_message(update, SimpleNamespace(), "yes")
 
@@ -734,6 +739,7 @@ async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     pending = {
         "review_delivered": True,
+        "review_message_id": 42,
         "approval_id": "0123456789abcdef",
         "review": {
             "second_confirmation_required": True,
@@ -746,7 +752,8 @@ async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
     bot._classify_pending_multi_reply = lambda _text: "confirm"
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=456, type="private"), effective_user=None
+        effective_chat=SimpleNamespace(id=456, type="private"), effective_user=None,
+        message=SimpleNamespace(reply_to_message=SimpleNamespace(message_id=42)),
     )
 
     await bot._process_user_message(update, SimpleNamespace(), "yes")

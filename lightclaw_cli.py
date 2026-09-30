@@ -1137,7 +1137,9 @@ def cmd_chat(args: argparse.Namespace) -> int:
             decision = bot._classify_pending_multi_reply(user_text)
             if decision == "confirm":
                 try:
-                    should_exit = asyncio.run(_run_terminal_command("/agent multi confirm"))
+                    should_exit = asyncio.run(_run_terminal_command(
+                        f"/agent multi confirm {pending_multi['approval_id']}"
+                    ))
                 except Exception as e:
                     print(f"bot> ⚠️ Command failed: {e}\n")
                     should_exit = False

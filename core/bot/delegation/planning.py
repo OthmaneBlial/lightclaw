@@ -1205,6 +1205,7 @@ class DelegationMultiPlanningMixin:
         plan_payload: dict[str, object],
         warnings: list[str] | None = None,
         include_confirm_hint: bool = True,
+        approval_id: str = "",
     ) -> str:
         lines = ["🤖 <b>Multi-Agent Plan Ready</b>", ""]
         lines.append(f"<b>Goal:</b> {_escape_html(goal)}")
@@ -1273,9 +1274,9 @@ class DelegationMultiPlanningMixin:
 
         if include_confirm_hint:
             lines.append("")
-            lines.append(
-                "Confirm to run: <code>/agent multi confirm</code> (or reply <code>yes</code>)."
-            )
+            lines.append("Use Approve, or reply <code>yes</code> directly to the final review message.")
+            if approval_id:
+                lines.append(f"Confirm this plan: <code>/agent multi confirm {_escape_html(approval_id)}</code>.")
             lines.append("Edit plan: <code>/agent multi edit &lt;feedback&gt;</code>.")
             lines.append("Cancel: <code>/agent multi cancel</code> (or reply <code>no</code>).")
         return "\n".join(lines)

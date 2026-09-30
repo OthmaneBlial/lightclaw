@@ -30,7 +30,8 @@ class DelegationMultiTaskMixin:
             )
         return (
             "A multi-agent plan is pending confirmation.\n"
-            "Use <code>/agent multi confirm</code> (or reply <code>yes</code>) to run it.\n"
+            "Use Approve on its complete review, or reply <code>yes</code> directly to the final review message.\n"
+            "For the terminal, copy <code>/agent multi confirm &lt;review-id&gt;</code> from that review.\n"
             "Use <code>/agent multi edit &lt;feedback&gt;</code> to regenerate it.\n"
             f"Use <code>/agent multi cancel</code> (or reply <code>no</code>) to discard it.\n"
             f"Pending plan expires in about <code>{mins}m</code>."

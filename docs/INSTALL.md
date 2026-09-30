@@ -80,6 +80,8 @@ Configure an LLM provider first. Terminal input is local to the host and does no
 require a Telegram token or user allowlist. Commands reuse the bot's handlers
 while keeping memory in a separate CLI scope. Replies show text and slash-command
 controls; Telegram buttons are not interactive in the terminal.
+Multi-agent reviews print `/agent multi confirm <review-id>`; a terminal `yes`
+passes the ID of the latest fully printed review to the same approval gate.
 
 ## Optional container
 

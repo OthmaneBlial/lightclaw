@@ -33,6 +33,13 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
             "terminal", user_namespace=namespace, workspace_namespace=workspace
         )
         bot.memory.ingest("user", "terminal secret amberfalcon <draft> & review", "terminal")
+        bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+        bot._plan_multi_agent_payload = AsyncMock(return_value=({
+            "goal": "inspect docs",
+            "workers": [("builder", "codex"), ("reviewer", "codex")],
+            "plan_payload": {"workers": [{"label": "builder", "owned_paths": ["docs/"]}]},
+        }, ""))
+        bot._execute_multi_agent_plan = AsyncMock()
         bots.append(bot)
         return bot
 
@@ -44,7 +51,8 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
     )
     monkeypatch.setenv("LIGHTCLAW_CHAT_MODE", "0")
     lines = iter([
-        "/help", "/recall amberfalcon", "/agent trusted codex inspect external files", "/exit"
+        "/help", "/recall amberfalcon", "/agent multi inspect docs", "yes",
+        "/agent trusted codex inspect external files", "/exit"
     ])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(lines))
 
@@ -58,6 +66,8 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
     assert config.telegram_allowed_users == allowed_users
     assert not config.telegram_public_bot_ack
     bots[0].llm.chat.assert_not_awaited()
+    bots[0]._execute_multi_agent_plan.assert_awaited_once()
+    assert bots[0]._execute_multi_agent_plan.await_args.kwargs["goal"] == "inspect docs"
 
     memory = MemoryStore(tmp_path / "memory.db")
     try:

@@ -187,7 +187,7 @@ async def test_planning_in_one_chat_does_not_invalidate_another_chat():
 
 async def _plan_action(bot, update, approval_id, action):
     if action == "slash":
-        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm"]))
+        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm", approval_id]))
     elif action == "text":
         await bot._process_user_message(update, SimpleNamespace(), "yes")
     else:
@@ -279,3 +279,66 @@ async def test_failed_review_delivery_invalidates_only_its_own_plan(failure, rep
     else:
         assert not bot._pending_multi_plan_by_session
     bot._execute_multi_agent_plan.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["bare-command", "old-id", "old-reply", "unbound-reply"])
+async def test_old_or_unbound_confirmation_cannot_approve_replacement_plan(entry):
+    bot = _bot()
+    bot._active_run_tasks_by_session = {}
+    bot._active_run_ids_by_session = {}
+    old = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("old goal")))
+    old.update(review_delivered=True, review_message_id=10)
+    latest = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("latest goal")))
+    latest.update(review_delivered=True, review_message_id=20)
+    update = _update()
+    if entry == "bare-command":
+        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm"]))
+    elif entry == "old-id":
+        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm", old["approval_id"]]))
+    else:
+        if entry == "old-reply":
+            update.message.reply_to_message = SimpleNamespace(message_id=10)
+        await bot._process_user_message(update, SimpleNamespace(), "yes")
+    bot._execute_multi_agent_plan.assert_not_awaited()
+    assert bot._get_pending_multi_plan("456") is latest
+    assert not latest["review"]["second_confirmation_prompted"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["command", "reply"])
+@pytest.mark.parametrize("high_risk", [False, True])
+async def test_confirmation_bound_to_current_complete_review_runs_once(entry, high_risk):
+    bot = _bot()
+    bot._active_run_tasks_by_session = {}
+    bot._active_run_ids_by_session = {}
+    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("latest goal")))
+    pending["review"]["second_confirmation_required"] = high_risk
+    bot._reply_logged.return_value = SimpleNamespace(message_id=777)
+    update = _update()
+    await bot._reply_multi_plan_preview(update, "complete review", pending["approval_id"], False)
+    assert pending["review_message_id"] == 777
+    if entry == "command":
+        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm", pending["approval_id"]]))
+    else:
+        update.message.reply_to_message = SimpleNamespace(message_id=777)
+        await bot._process_user_message(update, SimpleNamespace(), "yes")
+    if high_risk:
+        bot._execute_multi_agent_plan.assert_not_awaited()
+        assert pending["review"]["second_confirmation_prompted"]
+        await _plan_action(bot, update, pending["approval_id"], "confirm-risk")
+    bot._execute_multi_agent_plan.assert_awaited_once()
+    assert bot._execute_multi_agent_plan.await_args.kwargs["goal"] == "latest goal"
+    await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm", pending["approval_id"]]))
+    assert bot._execute_multi_agent_plan.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("review_id", ["é" * 16, "x", "", "0" * 16])
+async def test_invalid_multi_review_id_does_not_consume_current_plan(review_id):
+    bot = _bot()
+    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("latest goal")))
+    pending["review_delivered"] = True
+    await bot.cmd_agent(_update(), SimpleNamespace(args=["multi", "confirm", review_id]))
+    bot._execute_multi_agent_plan.assert_not_awaited()
+    assert bot._get_pending_multi_plan("456") is pending

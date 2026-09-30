@@ -122,7 +122,8 @@ class DelegationAgentsMixin:
             "<code>/agent multi @claude @codex &lt;goal&gt;</code> - prefer specific agents\n"
             "<code>/agent multi --agent &lt;label=agent&gt; [--agent ...] &lt;goal&gt;</code> - explicit worker roster\n"
             "<code>/agent multi --agent ... --depends-on &lt;label=dep1,dep2&gt; &lt;goal&gt;</code> - explicit worker DAG\n"
-            "<code>/agent multi confirm|edit|cancel</code> - control pending multi plan"
+            "<code>/agent multi confirm &lt;review-id&gt;</code> - approve the reviewed plan\n"
+            "<code>/agent multi edit|cancel</code> - control the pending plan"
         )
 
     @staticmethod
@@ -228,9 +229,9 @@ class DelegationAgentsMixin:
 
         first = (tokens[0] or "").strip().lower()
         if first == "confirm":
-            if len(tokens) > 1:
-                return {}, "Usage: <code>/agent multi confirm</code>"
-            return {"action": "confirm"}, ""
+            if len(tokens) > 2 or (len(tokens) == 2 and not re.fullmatch(r"[0-9a-f]{16}", tokens[1])):
+                return {}, "Usage: <code>/agent multi confirm &lt;review-id&gt;</code>"
+            return {"action": "confirm", "approval_id": tokens[1] if len(tokens) == 2 else ""}, ""
 
         if first in {"cancel", "stop"}:
             if len(tokens) > 1:

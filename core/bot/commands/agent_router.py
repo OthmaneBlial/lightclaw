@@ -51,7 +51,7 @@ class CommandsAgentRouterMixin:
         )
         try:
             for index, chunk in enumerate(chunks):
-                await self._reply_logged(
+                sent = await self._reply_logged(
                     update,
                     chunk,
                     parse_mode=ParseMode.HTML,
@@ -61,6 +61,7 @@ class CommandsAgentRouterMixin:
             if self._pending_multi_plan_by_session.get(session_id) is pending:
                 self._clear_pending_multi_plan(session_id)
             raise
+        pending["review_message_id"] = getattr(sent, "message_id", None)
         pending["review_delivered"] = True
 
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -187,6 +188,14 @@ class CommandsAgentRouterMixin:
                         parse_mode=ParseMode.HTML,
                     )
                     return
+                approval_id = str(parsed.get("approval_id") or "")
+                if not approval_id or not secrets.compare_digest(str(pending["approval_id"]), approval_id):
+                    await self._reply_logged(
+                        update,
+                        "This confirmation does not identify the current reviewed plan. "
+                        "Use its Approve button or copy /agent multi confirm <review-id> from the review.",
+                    )
+                    return
                 await self._execute_pending_multi_plan(update, session_id)
                 return
 
@@ -280,6 +289,7 @@ class CommandsAgentRouterMixin:
                     plan_payload=preview_payload,
                     warnings=[str(item) for item in preview_warnings],
                     include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
+                    approval_id=str(pending_payload["approval_id"]),
                 )
                 preview += "\n\n" + self._render_plan_review(pending_payload)
                 await self._reply_multi_plan_preview(
@@ -347,6 +357,7 @@ class CommandsAgentRouterMixin:
                 plan_payload=preview_payload,
                 warnings=[str(item) for item in preview_warnings],
                 include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
+                approval_id=str(pending_payload["approval_id"]),
             )
             preview += "\n\n" + self._render_plan_review(pending_payload)
             await self._reply_multi_plan_preview(
