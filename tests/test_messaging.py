@@ -11,10 +11,21 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, RetryAfter
 
 import core.bot.messaging as messaging
+from core.bot.base import BotBaseMixin
 from core.bot.messaging import BotMessagingMixin
 
 
 class MessagingHarness(BotMessagingMixin):
+    @staticmethod
+    def _session_id_from_update(_update) -> str:
+        return "fixture-session"
+
+    @staticmethod
+    def _log_bot_message(_session_id: str, _text: str) -> None:
+        pass
+
+
+class ReplyHarness(BotBaseMixin):
     @staticmethod
     def _session_id_from_update(_update) -> str:
         return "fixture-session"
@@ -36,6 +47,55 @@ async def test_escaped_content_is_not_truncated_after_html_conversion():
     html_chunk = placeholder.edit_text.await_args.args[0]
     assert len(html_chunk) > 4096
     assert html_chunk == "&lt;" * 1500
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("oversized", [False, True])
+async def test_send_response_redacts_configured_secret_values(tmp_path, oversized):
+    secret = "configured-provider-value-7f3a"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(
+        openai_api_key=secret,
+        workspace_path=str(workspace),
+    )
+    text = "Provider returned " + secret
+    if oversized:
+        text += "\nstatus: complete" + "\ncontext" * 1000
+    placeholder = SimpleNamespace(edit_text=AsyncMock())
+    message = SimpleNamespace(reply_document=AsyncMock())
+
+    await bot._send_response(
+        None if oversized else placeholder,
+        SimpleNamespace(message=message),
+        text,
+    )
+
+    if oversized:
+        artifact = next((workspace / ".lightclaw-meta" / "messages").glob("response-*.md"))
+        result_text = artifact.read_text()
+    else:
+        result_text = placeholder.edit_text.await_args.args[0]
+    assert secret not in result_text
+    assert "[REDACTED]" in result_text
+
+
+@pytest.mark.asyncio
+async def test_reply_logged_redacts_configured_secret_values():
+    secret = "configured-provider-value-7f3a"
+    bot = ReplyHarness.__new__(ReplyHarness)
+    bot.config = SimpleNamespace(openai_api_key=secret)
+    message = SimpleNamespace(reply_text=AsyncMock())
+
+    await bot._reply_logged(
+        SimpleNamespace(message=message),
+        "Provider returned " + secret,
+    )
+
+    text = message.reply_text.await_args.args[0]
+    assert secret not in text
+    assert "[REDACTED]" in text
 
 
 @pytest.mark.asyncio

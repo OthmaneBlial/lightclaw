@@ -100,6 +100,11 @@ class BotMessagingMixin:
 
     async def _send_response(self, placeholder, update: Update, markdown_response: str):
         """Send bounded Telegram HTML chunks while preserving formatting."""
+        markdown_response = redact_text(
+            markdown_response,
+            getattr(getattr(self, "config", None), "__dict__", {}),
+        )
+
         async def report_failure(text: str) -> None:
             target = placeholder.edit_text if placeholder else getattr(update.message, "reply_text", None)
             if target:

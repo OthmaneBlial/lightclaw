@@ -21,8 +21,10 @@ explicitly sends a prompt to a chosen provider or performs a separate publicatio
 Optional JSONL logs use owner-only files. LightClaw rotates them at 5 MiB and retains up to
 three backups; message, exception, and session fields are capped at 4,096 characters. LightClaw
 redacts known environment secrets and recognizable credential patterns before console or JSONL
-handlers write records. Detection is heuristic. LightClaw rejects a symlink at the configured
-log file path.
+handlers write records. Telegram replies and saved long-response artifacts also redact configured
+values whose setting names indicate credentials, along with recognizable credential patterns.
+Detection is heuristic; unknown formats and values shorter than four characters may evade it.
+LightClaw rejects a symlink at the configured log file path.
 
 Provider errors included in planner fallback notes mask configured credentials
 and recognizable credential patterns before appearing in a Telegram review.

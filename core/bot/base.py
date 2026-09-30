@@ -23,7 +23,7 @@ from ..constants import STRICT_LOCAL_AGENT_DENY_PATTERNS
 from ..jobs import JobStore
 from ..logging_setup import log
 from ..personality import load_personality
-from ..security import access_policy_label, is_sensitive_path
+from ..security import access_policy_label, is_sensitive_path, redact_text
 
 # ponytail: bounded in-process LRU; use shared storage if public traffic exceeds this ceiling.
 MAX_PRIVILEGED_RATE_LIMIT_KEYS = 4096
@@ -572,6 +572,7 @@ class BotBaseMixin:
         reply_markup=None,
     ):
         """Reply to Telegram and mirror the same content to terminal logs."""
+        text = redact_text(text, getattr(getattr(self, "config", None), "__dict__", {}))
         session_id = self._session_id_from_update(update)
         logged_text = self._strip_html_for_log(text) if parse_mode == ParseMode.HTML else text
         self._log_bot_message(session_id, logged_text)
