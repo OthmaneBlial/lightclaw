@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
+import sys
+import time
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -68,8 +72,8 @@ def test_acceptance_command_rejects_cwd_symlink_outside_workspace(tmp_path, monk
     outside = tmp_path / "outside"
     outside.mkdir()
     (workspace / "external").symlink_to(outside, target_is_directory=True)
-    run = Mock(return_value=SimpleNamespace(returncode=0, stdout="", stderr=""))
-    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.run", run)
+    run = Mock()
+    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.Popen", run)
     bot = LightClawBot.__new__(LightClawBot)
 
     failure = bot._run_multi_acceptance_command(
@@ -85,8 +89,9 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
     workspace.mkdir()
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
     monkeypatch.setenv("LIGHTCLAW_TEST_SECRET", "provider-secret")
-    run = Mock(return_value=SimpleNamespace(returncode=0, stdout="", stderr=""))
-    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.run", run)
+    process = SimpleNamespace(returncode=0, communicate=Mock(return_value=("", "")))
+    run = Mock(return_value=process)
+    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.Popen", run)
     bot = LightClawBot.__new__(LightClawBot)
 
     failure = bot._run_multi_acceptance_command(
@@ -99,6 +104,31 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
     assert "LIGHTCLAW_TEST_SECRET" not in child_env
     assert child_env["LIGHTCLAW_DELEGATED"] == "1"
     assert child_env["CI"] == "1"
+    process.communicate.assert_called_once_with(timeout=20)
+    assert run.call_args.kwargs["start_new_session"] is True
+
+
+@pytest.mark.skipif(os.name != "posix", reason="acceptance process groups require POSIX")
+def test_acceptance_timeout_kills_descendant_processes(tmp_path):
+    marker = tmp_path / "orphan-finished"
+    child = (
+        "import pathlib,time;time.sleep(1.4);"
+        f"pathlib.Path({str(marker)!r}).write_text('survived')"
+    )
+    parent = (
+        "import subprocess,sys,time;"
+        f"subprocess.Popen([sys.executable,'-c',{child!r}]);time.sleep(10)"
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+
+    failure = bot._run_multi_acceptance_command(
+        tmp_path,
+        {"command": shlex.join([sys.executable, "-c", parent]), "timeout_sec": 1},
+    )
+
+    assert "timed out" in failure
+    time.sleep(1.6)
+    assert not marker.exists()
 
 
 def test_handoff_acceptance_rejects_symlinked_parent_outside_workspace(tmp_path):

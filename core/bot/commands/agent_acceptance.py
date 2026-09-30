@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
+import signal
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -342,33 +344,53 @@ class CommandsAgentAcceptanceMixin:
         timeout_sec = max(1, min(45, timeout_sec))
 
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 argv,
                 cwd=str(cwd),
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=timeout_sec,
-                check=False,
                 env=delegated_process_env(extra={"CI": "1"}),
+                start_new_session=os.name == "posix",
             )
-        except subprocess.TimeoutExpired:
-            return f"command timed out after {timeout_sec}s: `{command}`"
+            try:
+                stdout, stderr = process.communicate(timeout=timeout_sec)
+            except subprocess.TimeoutExpired:
+                if os.name == "posix":
+                    try:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.wait(timeout=0.2)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                elif process.poll() is None:
+                    process.kill()
+                process.wait()
+                process.stdout.close()
+                process.stderr.close()
+                return f"command timed out after {timeout_sec}s: `{command}`"
         except Exception as e:
             return f"command failed to start `{command}`: {e}"
 
-        if completed.returncode == 0:
+        if process.returncode == 0:
             return ""
 
         output = "\n".join(
             part.strip()
-            for part in [completed.stdout or "", completed.stderr or ""]
+            for part in [stdout or "", stderr or ""]
             if part and part.strip()
         )
         output_preview = self._short_progress_text(output, max_chars=220) if output else ""
         location = f" in `{cwd_rel}`" if cwd_rel else ""
         detail = f": {output_preview}" if output_preview else ""
         return (
-            f"command failed{location} (exit {completed.returncode}): `{command}`{detail}"
+            f"command failed{location} (exit {process.returncode}): `{command}`{detail}"
         )
 
     def _multi_value_is_nonempty(self, value: Any) -> bool:
