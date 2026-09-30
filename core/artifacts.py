@@ -181,7 +181,6 @@ def create_patch_bundle(
             detail = redact_text(patch_result.stderr or patch_result.stdout).strip()[-800:]
             raise ArtifactError(detail or "could not write the review patch")
         patch_sha256 = sha256_file(patch_temp)
-        os.chmod(patch_temp, 0o600)
         os.replace(patch_temp, patch_path)
     finally:
         patch_temp.unlink(missing_ok=True)
