@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
 
-from .fs import open_directory_at, open_regular_file_at, sha256_file
+from .fs import directory_command_at, open_directory_at, open_regular_file_at, sha256_file
 from .receipts import _write_private, read_receipt
 from .security import delegated_process_env, redact_text
 
@@ -24,14 +24,16 @@ class ArtifactError(ValueError):
 
 def _git(workspace: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(
-            ["git", "-C", workspace.as_posix(), *args],
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-            env=delegated_process_env(),
-        )
+        with directory_command_at(workspace, (), "git", "-C", ".", *args) as (command, pass_fds):
+            return subprocess.run(
+                command,
+                pass_fds=pass_fds,
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+                env=delegated_process_env(),
+            )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ArtifactError(f"git command could not run: {' '.join(args)}") from exc
 

@@ -8,7 +8,9 @@ import json
 import os
 import secrets
 import stat
+import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -131,6 +133,21 @@ def open_directory_at(
                 exc.errno, "workspace path contains a symlink or non-directory parent"
             ) from exc
         raise
+
+
+@contextmanager
+def directory_command_at(root, parts: tuple[str, ...], *argv: str):
+    """Hold a directory open and prepare a command that enters it before exec."""
+    directory_fd = open_directory_at(root, parts)
+    try:
+        yield [
+            sys.executable, "-I", "-c",
+            "import os,sys;fd=int(sys.argv[1]);os.fchdir(fd);os.close(fd);"
+            "os.execvpe(sys.argv[2],sys.argv[2:],os.environ)",
+            str(directory_fd), *argv,
+        ], (directory_fd,)
+    finally:
+        os.close(directory_fd)
 
 
 def open_regular_file_at(

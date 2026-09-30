@@ -9,6 +9,8 @@ Review artifacts support up to 500 changed paths. Larger runs fail review-artifa
 
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.
 
+Git artifact operations enter an opened workspace directory before running Git. A workspace replaced by a symlink before opening is refused; replacing its path after opening cannot redirect staging, commits, resets, or patch inspection into the replacement repository.
+
 ## Review a result
 
 ```bash

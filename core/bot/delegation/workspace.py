@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import re
 import sqlite3
-import sys
 import time
 from pathlib import Path
 
 from ...artifacts import ArtifactError, initialize_artifact_repository
-from ...fs import open_directory_at, sha256_file
+from ...fs import directory_command_at, sha256_file
 from ...jobs import JobStateError
 from ...logging_setup import log
 from ...workspaces import (
@@ -47,16 +45,10 @@ async def await_task_completion(task):
 
 async def create_subprocess_at(root, parts: tuple[str, ...], *argv: str, **kwargs):
     """Start a process in an opened directory, closing its inherited handle before exec."""
-    directory_fd = open_directory_at(root, parts)
-    try:
+    with directory_command_at(root, parts, *argv) as (command, pass_fds):
         return await asyncio.create_subprocess_exec(
-            sys.executable, "-I", "-c",
-            "import os,sys;fd=int(sys.argv[1]);os.fchdir(fd);os.close(fd);"
-            "os.execvpe(sys.argv[2],sys.argv[2:],os.environ)",
-            str(directory_fd), *argv, pass_fds=(directory_fd,), **kwargs,
+            *command, pass_fds=pass_fds, **kwargs,
         )
-    finally:
-        os.close(directory_fd)
 
 
 class DelegationWorkspaceMixin:

@@ -36,6 +36,40 @@ def _git(root: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
+@pytest.mark.parametrize("phase", ["before_open", "launch"])
+def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeypatch, phase):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    for root in (workspace, outside):
+        _git(root, "init", "-b", "main")
+    (workspace / "inside.txt").write_text("approved")
+    (outside / "outside.txt").write_text("private")
+    run = subprocess.run
+
+    def swap():
+        workspace.rename(tmp_path / "original")
+        workspace.symlink_to(outside, target_is_directory=True)
+
+    def swapped_launch(*args, **kwargs):
+        swap()
+        return run(*args, **kwargs)
+
+    if phase == "before_open":
+        swap()
+        with pytest.raises(ArtifactError):
+            artifact_module._git(workspace, "add", "-A")
+    else:
+        monkeypatch.setattr(subprocess, "run", swapped_launch)
+        result = artifact_module._git(workspace, "add", "-A")
+        monkeypatch.setattr(subprocess, "run", run)
+        assert result.returncode == 0
+    assert _git(outside, "diff", "--cached", "--name-only") == ""
+    if phase == "launch":
+        assert _git(tmp_path / "original", "diff", "--cached", "--name-only") == "inside.txt"
+
+
 def _receipt(run_id: str) -> dict[str, object]:
     return {
         "run_id": run_id,
