@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 71,
-      "line": 865,
+      "line": 864,
       "lines": 405,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -64,16 +64,16 @@
     },
     {
       "branch_points": 52,
-      "line": 319,
-      "lines": 197,
-      "name": "_run_multi_acceptance_command",
+      "line": 587,
+      "lines": 177,
+      "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "branch_points": 52,
-      "line": 597,
-      "lines": 177,
-      "name": "_evaluate_multi_worker_acceptance",
+      "branch_points": 51,
+      "line": 319,
+      "lines": 187,
+      "name": "_run_multi_acceptance_command",
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
@@ -100,7 +100,7 @@
     {
       "branch_points": 45,
       "line": 496,
-      "lines": 299,
+      "lines": 298,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 71,
-      "line": 865,
+      "line": 864,
       "lines": 405,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -165,7 +165,7 @@
     {
       "branch_points": 45,
       "line": 496,
-      "lines": 299,
+      "lines": 298,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -198,13 +198,6 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "branch_points": 52,
-      "line": 319,
-      "lines": 197,
-      "name": "_run_multi_acceptance_command",
-      "path": "core/bot/commands/agent_acceptance.py"
-    },
-    {
       "branch_points": 54,
       "line": 320,
       "lines": 194,
@@ -212,8 +205,15 @@
       "path": "core/bot/approvals.py"
     },
     {
+      "branch_points": 51,
+      "line": 319,
+      "lines": 187,
+      "name": "_run_multi_acceptance_command",
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
       "branch_points": 52,
-      "line": 597,
+      "line": 587,
       "lines": 177,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
@@ -229,7 +229,7 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1269,
+      "lines": 1268,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -253,7 +253,7 @@
       "path": "core/jobs.py"
     },
     {
-      "lines": 800,
+      "lines": 790,
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21177,
+  "runtime_lines": 21184,
   "schema_version": 1
 }

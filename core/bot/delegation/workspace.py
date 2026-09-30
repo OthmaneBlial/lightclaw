@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import sqlite3
+import sys
 import time
 from pathlib import Path
 
 from ...artifacts import ArtifactError, initialize_artifact_repository
-from ...fs import sha256_file
+from ...fs import open_directory_at, sha256_file
 from ...jobs import JobStateError
 from ...logging_setup import log
 from ...workspaces import (
@@ -41,6 +43,20 @@ async def await_task_completion(task):
                 log.exception("Background operation failed during cancellation")
             break
         raise
+
+
+async def create_subprocess_at(root, parts: tuple[str, ...], *argv: str, **kwargs):
+    """Start a process in an opened directory, closing its inherited handle before exec."""
+    directory_fd = open_directory_at(root, parts)
+    try:
+        return await asyncio.create_subprocess_exec(
+            sys.executable, "-I", "-c",
+            "import os,sys;fd=int(sys.argv[1]);os.fchdir(fd);os.close(fd);"
+            "os.execvpe(sys.argv[2],sys.argv[2:],os.environ)",
+            str(directory_fd), *argv, pass_fds=(directory_fd,), **kwargs,
+        )
+    finally:
+        os.close(directory_fd)
 
 
 class DelegationWorkspaceMixin:
@@ -333,9 +349,11 @@ class DelegationWorkspaceMixin:
         workspace_path = target_workspace.as_posix()
         return (
             "You are a local coding agent delegated by LightClaw.\n"
-            f"Workspace root: {workspace_path}\n\n"
+            "Workspace root: current working directory (.)\n"
+            f"Approved workspace path label: {workspace_path}\n\n"
             "Requirements:\n"
             "- Implement the task directly by creating/editing files in this workspace.\n"
+            "- Use paths relative to the current working directory; the approved path label may have moved.\n"
             "- Do not ask for confirmation; make reasonable assumptions and proceed.\n"
             "- If the task is large, still perform as much as possible in one run.\n"
             "- Do not dump full source files in the final response.\n"

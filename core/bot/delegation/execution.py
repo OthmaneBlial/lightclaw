@@ -19,7 +19,7 @@ from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
 from .agents import DelegationAgentsMixin
 from .streams import BoundedStreamCapture
-from .workspace import await_task_completion, await_thread_completion
+from .workspace import await_task_completion, await_thread_completion, create_subprocess_at
 
 
 class DelegationExecutionMixin:
@@ -190,7 +190,7 @@ class DelegationExecutionMixin:
             else:
                 sandbox = "read-only" if profile == "observe" else "workspace-write"
                 cmd.extend(["--sandbox", sandbox])
-            cmd.extend(["-C", workspace.as_posix(), "-"])
+            cmd.extend(["-C", ".", "-"])
             run_input = prompt
             return cmd, run_input
 
@@ -558,12 +558,11 @@ class DelegationExecutionMixin:
             )
 
         creation_task = asyncio.create_task(
-            asyncio.create_subprocess_exec(
-                *cmd,
+            create_subprocess_at(
+                workspace, (), *cmd,
                 stdin=asyncio.subprocess.PIPE if run_input is not None else None,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=workspace.as_posix(),
                 env=env,
                 start_new_session=True,
             )

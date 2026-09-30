@@ -162,6 +162,61 @@ def test_receipt_output_refuses_symlinked_private_metadata_subdirectory(tmp_path
     assert list(outside.iterdir()) == []
 
 
+@pytest.mark.parametrize("agent", ["codex", "claude"])
+@pytest.mark.parametrize("phase", ["before_open", "launch"])
+async def test_agent_startup_cannot_follow_replaced_workspace(tmp_path, monkeypatch, agent, phase):
+    workspace = tmp_path / "checked"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    fake_agent = tmp_path / "fixture-agent"
+    fake_agent.write_text(
+        f"#!{sys.executable}\n"
+        "import os,sys,json\nfrom pathlib import Path\n"
+        "prompt = sys.stdin.read()\n"
+        "if '-C' in sys.argv: os.chdir(sys.argv[sys.argv.index('-C')+1])\n"
+        "Path('marker').write_text(prompt)\n"
+        "print(json.dumps({'type':'result','result':'fixture finished','is_error':False}))\n"
+    )
+    fake_agent.chmod(0o700)
+    harness = TimeoutHarness()
+    harness.config.local_agent_timeout_sec = 10
+    harness._build_delegation_prompt = lambda task, workspace=None: (
+        DelegationWorkspaceMixin._build_delegation_prompt(harness, task, workspace=workspace)
+    )
+    original_launch = asyncio.create_subprocess_exec
+
+    def swap():
+        workspace.rename(tmp_path / "original")
+        workspace.symlink_to(outside, target_is_directory=True)
+
+    def build(**kwargs):
+        command, prompt = ExecutionHarness._build_local_agent_command(harness, **kwargs)
+        command[0] = str(fake_agent)
+        if phase == "before_open":
+            swap()
+        return command, prompt
+
+    async def launch(*args, **kwargs):
+        if phase == "launch":
+            swap()
+        return await original_launch(*args, **kwargs)
+
+    harness._build_local_agent_command = build
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", launch)
+    result = await harness._invoke_local_agent_streaming(agent, "fixture", workspace=workspace)
+
+    assert not (outside / "marker").exists()
+    if phase == "launch":
+        assert result["ok"] is True
+        prompt = (tmp_path / "original" / "marker").read_text()
+        assert "Workspace root: current working directory (.)" in prompt
+        assert "fixture" in prompt
+    else:
+        assert result["ok"] is False
+        assert not (tmp_path / "original" / "marker").exists()
+
+
 async def test_streaming_timeout_kills_worker_process_group_and_preserves_existing_files(
     tmp_path: Path,
 ):
