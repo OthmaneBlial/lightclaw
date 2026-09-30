@@ -95,6 +95,89 @@ def test_concurrent_approval_transition_writes_one_event_across_connections(tmp_
             store.close()
 
 
+def test_concurrent_lane_retries_queue_one_attempt_across_connections(tmp_path):
+    database = tmp_path / "jobs.db"
+    stores = [JobStore(database) for _ in range(8)]
+    job = _create(stores[0], tmp_path / "repo")
+    stores[0].claim_next(workspace=tmp_path / "repo")
+    stores[0].update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+    stores[0].update_lane(job["run_id"], "backend", "failed")
+    stores[0].finish(job["run_id"], succeeded=False)
+    barrier = threading.Barrier(len(stores))
+    for store in stores:
+        get_job = store.get_job
+
+        def get_stale_job(run_id, get_job=get_job):
+            value = get_job(run_id)
+            if run_id == job["run_id"] and value["status"] == "failed":
+                barrier.wait(timeout=5)
+            return value
+
+        store.get_job = get_stale_job
+
+    def retry(store: JobStore) -> bool:
+        try:
+            store.retry_lane(job["run_id"], "backend")
+        except JobStateError:
+            return False
+        return True
+
+    try:
+        with ThreadPoolExecutor(max_workers=len(stores)) as pool:
+            results = list(pool.map(retry, stores))
+        event_count = stores[0].db.execute(
+            "SELECT count(*) FROM job_events WHERE run_id = ? AND kind = 'lane_retry_queued'",
+            (job["run_id"],),
+        ).fetchone()[0]
+        assert results.count(True) == 1
+        assert event_count == 1
+        assert stores[0].get_job(job["run_id"])["retry_count"] == 1
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_late_lane_start_cannot_resurrect_canceled_lane(tmp_path):
+    database = tmp_path / "jobs.db"
+    store = JobStore(database)
+    late_writer = JobStore(database)
+    job = _create(store, tmp_path / "repo")
+    store.claim_next(workspace=tmp_path / "repo")
+    started = threading.Event()
+    release = threading.Event()
+    errors: list[JobStateError] = []
+
+    def start_late_lane() -> None:
+        started.set()
+        if not release.wait(timeout=5):
+            return
+        try:
+            late_writer.update_lane(
+                job["run_id"], "backend", "running", increment_attempt=True
+            )
+        except JobStateError as exc:
+            errors.append(exc)
+
+    thread = threading.Thread(target=start_late_lane)
+    thread.start()
+    try:
+        assert started.wait(timeout=5)
+        store.request_cancel(job["run_id"])
+        store.update_lane(job["run_id"], "backend", "canceled")
+        store.mark_canceled(job["run_id"])
+        release.set()
+        thread.join(timeout=5)
+
+        assert not thread.is_alive()
+        assert errors
+        assert store.get_job(job["run_id"])["lanes"][0]["status"] == "canceled"
+    finally:
+        release.set()
+        thread.join(timeout=5)
+        late_writer.close()
+        store.close()
+
+
 def test_priority_queue_and_one_active_writer_per_workspace(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     workspace = tmp_path / "repo"

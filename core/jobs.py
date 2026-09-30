@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 
 JOB_SCHEMA_VERSION = 2
 TERMINAL_STATUSES = frozenset({"canceled", "failed", "succeeded", "accepted", "rejected"})
+TERMINAL_LANE_STATUSES = frozenset({"canceled", "failed", "skipped", "succeeded"})
 RESUMABLE_STATUSES = frozenset({"paused", "stalled", "failed"})
 
 
@@ -595,17 +596,39 @@ class JobStore:
         allowed = {"queued", "running", "succeeded", "failed", "skipped", "canceled"}
         if status not in allowed:
             raise JobStateError(f"invalid lane state: {status}")
+        if increment_attempt and status != "running":
+            raise JobStateError("attempts can only increase when a lane starts")
         with self._lock, self.db:
             updated = self.db.execute(
-                """
-                UPDATE lanes SET status = ?, last_error = ?,
-                    attempt = attempt + ?
-                WHERE run_id = ? AND label = ?
-                """,
-                (status, str(error), int(increment_attempt), run_id, label),
+                "UPDATE lanes SET status = ?, last_error = ?, attempt = attempt + ? "
+                "WHERE run_id = ? AND label = ? "
+                "AND (status NOT IN ('succeeded', 'failed', 'skipped', 'canceled') OR status = ?) "
+                "AND (? = 0 OR status = 'queued')",
+                (
+                    status,
+                    str(error),
+                    int(increment_attempt),
+                    run_id,
+                    label,
+                    status,
+                    int(increment_attempt),
+                ),
             )
             if updated.rowcount != 1:
-                raise JobStateError(f"unknown lane: {label}")
+                latest = self.db.execute(
+                    "SELECT status FROM lanes WHERE run_id = ? AND label = ?",
+                    (run_id, label),
+                ).fetchone()
+                if latest is None:
+                    raise JobStateError(f"unknown lane: {label}")
+                latest_status = str(latest["status"])
+                if latest_status == status or (
+                    status == "canceled" and latest_status in TERMINAL_LANE_STATUSES
+                ):
+                    return self.get_job(run_id)
+                raise JobStateError(
+                    f"cannot transition lane {label} from {latest_status} to {status}"
+                )
             self._event(run_id, "lane_updated", {"label": label, "status": status})
         return self.get_job(run_id)
 
@@ -625,14 +648,18 @@ class JobStore:
         if int(lane["attempt"]) >= int(lane["max_attempts"]):
             raise JobStateError("lane retry bound has been reached")
         with self._lock, self.db:
-            self.db.execute(
-                "UPDATE lanes SET status = 'queued', last_error = '' WHERE run_id = ? AND label = ?",
+            updated_lane = self.db.execute(
+                "UPDATE lanes SET status = 'queued', last_error = '' "
+                "WHERE run_id = ? AND label = ? AND status = 'failed'",
                 (run_id, label),
             )
-            self.db.execute(
-                "UPDATE jobs SET status = 'queued', retry_count = retry_count + 1, updated_at = ?, finished_at = NULL WHERE run_id = ? AND status IN ('failed', 'paused', 'stalled')",
-                (time.time(), run_id),
+            updated_job = self.db.execute(
+                "UPDATE jobs SET status = 'queued', retry_count = retry_count + 1, "
+                "updated_at = ?, finished_at = NULL WHERE run_id = ? AND status = ?",
+                (time.time(), run_id, str(job["status"])),
             )
+            if updated_lane.rowcount != 1 or updated_job.rowcount != 1:
+                raise JobStateError("job or lane state changed before retry")
             self._event(run_id, "lane_retry_queued", {"label": label})
         return self.get_job(run_id)
 
