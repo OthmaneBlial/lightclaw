@@ -86,9 +86,13 @@ def validate_receipt(receipt: dict[str, object]) -> list[str]:
             errors.append(f"field must be a list: {field}")
     if "checkpoint" in receipt and not isinstance(receipt["checkpoint"], dict):
         errors.append("field must be an object: checkpoint")
-    if "retries" in receipt and not isinstance(receipt["retries"], (int, list)):
+    if "retries" in receipt and (
+        isinstance(receipt["retries"], bool)
+        or not isinstance(receipt["retries"], (int, list))
+    ):
         errors.append("field must be an integer or list: retries")
-    if int(receipt.get("schema_version", RECEIPT_SCHEMA_VERSION)) != RECEIPT_SCHEMA_VERSION:
+    schema_version = receipt.get("schema_version", RECEIPT_SCHEMA_VERSION)
+    if type(schema_version) is not int or schema_version != RECEIPT_SCHEMA_VERSION:
         errors.append(f"unsupported schema_version; expected {RECEIPT_SCHEMA_VERSION}")
     return errors
 

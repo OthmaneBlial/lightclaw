@@ -64,6 +64,31 @@ def test_receipt_rejects_missing_required_fields(tmp_path):
         write_receipt({"run_id": "incomplete"}, tmp_path)
 
 
+@pytest.mark.parametrize("schema_version", [True, 1.5, "1", [], None])
+def test_receipt_schema_version_requires_an_integer(schema_version):
+    receipt = _receipt()
+    receipt["schema_version"] = schema_version
+
+    assert validate_receipt(receipt) == ["unsupported schema_version; expected 1"]
+
+
+def test_receipt_retries_rejects_boolean():
+    receipt = _receipt()
+    receipt["retries"] = True
+
+    assert validate_receipt(receipt) == ["field must be an integer or list: retries"]
+
+
+def test_share_card_rejects_malformed_schema_version_with_value_error(tmp_path):
+    source, _, _ = write_receipt(_receipt(), tmp_path)
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    payload["schema_version"] = []
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="unsupported schema_version; expected 1"):
+        export_share_card(source, tmp_path / "share-card.json")
+
+
 def test_read_receipt_is_bounded_and_rejects_non_objects(tmp_path, monkeypatch):
     source = tmp_path / "receipt.json"
     monkeypatch.setattr("core.receipts.MAX_RECEIPT_BYTES", 8)
