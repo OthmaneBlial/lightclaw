@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1282,
+      "lines": 1287,
       "path": "core/bot/delegation/planning.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 21152,
+  "runtime_lines": 21157,
   "schema_version": 1
 }

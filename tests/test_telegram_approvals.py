@@ -121,6 +121,36 @@ def test_plan_review_makes_directional_controls_visible_in_paths_and_commands():
     assert rendered.count("�") == 3
 
 
+@pytest.mark.parametrize("terminal", [False, True])
+def test_detailed_plan_preview_makes_untrusted_controls_visible(monkeypatch, terminal):
+    monkeypatch.setenv("LIGHTCLAW_CHAT_MODE", "1" if terminal else "0")
+    bot = LightClawBot.__new__(LightClawBot)
+    controls = "\u202e\x00\ud800\x1b[31m"
+    label = "builder" + controls
+    rendered = bot._render_multi_plan_preview(
+        goal="goal <unsafe>" + controls,
+        workers=[(label, "codex" + controls)],
+        plan_payload={"workers": [{
+            "label": label,
+            "role": "role" + controls,
+            "depends_on": ["dependency" + controls],
+            "responsibilities": ["responsibility" + controls],
+            "expected_outputs": ["output" + controls],
+            "owned_paths": ["path" + controls],
+        }]},
+        warnings=["warning" + controls],
+    )
+
+    assert "\u202e" not in rendered and "\x00" not in rendered and "\ud800" not in rendered
+    assert "\x1b[31m" not in rendered
+    for field in ("builder", "codex", "role", "dependency", "responsibility", "output", "path", "warning"):
+        assert field + "����[31m" in rendered
+    assert "goal &lt;unsafe&gt;����[31m" in rendered
+    assert "<b>Worker Contracts:</b>\n" in rendered
+    assert ("\x1b[" in rendered) == terminal
+    rendered.encode("utf-16-le")
+
+
 def test_mobile_diff_preview_makes_directional_controls_visible():
     rendered = LightClawBot._mobile_diff_preview(
         "@@ -1 +1 @@\n-old\n+safe.py\u202eevil.txt"

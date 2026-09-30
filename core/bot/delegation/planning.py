@@ -1207,8 +1207,11 @@ class DelegationMultiPlanningMixin:
         include_confirm_hint: bool = True,
         approval_id: str = "",
     ) -> str:
+        def escape(value):
+            return _escape_html(self._visible_review_text(value))
+
         lines = ["🤖 <b>Multi-Agent Plan Ready</b>", ""]
-        lines.append(f"<b>Goal:</b> {_escape_html(goal)}")
+        lines.append(f"<b>Goal:</b> {escape(goal)}")
         lines.append("")
         lines.append("<b>Worker Contracts:</b>")
 
@@ -1223,7 +1226,9 @@ class DelegationMultiPlanningMixin:
                 by_label[label] = contract
 
         for index, (label, agent) in enumerate(workers):
-            tag = self._multi_agent_tag(label, agent, index)
+            tag = self._multi_agent_tag(
+                self._visible_review_text(label), self._visible_review_text(agent), index
+            )
             contract = by_label.get(label, {})
             role = str(contract.get("role") or "implementation").strip() or "implementation"
             depends_obj = contract.get("depends_on")
@@ -1250,10 +1255,10 @@ class DelegationMultiPlanningMixin:
                 else []
             )
             lines.append(
-                f"• <code>{_escape_html(tag)}</code> — role: <code>{_escape_html(role)}</code> — depends_on: <code>{_escape_html(deps_text)}</code>"
+                f"• <code>{_escape_html(tag)}</code> — role: <code>{escape(role)}</code> — depends_on: <code>{escape(deps_text)}</code>"
             )
             if first_resp:
-                lines.append(f"  task: {_escape_html(first_resp)}")
+                lines.append(f"  task: {escape(first_resp)}")
             expected_outputs = contract.get("expected_outputs")
             output_text = (
                 " · ".join(str(item).strip() for item in expected_outputs if str(item).strip())
@@ -1261,22 +1266,22 @@ class DelegationMultiPlanningMixin:
                 else ""
             )
             if output_text:
-                lines.append(f"  outputs: {_escape_html(output_text)}")
+                lines.append(f"  outputs: {escape(output_text)}")
             if owned_paths:
                 owned_text = ", ".join(owned_paths)
-                lines.append(f"  owns: <code>{_escape_html(owned_text)}</code>")
+                lines.append(f"  owns: <code>{escape(owned_text)}</code>")
 
         if warnings:
             lines.append("")
             lines.append("<b>Planner Notes:</b>")
             for warning in warnings[:6]:
-                lines.append(f"• {_escape_html(warning)}")
+                lines.append(f"• {escape(warning)}")
 
         if include_confirm_hint:
             lines.append("")
             lines.append("Use Approve, or reply <code>yes</code> directly to the final review message.")
             if approval_id:
-                lines.append(f"Confirm this plan: <code>/agent multi confirm {_escape_html(approval_id)}</code>.")
+                lines.append(f"Confirm this plan: <code>/agent multi confirm {escape(approval_id)}</code>.")
             lines.append("Edit plan: <code>/agent multi edit &lt;feedback&gt;</code>.")
             lines.append("Cancel: <code>/agent multi cancel</code> (or reply <code>no</code>).")
         return "\n".join(lines)
