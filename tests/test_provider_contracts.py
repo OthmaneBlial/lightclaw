@@ -412,6 +412,26 @@ async def test_retry_policy_is_shared_and_reports_attempt_count(monkeypatch):
     assert adapter.calls == 3
 
 
+async def test_failed_provider_close_can_retry_cleanup_without_accepting_work():
+    fixture = json.loads((FIXTURE_ROOT / "openai.json").read_text())
+    adapter, raw_client = _recorded_adapter("openai", _namespace(fixture["response"]))
+    raw_client.close = Mock(side_effect=[OSError("fixture cleanup failure"), None])
+    client = LLMClient(
+        Config(llm_provider="openai", llm_model="fixture-model"), adapter=adapter
+    )
+
+    with pytest.raises(OSError, match="fixture cleanup failure"):
+        client.close()
+    with pytest.raises(RuntimeError, match="provider client is closed"):
+        await client.complete([{"role": "user", "content": "hello"}])
+    with pytest.raises(RuntimeError, match="provider adapter is closed"):
+        await adapter.complete(ProviderRequest(messages=({"role": "user", "content": "hello"},)))
+    client.close()
+    client.close()
+    assert raw_client.close.call_count == 2
+    assert raw_client.chat.completions.calls == []
+
+
 async def test_close_during_retry_delay_prevents_another_provider_attempt(monkeypatch):
     adapter = _PolicyAdapter(failures=[_StatusError(429, "rate limit")])
     client = LLMClient(

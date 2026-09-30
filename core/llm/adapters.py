@@ -26,6 +26,7 @@ def _usage_value(usage: object, name: str) -> int | None:
 class _ClosableAdapter:
     def __init__(self) -> None:
         self._closed = False
+        self._close_completed = False
 
     def _call(self, operation, **kwargs):
         if self._closed:
@@ -33,12 +34,13 @@ class _ClosableAdapter:
         return operation(**kwargs)
 
     def close(self) -> None:
-        if self._closed:
+        if self._close_completed:
             return
         self._closed = True
         close = getattr(self.client, "close", None)
         if callable(close):
             close()
+        self._close_completed = True
 
 
 class OpenAICompatibleAdapter(_ClosableAdapter):

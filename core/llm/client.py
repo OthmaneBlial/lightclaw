@@ -435,7 +435,5 @@ class LLMClient:
             return _format_legacy_error(error)
 
     def close(self) -> None:
-        if self._closed:
-            return
         self._closed = True
         self._adapter.close()
