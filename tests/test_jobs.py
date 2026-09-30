@@ -110,6 +110,23 @@ def test_job_store_does_not_chmod_database_symlink_target(tmp_path, monkeypatch)
     assert stat.S_IMODE(victim.stat().st_mode) == 0o644
 
 
+@pytest.mark.parametrize("suffix", ("-wal", "-shm"))
+def test_job_store_rejects_symlinked_sidecar_without_chmod_target(tmp_path, suffix):
+    database = tmp_path / "jobs.db"
+    sqlite3.connect(database).close()
+    database.chmod(0o600)
+    victim = tmp_path / "victim.db"
+    victim.write_text("private", encoding="utf-8")
+    os.chmod(victim, 0o644)
+    database.with_name(database.name + suffix).symlink_to(victim)
+
+    with pytest.raises(OSError):
+        JobStore(database)
+
+    assert victim.read_text(encoding="utf-8") == "private"
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+
+
 def test_job_store_fails_closed_when_database_cannot_be_private(tmp_path, monkeypatch):
     def fail_chmod(*_args, **_kwargs):
         raise PermissionError("fixture permission failure")
