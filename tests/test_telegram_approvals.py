@@ -144,6 +144,11 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
         "python -c \"import os; os.replace('/tmp/a', '/tmp/b')\"",
         "python -c \"import shutil; shutil.move('/tmp/a', '/tmp/b')\"",
         "cat /etc/config",
+        "sed -i 's/old/new/' /tmp/config",
+        "perl -i -pe 's/old/new/' /tmp/config",
+        "tee -a /tmp/config",
+        "chmod -R 777 /tmp/workspace",
+        "chown alice /tmp/workspace",
     ],
 )
 def test_risky_commands_and_system_paths_require_second_confirmation(command: str):
