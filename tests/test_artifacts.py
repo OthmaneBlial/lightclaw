@@ -290,6 +290,18 @@ def test_selective_apply_rejects_symlinked_workspace_roots(tmp_path):
         apply_selected_files(source, target_link, ["file.txt"], run_id="root-link")
 
 
+def test_artifact_checkpoint_rejects_symlinked_workspace_root(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    linked = tmp_path / "linked-workspace"
+    linked.symlink_to(workspace, target_is_directory=True)
+
+    with pytest.raises(ArtifactError, match="real directory"):
+        initialize_artifact_repository(linked, "run-root-link")
+
+    assert not (workspace / ".git").exists()
+
+
 def test_selective_apply_hashes_large_source_without_read_bytes(tmp_path, monkeypatch):
     source = tmp_path / "source"
     target = tmp_path / "target"

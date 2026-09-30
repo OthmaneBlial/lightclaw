@@ -63,9 +63,10 @@ def _safe_git_ref(raw: str, label: str) -> str:
 
 def initialize_artifact_repository(workspace: str | Path, run_id: str) -> dict[str, object]:
     """Create a local checkpoint and review branch in an isolated task directory."""
-    root = Path(workspace).expanduser().resolve()
-    if not root.is_dir() or root.is_symlink():
+    workspace_path = Path(workspace).expanduser()
+    if workspace_path.is_symlink() or not workspace_path.is_dir():
         raise ArtifactError("artifact workspace must be a real directory")
+    root = workspace_path.resolve()
     inside = _git(root, "rev-parse", "--is-inside-work-tree")
     if inside.returncode != 0:
         initialized = _git(root, "init", "-b", "main")
