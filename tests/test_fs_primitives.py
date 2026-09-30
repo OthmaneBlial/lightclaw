@@ -87,6 +87,28 @@ def test_atomic_private_write_and_bounded_json_read(tmp_path):
     assert read_json_object(destination) == {"value": 3}
 
 
+@pytest.mark.parametrize("trailing_newline", [False, True])
+def test_bounded_json_write_accepts_exact_size_and_preserves_previous_state(tmp_path, trailing_newline):
+    destination = tmp_path / "state.json"
+    payload = {"value": "🐾"}
+    atomic_write_json(destination, payload, mode=0o600, trailing_newline=trailing_newline)
+    original = destination.read_bytes()
+    limit = len(original)
+
+    atomic_write_json(
+        destination, payload, mode=0o600, trailing_newline=trailing_newline, max_bytes=limit,
+    )
+    with pytest.raises(FileTooLargeError):
+        atomic_write_json(
+            destination, {"value": "🐾🐾"}, trailing_newline=trailing_newline, max_bytes=limit,
+        )
+
+    assert destination.read_bytes() == original
+    assert read_json_object(destination, max_bytes=limit) == payload
+    assert destination.stat().st_mode & 0o777 == 0o600
+    assert not list(tmp_path.glob(".state.json.*.tmp"))
+
+
 def test_atomic_write_refuses_symlink_and_cleans_failed_temp(tmp_path, monkeypatch):
     target = tmp_path / "target.txt"
     target.write_text("original", encoding="utf-8")

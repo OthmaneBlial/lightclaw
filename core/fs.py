@@ -14,7 +14,7 @@ from typing import Any
 
 
 class FileTooLargeError(OSError):
-    """Raised when a bounded text read exceeds its byte limit."""
+    """Raised when a bounded file operation exceeds its byte limit."""
 
 
 def secure_sqlite_files(path: str | Path) -> None:
@@ -328,10 +328,13 @@ def atomic_write_json(
     *,
     mode: int | None = None,
     trailing_newline: bool = False,
+    max_bytes: int | None = None,
 ) -> None:
     content = json.dumps(payload, indent=2, sort_keys=True)
     if trailing_newline:
         content += "\n"
+    if max_bytes is not None and len(content.encode("utf-8")) > max(1, int(max_bytes)):
+        raise FileTooLargeError("JSON state exceeds the size limit")
     atomic_write_text(path, content, mode=mode)
 
 

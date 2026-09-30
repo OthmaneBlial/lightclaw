@@ -15,12 +15,14 @@ from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 from telegram.ext import ContextTypes
 
+from ...fs import FileTooLargeError, read_json_object
 from ...fs import atomic_write_json as _atomic_write_json
-from ...fs import read_json_object
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import runtime_root_from_workspace
 from ..messaging import _TelegramHTMLChunker
+
+MAX_CRON_STORE_BYTES = 1024 * 1024
 
 
 class CronStoreReadError(RuntimeError):
@@ -75,7 +77,7 @@ class CommandsCronMixin:
     def _read_cron_store(self) -> dict[str, Any]:
         path = self._cron_jobs_path()
         try:
-            data = read_json_object(path, default={"jobs": []}, max_bytes=1024 * 1024)
+            data = read_json_object(path, default={"jobs": []}, max_bytes=MAX_CRON_STORE_BYTES)
         except Exception as e:
             raise CronStoreReadError(f"Failed to read cron jobs store: {e}") from e
 
@@ -136,7 +138,7 @@ class CommandsCronMixin:
 
     def _write_cron_store(self, store: dict[str, Any]) -> None:
         payload = {"jobs": store.get("jobs", []) if isinstance(store, dict) else []}
-        _atomic_write_json(self._cron_jobs_path(), payload)
+        _atomic_write_json(self._cron_jobs_path(), payload, max_bytes=MAX_CRON_STORE_BYTES)
 
 
     async def _reply_cron_store_read_error(self, update: Update, error: CronStoreReadError) -> None:
@@ -308,6 +310,10 @@ class CommandsCronMixin:
             await self._cmd_cron(update, context)
         except CronStoreReadError as e:
             await self._reply_cron_store_read_error(update, e)
+        except FileTooLargeError:
+            await self._reply_logged(
+                update, "Cron storage is full. No changes made; remove existing reminders to free space."
+            )
 
 
     async def _cmd_cron(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

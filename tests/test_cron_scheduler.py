@@ -314,6 +314,39 @@ async def test_cron_command_preserves_unreadable_store(tmp_path, args, content):
 
 
 @pytest.mark.asyncio
+async def test_cron_add_preserves_reminders_when_store_would_exceed_read_limit(tmp_path):
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    store_path = tmp_path / "jobs.json"
+    bot._cron_jobs_path = lambda: store_path
+    bot._write_cron_store({"jobs": [{
+        "id": "existing", "chat_id": "123", "mode": "at",
+        "text": "x" * (1024 * 1024 - 512),
+        "next_run_at": time.time() + 60, "created_at": time.time(),
+    }]})
+    original = store_path.read_bytes()
+    assert bot._read_cron_store()["jobs"][0]["id"] == "existing"
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=123), message=object())
+    context = SimpleNamespace(args=["add", "every", "5", "🐾" * 80], bot=SimpleNamespace())
+
+    await bot.cmd_cron(update, context)
+
+    assert store_path.stat().st_size == len(original)
+    assert store_path.read_bytes() == original
+    assert [job["id"] for job in bot._read_cron_store()["jobs"]] == ["existing"]
+    assert "full" in bot._reply_logged.await_args.args[1].lower()
+    assert "no changes made" in bot._reply_logged.await_args.args[1].lower()
+    await bot.cmd_cron(update, SimpleNamespace(args=["remove", "existing"], bot=SimpleNamespace()))
+    await bot.cmd_cron(update, context)
+    assert [job["text"] for job in bot._read_cron_store()["jobs"]] == ["🐾" * 80]
+
+
+@pytest.mark.asyncio
 async def test_cron_delivery_does_not_block_schedule_edits(tmp_path):
     bot = CronHarness()
     bot._cron_lock = asyncio.Lock()
