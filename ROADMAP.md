@@ -435,7 +435,8 @@ An item is complete only when:
 - user-visible errors explain recovery;
 - secrets and personal data are absent from logs/fixtures;
 - install/upgrade/uninstall impact is documented;
-- CI is green;
+- The canonical local quality suite passes. If GitHub CI is intentionally disabled, record that
+  hosted checks remain unverified; release gates that require them stay open.
 - the README/changelog is updated when the public contract changes;
 - measurable claims link to reproducible evidence.
 
