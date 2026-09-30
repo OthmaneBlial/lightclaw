@@ -88,3 +88,31 @@ async def test_allowed_user_cannot_use_authorized_bot_from_group_chat(handler_na
         query.answer.assert_awaited_once_with("Not authorized", show_alert=True)
     else:
         query.answer.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("handler_name", "attachment", "notice"),
+    [
+        ("handle_photo", "photo", "can't inspect photo"),
+        ("handle_document", "document", "can't read Telegram file"),
+    ],
+)
+async def test_unsupported_attachments_are_not_sent_to_the_model(
+    handler_name, attachment, notice
+):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._reply_logged = AsyncMock()
+    bot._process_user_message = AsyncMock()
+    message = SimpleNamespace(
+        photo=[SimpleNamespace()] if attachment == "photo" else [],
+        document=SimpleNamespace(file_name="report.pdf") if attachment == "document" else None,
+        caption="summarize this",
+    )
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=123), message=message)
+
+    await getattr(bot, handler_name)(update, SimpleNamespace())
+
+    bot._reply_logged.assert_awaited_once()
+    assert notice in bot._reply_logged.await_args.args[1]
+    bot._process_user_message.assert_not_awaited()

@@ -180,32 +180,30 @@ class BotHandlersMixin:
     # ── Photo Handler ─────────────────────────────────────────
 
     async def handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle photo messages — note the image and process caption."""
+        """Explain that Telegram photos are not available to the text-only agent."""
         if not update.effective_user or not update.message or not update.message.photo:
             return
         if not self.is_update_allowed(update):
             return
 
-        caption = update.message.caption or ""
-        user_text = f"[image: photo attached]\n{caption}" if caption else "[image: photo attached]"
-
-        await self._process_user_message(update, context, user_text)
+        await self._reply_logged(
+            update,
+            "LightClaw can't inspect photo attachments yet. Describe the image in a text message; its contents weren't sent to the AI.",
+        )
 
     # ── Document Handler ──────────────────────────────────────
 
     async def handle_document(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle document messages."""
+        """Explain that Telegram documents are not available to the text-only agent."""
         if not update.effective_user or not update.message or not update.message.document:
             return
         if not self.is_update_allowed(update):
             return
 
-        doc = update.message.document
-        filename = doc.file_name or "unknown file"
-        caption = update.message.caption or ""
-        user_text = f"[document: {filename}]\n{caption}" if caption else f"[document: {filename}]"
-
-        await self._process_user_message(update, context, user_text)
+        await self._reply_logged(
+            update,
+            "LightClaw can't read Telegram file attachments yet. Paste the relevant text or refer to a file in the workspace; file contents weren't sent to the AI.",
+        )
 
     # ── Message Handler (the core loop) ───────────────────────
 
