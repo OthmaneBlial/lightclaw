@@ -4,6 +4,8 @@ Every delegated single-agent and multi-agent run writes a JSON receipt and a Mar
 
 The receipt records the approved goal and scope, risk/capability, DAG and worker assignment, bounded usage when available, redacted commands and exit evidence, content-addressed file changes, checks, handoffs, failures, retries, checkpoint, disposition, and scoped undo command. A `null` token or cost value means the local coding-agent CLI did not expose that evidence; LightClaw does not invent an estimate.
 
+File-change hashes open regular files relative to the task workspace without following symlinks. If a file or parent directory is replaced with a symlink, or a file becomes a named pipe, the hash is recorded as `unavailable` instead of reading outside the task tree or waiting on the pipe. Deleted files have an empty hash.
+
 ## Validate the private receipt
 
 The JSON `schema_version` is stable and the CLI refuses incomplete receipts. Keep the private receipt local because it may contain workspace paths, commands, handoffs, and recovery context.

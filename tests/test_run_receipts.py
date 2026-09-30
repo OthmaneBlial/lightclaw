@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import sqlite3
@@ -67,6 +68,7 @@ def test_real_delegation_path_emits_private_structured_receipt(
     assert receipt["commands"][0]["exit_code"] == 0
     assert receipt["file_changes"][0]["path"] == "result.txt"
     assert receipt["file_changes"][0]["change"] == "created"
+    assert receipt["file_changes"][0]["sha256"] == hashlib.sha256(b"verified\n").hexdigest()
     assert receipt["checks"][0]["passed"] is True
     assert receipt["checkpoint"]["type"] == "git-checkpoint"
     assert receipt["checkpoint"]["branch"].startswith("lightclaw/run-")

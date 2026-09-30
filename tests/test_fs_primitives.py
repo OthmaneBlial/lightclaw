@@ -49,13 +49,12 @@ def test_sha256_file_reads_large_files_in_bounded_chunks(tmp_path, monkeypatch):
             expected.update(chunk)
 
     read_requests = []
-    original_open = Path.open
+    original_open = os.fdopen
 
-    def probe_open(candidate, *args, **kwargs):
-        handle = original_open(candidate, *args, **kwargs)
-        return _ReadProbe(handle, read_requests) if candidate == path else handle
+    def probe_open(file_fd, *args, **kwargs):
+        return _ReadProbe(original_open(file_fd, *args, **kwargs), read_requests)
 
-    monkeypatch.setattr(Path, "open", probe_open)
+    monkeypatch.setattr(os, "fdopen", probe_open)
     assert sha256_file(path) == expected.hexdigest()
     assert read_requests and max(read_requests) <= 1024 * 1024
 
@@ -75,12 +74,14 @@ def test_bounded_text_reader_stops_at_limit_plus_one(tmp_path, monkeypatch):
     assert read_requests == [9]
 
 
-def test_bounded_text_reader_rejects_fifo_without_waiting(tmp_path):
+@pytest.mark.parametrize("reader", ["read_text_bounded", "sha256_file"])
+def test_regular_file_readers_reject_fifo_without_waiting(tmp_path, reader):
     path = tmp_path / "pipe"
     os.mkfifo(path)
+    arguments = "sys.argv[1], 64" if reader == "read_text_bounded" else "sys.argv[1]"
     script = (
-        "import sys\nfrom core.fs import read_text_bounded\n"
-        "try:\n    read_text_bounded(sys.argv[1], 64)\n"
+        f"import sys\nfrom core.fs import {reader}\n"
+        f"try:\n    {reader}({arguments})\n"
         "except OSError:\n    pass\n"
         "else:\n    raise AssertionError('FIFO was accepted')\n"
     )

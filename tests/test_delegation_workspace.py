@@ -18,6 +18,35 @@ class WorkspaceHarness(DelegationWorkspaceMixin):
         self.config = SimpleNamespace(workspace_path=str(workspace_path))
 
 
+@pytest.mark.parametrize("swap", ["leaf", "parent"])
+def test_receipt_file_hash_rejects_symlink_swap(tmp_path, monkeypatch, swap):
+    from core.fs import sha256_file
+
+    workspace = tmp_path / "workspace"
+    folder = workspace / "result"
+    folder.mkdir(parents=True)
+    target = folder / "output.txt"
+    target.write_text("approved workspace output")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / target.name).write_text("private outside output")
+
+    def swap_before_hash(*args, **kwargs):
+        if swap == "parent":
+            folder.rename(workspace / "original")
+            folder.symlink_to(outside, target_is_directory=True)
+        else:
+            target.unlink()
+            target.symlink_to(outside / target.name)
+        return sha256_file(*args, **kwargs)
+
+    monkeypatch.setattr("core.bot.delegation.workspace.sha256_file", swap_before_hash)
+    changes = WorkspaceHarness._workspace_file_changes(
+        workspace, {}, {"result/output.txt": (25, 1)}
+    )
+    assert changes[0]["sha256"] == "unavailable"
+
+
 def test_task_workspace_retries_atomic_name_collision(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     root.mkdir()

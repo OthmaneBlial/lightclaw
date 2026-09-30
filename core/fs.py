@@ -55,10 +55,15 @@ def _secure_open_sqlite_file(path: Path, fd: int) -> None:
         raise OSError(errno.EINVAL, f"SQLite state path changed during permission update: {path}")
 
 
-def sha256_file(path: str | Path) -> str:
-    """Hash a file in fixed-size chunks so large artifacts stay memory-bounded."""
+def sha256_file(path: str | Path, *, root: str | Path | int | None = None) -> str:
+    """Hash a regular file in fixed-size chunks, optionally anchored to a root."""
+    source = Path(path)
+    file_fd, _ = open_regular_file_at(
+        root if root is not None else source.parent.resolve(),
+        source if root is not None else source.name,
+    )
     digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
+    with os.fdopen(file_fd, "rb") as handle:
         while chunk := handle.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()

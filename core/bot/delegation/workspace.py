@@ -425,13 +425,12 @@ class DelegationWorkspaceMixin:
         )
         for change, paths in groups:
             for relative in paths[:500]:
-                current = workspace / relative
                 size = after.get(relative, before.get(relative, (0, 0)))[0]
                 digest = ""
-                if change != "deleted" and current.is_file() and not current.is_symlink():
+                if change != "deleted":
                     try:
-                        digest = sha256_file(current)
-                    except OSError:
+                        digest = sha256_file(relative, root=workspace)
+                    except (OSError, ValueError):
                         digest = "unavailable"
                 changes.append(
                     {
