@@ -22,8 +22,8 @@
     },
     {
       "branch_points": 86,
-      "line": 16,
-      "lines": 500,
+      "line": 39,
+      "lines": 494,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -122,8 +122,8 @@
     },
     {
       "branch_points": 86,
-      "line": 16,
-      "lines": 500,
+      "line": 39,
+      "lines": 494,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -257,7 +257,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 568,
+      "lines": 585,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 19191,
+  "runtime_lines": 19208,
   "schema_version": 1
 }

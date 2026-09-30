@@ -50,6 +50,24 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
     assert "python -m pytest" in rendered
 
 
+@pytest.mark.asyncio
+async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace()
+    approval_id = "0123456789abcdef"
+    preview = bot._render_multi_plan_preview("x" * 3900, [], {})
+    preview += "\n\n" + bot._render_plan_review({})
+
+    await bot._reply_multi_plan_preview(update, preview, approval_id, False)
+
+    calls = bot._reply_logged.await_args_list
+    assert len(calls) > 1
+    assert all(len(call.args[1]) < 4096 for call in calls)
+    assert all(call.kwargs["reply_markup"] is None for call in calls[:-1])
+    assert calls[-1].kwargs["reply_markup"] is not None
+
+
 def test_plan_with_hidden_commands_cannot_be_approved():
     bot = LightClawBot.__new__(LightClawBot)
     approval_id = "0123456789abcdef"

@@ -10,9 +10,32 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ...markdown import _escape_html
+from ..messaging import _TelegramHTMLChunker
 
 
 class CommandsAgentRouterMixin:
+    async def _reply_multi_plan_preview(
+        self,
+        update: Update,
+        preview: str,
+        approval_id: str,
+        approval_blocked: bool,
+    ) -> None:
+        chunker = _TelegramHTMLChunker(max_len=3000)
+        chunker.feed(preview)
+        chunks = chunker.finish()
+        reply_markup = self._inline_plan_keyboard(
+            approval_id,
+            approval_blocked=approval_blocked,
+        )
+        for index, chunk in enumerate(chunks):
+            await self._reply_logged(
+                update,
+                chunk,
+                parse_mode=ParseMode.HTML,
+                reply_markup=reply_markup if index == len(chunks) - 1 else None,
+            )
+
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
@@ -229,14 +252,11 @@ class CommandsAgentRouterMixin:
                     include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
                 )
                 preview += "\n\n" + self._render_plan_review(pending_payload)
-                await self._reply_logged(
+                await self._reply_multi_plan_preview(
                     update,
                     preview,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=self._inline_plan_keyboard(
-                        str(pending_payload["approval_id"]),
-                        approval_blocked=bool(pending_payload["review"]["approval_blocked"]),
-                    ),
+                    str(pending_payload["approval_id"]),
+                    bool(pending_payload["review"]["approval_blocked"]),
                 )
                 return
 
@@ -296,14 +316,11 @@ class CommandsAgentRouterMixin:
                 include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
             )
             preview += "\n\n" + self._render_plan_review(pending_payload)
-            await self._reply_logged(
+            await self._reply_multi_plan_preview(
                 update,
                 preview,
-                parse_mode=ParseMode.HTML,
-                reply_markup=self._inline_plan_keyboard(
-                    str(pending_payload["approval_id"]),
-                    approval_blocked=bool(pending_payload["review"]["approval_blocked"]),
-                ),
+                str(pending_payload["approval_id"]),
+                bool(pending_payload["review"]["approval_blocked"]),
             )
 
             if self.config.local_agent_multi_auto_continue:
