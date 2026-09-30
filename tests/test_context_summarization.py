@@ -64,6 +64,7 @@ async def test_clear_during_summary_does_not_restore_old_context():
     await task
 
     assert ("chat-42", "telegram-user:42", "/workspace") not in bot._session_summaries
+    assert bot._summary_generation_by_session == {}
     bot.memory.clear_session.assert_called_once_with("chat-42")
 
 
@@ -129,16 +130,55 @@ def test_summary_cache_isolated_by_user_within_shared_group(tmp_path):
         memory.bind_session(
             session_id, user_namespace="telegram-user:99", workspace_namespace=str(tmp_path)
         )
-        assert bot._summary_key(session_id) not in bot._summarizing
+        key_99 = bot._summary_key(session_id)
+        assert key_99 not in bot._summarizing
         assert bot._get_session_summary(session_id) == ""
+        bot._summarizing.add(key_99)
         bot._invalidate_session_summary(session_id)
-        assert bot._summary_generation_by_session[bot._summary_key(session_id)] == 1
+        assert bot._summary_generation_by_session[key_99] == 1
 
         memory.bind_session(
             session_id, user_namespace="telegram-user:42", workspace_namespace=str(tmp_path)
         )
         assert bot._get_session_summary(session_id) == "private summary for user 42"
         assert bot._summary_generation_by_session.get(bot._summary_key(session_id), 0) == 0
+    finally:
+        memory.db.close()
+
+
+def test_summary_cache_evicts_least_recent_user_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.bot.context.MAX_CACHED_SESSION_SUMMARIES", 2)
+    session_id = "group-1"
+    memory = MemoryStore(tmp_path / "memory.db")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.memory = memory
+    bot._session_summaries = {}
+
+    def store_summary(user_id, value):
+        memory.bind_session(
+            session_id, user_namespace=f"telegram-user:{user_id}", workspace_namespace=str(tmp_path)
+        )
+        memory.set_summary(session_id, value)
+        return bot._get_session_summary(session_id)
+
+    try:
+        assert store_summary(42, "summary A") == "summary A"
+        key_42 = bot._summary_key(session_id)
+        assert store_summary(99, "summary B") == "summary B"
+        key_99 = bot._summary_key(session_id)
+        memory.bind_session(
+            session_id, user_namespace="telegram-user:42", workspace_namespace=str(tmp_path)
+        )
+        assert bot._get_session_summary(session_id) == "summary A"
+        assert store_summary(17, "summary C") == "summary C"
+        key_17 = bot._summary_key(session_id)
+        assert set(bot._session_summaries) == {key_42, key_17}
+
+        memory.bind_session(
+            session_id, user_namespace="telegram-user:99", workspace_namespace=str(tmp_path)
+        )
+        assert bot._get_session_summary(session_id) == "summary B"
+        assert set(bot._session_summaries) == {key_17, key_99}
     finally:
         memory.db.close()
 

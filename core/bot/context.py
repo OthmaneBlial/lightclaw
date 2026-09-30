@@ -6,10 +6,18 @@ import os
 
 from ..logging_setup import log
 
+MAX_CACHED_SESSION_SUMMARIES = 128
+
 
 class BotContextMixin:
     def _summary_key(self, session_id: str) -> tuple[str, str, str]:
         return (session_id, *self.memory.scope_for(session_id))
+
+    def _cache_session_summary(self, key: tuple[str, str, str], summary: str) -> None:
+        self._session_summaries.pop(key, None)
+        self._session_summaries[key] = summary
+        while len(self._session_summaries) > MAX_CACHED_SESSION_SUMMARIES:
+            self._session_summaries.pop(next(iter(self._session_summaries)))
 
     @staticmethod
     def estimate_tokens(messages: list[dict]) -> int:
@@ -42,6 +50,7 @@ class BotContextMixin:
             await self._summarize_session(session_id, recent, generation)
         finally:
             self._summarizing.discard(key)
+            self._summary_generation_by_session.pop(key, None)
 
     async def _summarize_session(
         self, session_id: str, history: list[dict], generation: int
@@ -84,7 +93,7 @@ class BotContextMixin:
                 if generation != self._summary_generation_by_session.get(key, 0):
                     return
                 self.memory.set_summary(session_id, summary)
-                self._session_summaries[key] = summary
+                self._cache_session_summary(key, summary)
                 self._clear_llm_backoff()
                 if os.getenv("LIGHTCLAW_CHAT_MODE", "").strip() == "1":
                     log.debug(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")
@@ -99,7 +108,8 @@ class BotContextMixin:
     def _invalidate_session_summary(self, session_id: str) -> None:
         key = self._summary_key(session_id)
         generations = self._summary_generation_by_session
-        generations[key] = generations.get(key, 0) + 1
+        if key in self._summarizing:
+            generations[key] = generations.get(key, 0) + 1
 
     def _invalidate_active_summaries(self) -> None:
         for key in tuple(self._summarizing):
@@ -116,11 +126,14 @@ class BotContextMixin:
             if self._is_provider_error_text(summary):
                 self._session_summaries.pop(key, None)
                 return ""
+            self._cache_session_summary(key, summary)
             return summary
         # Fall back to memory store
         summary = self._sanitize_summary_for_prompt(self.memory.get_summary(session_id))
         if self._is_provider_error_text(summary):
             return ""
+        if summary:
+            self._cache_session_summary(key, summary)
         return summary
 
     # ── Emergency Context Compression ────────────────────────
