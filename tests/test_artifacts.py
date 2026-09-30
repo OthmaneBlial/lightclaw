@@ -244,6 +244,45 @@ def test_task_artifacts_ignore_configured_monitor_and_stale_index(tmp_path, acti
     assert monitor.exists()
 
 
+@pytest.mark.parametrize("operation", ["bundle", "accept"])
+@pytest.mark.parametrize("helper_kind", ["textconv", "command"])
+def test_artifact_diffs_ignore_external_helpers_and_preserve_raw_changes(tmp_path, operation, helper_kind):
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / ".gitattributes").write_text("data.bin diff=fixture\n")
+    before, after = b"old\0raw\n", b"new\0raw\n"
+    data = task / "data.bin"
+    data.write_bytes(before)
+    checkpoint = initialize_artifact_repository(task, "diff-helper-test")
+    helper = tmp_path / "diff-helper"
+    marker = tmp_path / "outside-marker"
+    helper.write_text("#!/bin/sh\nprintf ran >> " + shlex.quote(str(marker)) + "\nprintf 'converted\\n'\n")
+    helper.chmod(0o700)
+    setting = f"diff.fixture.{helper_kind}"
+    _git(task, "config", setting, str(helper))
+    _git(task, "config", "diff.fixture.trustExitCode", "true")
+    data.write_bytes(after)
+
+    if operation == "bundle":
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="diff-helper-test")
+        patch = Path(bundle["patch"])
+        assert bundle["changed_paths"] == [{"status": "M", "path": "data.bin"}]
+        assert "GIT binary patch" in patch.read_text()
+        _git(task, "apply", "--reverse", str(patch))
+        assert data.read_bytes() == before
+        _git(task, "apply", str(patch))
+        assert data.read_bytes() == after
+    else:
+        result = accept_artifact(task, "diff-helper-test")
+        assert result["commit"] != checkpoint["base_commit"]
+        committed = subprocess.run(["git", "-C", str(task), "show", "HEAD:data.bin"], check=True, capture_output=True)
+        assert committed.stdout == after
+
+    assert not marker.exists()
+    assert _git(task, "config", "--get", setting) == str(helper)
+    assert helper.exists()
+
+
 @pytest.mark.parametrize("phase", ["checkpoint", "accept"])
 def test_task_commits_do_not_invoke_configured_signing_program(tmp_path, phase):
     task = tmp_path / "task"

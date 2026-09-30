@@ -34,6 +34,12 @@ settings from launching a signer, requesting host keys or passphrases, or failin
 local commit. Signing configuration is preserved for deliberate signing with the user's Git CLI
 after review; existing signed commits are not rewritten by acceptance.
 
+Artifact comparisons disable external diff drivers and text conversion with
+[`--no-ext-diff` and `--no-textconv`](https://git-scm.com/docs/git-diff). Configured helpers
+cannot run during change detection, statistics, or patch generation, nor hide raw changes by
+converting different files into identical text. Binary patches retain the actual staged bytes
+and can be applied with Git; stored driver settings remain available for manual review.
+
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.
