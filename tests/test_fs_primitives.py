@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -100,6 +101,24 @@ def test_atomic_write_refuses_symlink_and_cleans_failed_temp(tmp_path, monkeypat
     with pytest.raises(OSError, match="fixture replace failure"):
         atomic_write_text(tmp_path / "failed.txt", "value")
     assert not list(tmp_path.glob(".failed.txt.*.tmp"))
+
+
+def test_atomic_write_does_not_chmod_destination_swapped_to_symlink(tmp_path, monkeypatch):
+    destination = tmp_path / "value.txt"
+    victim = tmp_path / "victim.txt"
+    victim.write_text("private", encoding="utf-8")
+    os.chmod(victim, 0o644)
+    replace = os.replace
+
+    def replace_then_swap(source, target):
+        replace(source, target)
+        Path(target).unlink()
+        Path(target).symlink_to(victim)
+
+    monkeypatch.setattr("core.fs.os.replace", replace_then_swap)
+    atomic_write_text(destination, "value", mode=0o600)
+
+    assert victim.stat().st_mode & 0o777 == 0o644
 
 
 def test_json_reader_rejects_dangling_symlink_instead_of_using_default(tmp_path):

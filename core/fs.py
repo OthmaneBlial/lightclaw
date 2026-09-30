@@ -64,8 +64,6 @@ def atomic_write_text(
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_path, destination)
-        if mode is not None:
-            destination.chmod(mode)
         try:
             directory_fd = os.open(destination.parent, os.O_RDONLY)
             try:
