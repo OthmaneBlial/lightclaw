@@ -296,3 +296,70 @@ async def test_sqlite_error_after_agent_completion_retries_and_writes_receipt(
         assert "Local job history could not record" in result
     assert "Receipt:" in result
     assert "Retrying durable run finalization after SQLite error" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_sqlite_heartbeat_error_does_not_discard_completed_run(
+    tmp_path, monkeypatch, caplog
+):
+    import core.bot.delegation.execution as execution
+
+    real_sleep = asyncio.sleep
+
+    async def quick_sleep(_delay):
+        await real_sleep(0.005)
+
+    monkeypatch.setattr(execution.asyncio, "sleep", quick_sleep)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(tmp_path / "workspace"),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    heartbeat = bot.jobs.heartbeat
+    heartbeat_calls = 0
+
+    def fail_first_heartbeat(*args, **kwargs):
+        nonlocal heartbeat_calls
+        heartbeat_calls += 1
+        if heartbeat_calls == 1:
+            raise sqlite3.OperationalError("database is locked")
+        return heartbeat(*args, **kwargs)
+
+    def fake_invoke(**kwargs):
+        async def complete():
+            await real_sleep(0.04)
+            (Path(kwargs["workspace"]) / "result.txt").write_text("verified\n", encoding="utf-8")
+            return {
+                "ok": True,
+                "exit_code": 0,
+                "stdout": "",
+                "stderr": "",
+                "summary": "Created verified result",
+                "elapsed": 0.25,
+                "timed_out": False,
+            }
+
+        return complete()
+
+    monkeypatch.setattr(bot.jobs, "heartbeat", fail_first_heartbeat)
+    bot._invoke_local_agent_streaming = fake_invoke
+    evidence: dict[str, object] = {}
+    try:
+        with caplog.at_level(logging.WARNING):
+            result = await bot._run_local_agent_task(
+                "fixture-session", "codex", "Create and verify result.txt", evidence_sink=evidence
+            )
+        job = bot.jobs.get_job(str(evidence["run_id"]))
+    finally:
+        bot.jobs.close()
+
+    assert heartbeat_calls >= 2
+    assert job["status"] == "succeeded"
+    assert evidence["disposition"] == "ready_for_review"
+    assert "Receipt:" in result
+    assert "Durable job heartbeat failed; retrying" in caplog.text

@@ -1033,6 +1033,8 @@ class DelegationExecutionMixin:
                                 return
                         except JobStateError:
                             return
+                        except Exception:
+                            log.exception("Durable job heartbeat failed; retrying run %s", run_id)
 
                 heartbeat_task = asyncio.create_task(durable_heartbeat())
             except asyncio.CancelledError:
