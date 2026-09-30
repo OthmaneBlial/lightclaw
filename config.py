@@ -70,6 +70,15 @@ def _int_env(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer") from exc
 
 
+def heartbeat_interval_seconds(minutes: int) -> int:
+    seconds = max(5, minutes) * 60
+    try:
+        float(seconds)
+    except OverflowError as exc:
+        raise ValueError("HEARTBEAT_INTERVAL_MIN is too large") from exc
+    return seconds
+
+
 def _parse_allowed_users(raw: str) -> list[str]:
     """Parse TELEGRAM_ALLOWED_USERS as comma-separated numeric user IDs."""
     cleaned = _strip_inline_comment(raw)
@@ -293,7 +302,7 @@ def load_config() -> Config:
     cfg.max_output_tokens = max(512, int(cfg.max_output_tokens))
     cfg.provider_timeout_sec = max(1, min(600, int(cfg.provider_timeout_sec)))
     cfg.provider_max_retries = max(0, min(4, int(cfg.provider_max_retries)))
-    cfg.heartbeat_interval_min = max(5, int(cfg.heartbeat_interval_min))
+    cfg.heartbeat_interval_min = heartbeat_interval_seconds(cfg.heartbeat_interval_min) // 60
     cfg.memory_top_k = max(1, min(50, int(cfg.memory_top_k)))
     cfg.memory_retention_days = max(1, min(3_650, int(cfg.memory_retention_days)))
     cfg.memory_max_interactions = max(100, min(1_000_000, int(cfg.memory_max_interactions)))

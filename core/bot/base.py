@@ -14,7 +14,7 @@ from pathlib import Path
 from telegram import Update
 from telegram.constants import ParseMode
 
-from config import Config
+from config import Config, heartbeat_interval_seconds
 from memory import MemoryStore
 from providers import LLMClient
 from skills import SkillManager
@@ -33,6 +33,7 @@ _LEGACY_CANCELLED_TASKS = weakref.WeakSet()
 class BotBaseMixin:
     def __init__(self, config: Config):
         self.config = config
+        self._heartbeat_interval_sec = heartbeat_interval_seconds(config.heartbeat_interval_min)
         self.memory = MemoryStore(
             config.memory_db_path,
             retention_days=config.memory_retention_days,
@@ -72,7 +73,6 @@ class BotBaseMixin:
         self._last_telegram_conflict_log_at: float = 0.0
         # Optional HEARTBEAT scheduler; /heartbeat on pins its chat (disabled by default).
         self._heartbeat_enabled: bool = False
-        self._heartbeat_interval_sec: int = max(5, config.heartbeat_interval_min) * 60
         self._heartbeat_last_chat_id: str = ""
         self._heartbeat_last_run_at: float = 0.0
         self._heartbeat_task = None

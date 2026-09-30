@@ -14,6 +14,37 @@ from memory import MemoryStore
 
 
 @pytest.mark.asyncio
+async def test_overflowing_heartbeat_interval_preserves_existing_schedule(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "99"
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    bot._heartbeat_enabled = True
+    bot._heartbeat_interval_sec = 300
+    bot._heartbeat_last_chat_id = "42"
+    task = SimpleNamespace(done=lambda: False, cancel=Mock())
+    bot._heartbeat_task = task
+    bot._ensure_heartbeat_task = AsyncMock()
+    bot._heartbeat_file_path = lambda: tmp_path / "HEARTBEAT.md"
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=99), message=object())
+    context = SimpleNamespace(
+        args=["on", "9" * 400], bot=SimpleNamespace(send_message=AsyncMock())
+    )
+
+    await bot.cmd_heartbeat(update, context)
+
+    assert bot._heartbeat_enabled
+    assert bot._heartbeat_interval_sec == 300
+    assert bot._heartbeat_last_chat_id == "42"
+    assert bot._heartbeat_task is task
+    task.cancel.assert_not_called()
+    bot._ensure_heartbeat_task.assert_not_awaited()
+    assert "too large" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("chat_ids", [(42, 99), (-7, -7)])
 async def test_heartbeat_target_and_scope_change_only_on_explicit_enable(
     tmp_path, monkeypatch, chat_ids

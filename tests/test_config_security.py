@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -57,6 +58,23 @@ def test_heartbeat_interval_has_five_minute_minimum(monkeypatch):
     monkeypatch.setenv("HEARTBEAT_INTERVAL_MIN", "2")
 
     assert load_config().heartbeat_interval_min == 5
+
+
+def test_heartbeat_interval_rejects_runtime_overflow(monkeypatch):
+    monkeypatch.setenv("HEARTBEAT_INTERVAL_MIN", "9" * 400)
+
+    with pytest.raises(ValueError, match="HEARTBEAT_INTERVAL_MIN is too large"):
+        load_config()
+
+
+def test_direct_bot_config_rejects_bad_interval_before_opening_storage(monkeypatch):
+    storage = Mock()
+    monkeypatch.setattr("core.bot.base.MemoryStore", storage)
+
+    with pytest.raises(ValueError, match="HEARTBEAT_INTERVAL_MIN is too large"):
+        BotBaseMixin(Config(heartbeat_interval_min=10**400))
+
+    storage.assert_not_called()
 
 
 def test_deepseek_default_and_cli_choices_use_current_api_ids(monkeypatch):

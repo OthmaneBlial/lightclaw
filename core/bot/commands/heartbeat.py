@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from config import heartbeat_interval_seconds
 from skills import SkillError
 
 from ...fs import FileTooLargeError, read_text_bounded
@@ -344,7 +345,13 @@ class CommandsHeartbeatMixin:
                     )
                     return
 
-            self._heartbeat_interval_sec = max(5, interval_min) * 60
+            try:
+                interval_sec = heartbeat_interval_seconds(interval_min)
+            except ValueError:
+                await self._reply_logged(update, "That heartbeat interval is too large. Schedule unchanged.")
+                return
+
+            self._heartbeat_interval_sec = interval_sec
             self._stop_heartbeat_task()
             self._heartbeat_last_chat_id = session_id
             self._heartbeat_enabled = True
