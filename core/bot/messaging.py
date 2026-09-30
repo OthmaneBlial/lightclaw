@@ -215,7 +215,7 @@ class BotMessagingMixin:
                 )
             return
         if isinstance(err, RetryAfter):
-            log.warning(f"[{session_id}] Telegram rate limit: retry after {err.retry_after}s")
+            log.warning(f"[{session_id}] Telegram rate limit: retry after {err.retry_after}")
             return
         if isinstance(err, (TimedOut, NetworkError)):
             log.warning("[%s] Telegram network issue: %s", session_id, error_text)

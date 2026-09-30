@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from html.parser import HTMLParser
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 from telegram.constants import ParseMode
-from telegram.error import BadRequest, NetworkError
+from telegram.error import BadRequest, NetworkError, RetryAfter
 
 import core.bot.messaging as messaging
 from core.bot.messaging import BotMessagingMixin
@@ -49,6 +50,21 @@ async def test_network_error_log_redacts_telegram_bot_token(caplog):
     assert token not in caplog.text
     assert "request failed" in caplog.text
     assert "[REDACTED]" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_log_formats_retry_after_timedelta(monkeypatch, caplog):
+    monkeypatch.setattr(
+        RetryAfter,
+        "retry_after",
+        property(lambda _self: timedelta(seconds=120)),
+    )
+    bot = MessagingHarness()
+    caplog.set_level(logging.WARNING, logger="lightclaw")
+
+    await bot.on_error(object(), SimpleNamespace(error=RetryAfter(120)))
+
+    assert "Telegram rate limit: retry after 0:02:00" in caplog.text
 
 
 @pytest.mark.asyncio
