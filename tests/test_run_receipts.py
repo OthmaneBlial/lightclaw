@@ -534,6 +534,67 @@ async def test_cancel_during_post_run_snapshot_cancels_durable_job(
 
 
 @pytest.mark.asyncio
+async def test_cancel_during_patch_creation_cancels_durable_job(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    patch_started = threading.Event()
+    release_patch = threading.Event()
+
+    def patch_bundle(*_args, **_kwargs):
+        patch_started.set()
+        assert release_patch.wait(timeout=5)
+        return {}
+
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    monkeypatch.setattr(
+        "core.bot.delegation.execution.create_patch_bundle", patch_bundle
+    )
+    bot._invoke_local_agent_streaming = AsyncMock(
+        return_value={
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "summary": "Agent completed",
+            "elapsed": 0.25,
+            "timed_out": False,
+        }
+    )
+    task = asyncio.create_task(
+        bot._run_local_agent_task("fixture-session", "codex", "cancel during patch")
+    )
+    try:
+        assert await asyncio.to_thread(patch_started.wait, 5)
+        task.cancel()
+        release_patch.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        job = bot.jobs.list_jobs()[0]
+        assert job["status"] == "canceled"
+        assert job["lanes"][0]["status"] == "canceled"
+        assert Path(str(job["workspace"])).is_dir()
+        assert bot._active_run_ids_by_session == {}
+        assert bot._active_run_tasks_by_session == {}
+    finally:
+        release_patch.set()
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failures_before_success", [1, 2])
 async def test_durable_job_finish_retries_and_records_sqlite_failure(
     tmp_path, monkeypatch, failures_before_success
