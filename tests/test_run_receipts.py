@@ -231,3 +231,68 @@ async def test_sqlite_error_after_single_run_claim_cancels_durable_job(
         assert bot._active_run_tasks_by_session == {}
     finally:
         bot.jobs.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failures_before_success", [1, 2])
+async def test_sqlite_error_after_agent_completion_retries_and_writes_receipt(
+    tmp_path, monkeypatch, caplog, failures_before_success
+):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(tmp_path / "workspace"),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    update_lane = bot.jobs.update_lane
+    failures_remaining = failures_before_success
+
+    def fail_completion_once(*args, **kwargs):
+        nonlocal failures_remaining
+        if failures_remaining and args[2] == "succeeded":
+            failures_remaining -= 1
+            raise sqlite3.OperationalError("database is locked")
+        return update_lane(*args, **kwargs)
+
+    async def fake_invoke(**kwargs):
+        (Path(kwargs["workspace"]) / "result.txt").write_text("verified\n", encoding="utf-8")
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "summary": "Created verified result",
+            "elapsed": 0.25,
+            "timed_out": False,
+        }
+
+    monkeypatch.setattr(bot.jobs, "update_lane", fail_completion_once)
+    bot._invoke_local_agent_streaming = fake_invoke
+    evidence: dict[str, object] = {}
+    try:
+        with caplog.at_level(logging.WARNING):
+            result = await bot._run_local_agent_task(
+                "fixture-session", "codex", "Create and verify result.txt", evidence_sink=evidence
+            )
+        job = bot.jobs.get_job(str(evidence["run_id"]))
+    finally:
+        bot.jobs.close()
+
+    if failures_before_success == 1:
+        assert job["status"] == "succeeded"
+        assert job["lanes"][0]["status"] == "succeeded"
+        assert evidence["disposition"] == "ready_for_review"
+        assert evidence["checks"][-1]["passed"] is True
+        assert "Local job history could not record" not in result
+    else:
+        assert job["status"] == "running"
+        assert job["lanes"][0]["status"] == "running"
+        assert evidence["disposition"] == "failed"
+        assert evidence["checks"][-1]["passed"] is False
+        assert "Local job history could not record" in result
+    assert "Receipt:" in result
+    assert "Retrying durable run finalization after SQLite error" in caplog.text

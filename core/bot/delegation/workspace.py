@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import sqlite3
 import time
 from pathlib import Path
 
@@ -152,6 +153,38 @@ class DelegationWorkspaceMixin:
             f"Run ID: `{run_id}`. See local logs for details."
         )
 
+    async def _finalize_durable_delegation(self, store, run_id: str, result) -> str:
+        succeeded = bool(result.get("ok"))
+        lane_status = "succeeded" if succeeded else "failed"
+        error = "" if succeeded else str(result.get("stderr") or "delegation failed")[:500]
+        for attempt in range(2):
+            try:
+                await await_thread_completion(
+                    store.update_lane, run_id, "delegation", lane_status, error=error
+                )
+                current = await await_thread_completion(store.get_job, run_id)
+                if current["status"] in {"succeeded", "failed", "canceled"}:
+                    if current["status"] == "canceled" and succeeded:
+                        return "job was canceled before finalization"
+                    if current["status"] not in {lane_status, "canceled"}:
+                        return f"job ended as {current['status']} before finalization"
+                    return ""
+                if current["status"] == "cancel_requested":
+                    await await_thread_completion(store.mark_canceled, run_id)
+                else:
+                    await await_thread_completion(
+                        store.finish, run_id, succeeded=succeeded, error=error
+                    )
+                return ""
+            except sqlite3.OperationalError:
+                if attempt == 0:
+                    log.warning("Retrying durable run finalization after SQLite error: %s", run_id)
+                    continue
+                log.exception("Could not finalize durable run %s", run_id)
+                return "OperationalError"
+            except Exception as exc:
+                log.exception("Could not finalize durable run %s", run_id)
+                return type(exc).__name__
     @staticmethod
     def _slugify_goal_name(text: str, max_len: int = 56) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")

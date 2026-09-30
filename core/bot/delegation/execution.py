@@ -1103,26 +1103,11 @@ class DelegationExecutionMixin:
                 except asyncio.CancelledError:
                     pass
         after = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
-
-        if durable_store is not None:
-            lane_status = "succeeded" if result.get("ok") else "failed"
-            await asyncio.to_thread(
-                durable_store.update_lane,
-                run_id,
-                "delegation",
-                lane_status,
-                error="" if result.get("ok") else str(result.get("stderr") or "delegation failed")[:500],
-            )
-            current = await asyncio.to_thread(durable_store.get_job, run_id)
-            if current["status"] == "cancel_requested":
-                await asyncio.to_thread(durable_store.mark_canceled, run_id)
-            else:
-                await asyncio.to_thread(
-                    durable_store.finish,
-                    run_id,
-                    succeeded=bool(result.get("ok")),
-                    error="" if result.get("ok") else str(result.get("stderr") or "delegation failed")[:500],
-                )
+        durable_error = (
+            await self._finalize_durable_delegation(durable_store, run_id, result)
+            if durable_store is not None
+            else ""
+        )
 
         summary = self._compact_external_agent_summary(str(result.get("summary") or ""))
         delta_summary = self._summarize_workspace_delta(before, after)
@@ -1184,7 +1169,15 @@ class DelegationExecutionMixin:
                     ),
                 }
             )
-        run_ok = bool(result.get("ok")) and artifact_ok
+        if durable_store is not None:
+            checks.append(
+                {
+                    "name": "durable job finalization",
+                    "passed": not durable_error,
+                    "evidence": durable_error or "terminal job state recorded",
+                }
+            )
+        run_ok = bool(result.get("ok")) and artifact_ok and not durable_error
         artifact_paths = [
             item["path"] for item in file_changes if item.get("change") != "deleted"
         ]
@@ -1232,7 +1225,9 @@ class DelegationExecutionMixin:
                 []
                 if run_ok
                 else [
-                    str(artifact_bundle.get("error") or "patch generation failed")
+                    f"Durable job finalization failed: {durable_error}"
+                    if durable_error
+                    else str(artifact_bundle.get("error") or "patch generation failed")
                     if not artifact_ok and artifact_bundle
                     else stderr_excerpt or "delegated process failed"
                 ]
@@ -1275,6 +1270,8 @@ class DelegationExecutionMixin:
             lines.append(
                 f"⚠️ `{agent}` exited with code {int(result.get('exit_code', 1))}"
             )
+        if durable_error:
+            lines.append("⚠️ Local job history could not record a terminal state; receipt is marked failed.")
 
         if summary:
             lines.append("")
