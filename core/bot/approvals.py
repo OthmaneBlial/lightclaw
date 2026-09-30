@@ -630,7 +630,7 @@ class BotApprovalsMixin:
             job = await asyncio.to_thread(self.jobs.get_job, run_id)
             if job["status"] != "succeeded":
                 raise JobStateError(f"run is {job['status']}, not succeeded")
-            workspace = self._last_run_workspaces_by_session.get(session_id) or str(job["workspace"])
+            workspace = str(job["workspace"])
             artifact = await asyncio.to_thread(accept_artifact, workspace, run_id)
             job = await asyncio.to_thread(self.jobs.accept, run_id)
         except (ArtifactError, JobStateError) as exc:
@@ -646,7 +646,7 @@ class BotApprovalsMixin:
             job = await asyncio.to_thread(self.jobs.get_job, run_id)
             if job["status"] not in {"succeeded", "failed"}:
                 raise JobStateError(f"run is {job['status']}, not finished")
-            workspace = self._last_run_workspaces_by_session.get(session_id) or str(job["workspace"])
+            workspace = str(job["workspace"])
             await asyncio.to_thread(reject_artifact, workspace, run_id)
             job = await asyncio.to_thread(self.jobs.reject, run_id)
         except (ArtifactError, JobStateError) as exc:

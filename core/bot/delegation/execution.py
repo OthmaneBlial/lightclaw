@@ -920,7 +920,6 @@ class DelegationExecutionMixin:
             "_active_run_tasks_by_session",
             "_last_run_ids_by_session",
             "_last_run_receipts_by_session",
-            "_last_run_workspaces_by_session",
         ):
             if not hasattr(self, attribute):
                 setattr(self, attribute, {})
@@ -1222,7 +1221,6 @@ class DelegationExecutionMixin:
             receipt = safe_receipt
             self._last_run_ids_by_session[session_id] = run_id
             self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
-            self._last_run_workspaces_by_session[session_id] = target_workspace.as_posix()
         if evidence_sink is not None:
             evidence_sink.clear()
             evidence_sink.update(receipt)

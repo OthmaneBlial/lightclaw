@@ -5,6 +5,7 @@ LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in
 ## Guarantees
 
 - One run can execute per Telegram conversation at a time; separate conversations remain concurrent.
+- Result acceptance and rejection use the workspace stored for the selected run ID. A newer result in the same conversation cannot redirect an already started decision into its workspace.
 - A SQLite partial unique index permits only one `running` or `cancel_requested` writer for a resolved workspace.
 - Stalled jobs also block queued work in their workspace until an operator cancels or resumes them.
 - Queued work is claimed by priority, then creation time, among unlocked workspaces. A blocked workspace cannot stall the global queue for other workspaces.

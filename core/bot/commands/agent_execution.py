@@ -899,7 +899,6 @@ class CommandsAgentExecutionMixin:
         final_lines.append(f"JSON: `{receipt_json.as_posix()}`")
         self._last_run_ids_by_session[session_id] = run_id
         self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
-        self._last_run_workspaces_by_session[session_id] = multi_workspace.as_posix()
 
         self._cancel_task_once(durable_heartbeat)
         try:

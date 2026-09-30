@@ -109,7 +109,6 @@ class BotBaseMixin:
             self._active_run_heartbeats_by_run: dict[str, asyncio.Task[None]] = {}
             self._last_run_ids_by_session: dict[str, str] = {}
             self._last_run_receipts_by_session: dict[str, str] = {}
-            self._last_run_workspaces_by_session: dict[str, str] = {}
             self._result_actions_in_flight: set[str] = set()
             # Sliding-window limiter for high-authority Telegram commands.
             self._privileged_request_times: dict[tuple[str, str], list[float]] = {}

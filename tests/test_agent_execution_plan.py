@@ -83,7 +83,7 @@ async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path, clear_
     for name in (
         "_active_run_ids_by_session", "_active_worker_tasks_by_run",
         "_active_run_heartbeats_by_run", "_last_run_ids_by_session",
-        "_last_run_receipts_by_session", "_last_run_workspaces_by_session",
+        "_last_run_receipts_by_session",
     ):
         setattr(bot, name, {})
     bot._reply_logged = AsyncMock(return_value=SimpleNamespace(edit_text=AsyncMock()))

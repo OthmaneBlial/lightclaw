@@ -1559,6 +1559,62 @@ async def test_duplicate_result_taps_only_run_one_acceptance():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["accept", "reject"])
+async def test_result_decision_stays_bound_to_its_run_during_session_change(tmp_path, action):
+    from core import artifacts
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot._reply_logged = AsyncMock()
+    roots = {run_id: tmp_path / run_id for run_id in ("old-run", "new-run")}
+    for run_id, root in roots.items():
+        root.mkdir()
+        (root / "result.txt").write_text("checkpoint\n")
+        artifacts.initialize_artifact_repository(root, run_id)
+        (root / "result.txt").write_text(f"reviewed {run_id}\n")
+        artifacts._require_git(root, "add", "-A")
+        bot.jobs.create_job(
+            run_id=run_id, workspace=root, session_id="456", goal="fixture",
+            approved_scope="fixture", risk_level="low", capability_profile="workspace-write",
+            plan=[], status="queued",
+        )
+        bot.jobs.claim_next(run_id=run_id, worker_pid=999999)
+        bot.jobs.finish(run_id, succeeded=True)
+    new_root = roots["new-run"]
+    new_head = artifacts._require_git(new_root, "rev-parse", "HEAD")
+    new_index = (new_root / ".git" / "index").read_bytes()
+    bot._last_run_ids_by_session = {"456": "old-run"}
+    bot._last_run_workspaces_by_session = {"456": str(roots["old-run"])}
+    lookup_started, lookup_release = threading.Event(), threading.Event()
+    get_job = bot.jobs.get_job
+
+    def delayed_lookup(run_id):
+        lookup_started.set()
+        assert lookup_release.wait(5), "fixture job lookup was not released"
+        return get_job(run_id)
+
+    bot.jobs.get_job = delayed_lookup
+    decision = asyncio.create_task(
+        getattr(bot, f"_{action}_last_run_result")(SimpleNamespace(), "456", "old-run")
+    )
+    try:
+        assert await asyncio.to_thread(lookup_started.wait, 5)
+        bot._last_run_ids_by_session["456"] = "new-run"
+        bot._last_run_workspaces_by_session["456"] = str(new_root)
+    finally:
+        lookup_release.set()
+    try:
+        await decision
+        assert artifacts._require_git(new_root, "rev-parse", "HEAD") == new_head
+        assert (new_root / ".git" / "index").read_bytes() == new_index
+        assert get_job("new-run")["status"] == "succeeded"
+        assert get_job("old-run")["status"] == ("accepted" if action == "accept" else "rejected")
+        assert artifacts._require_git(roots["old-run"], "diff", "--cached", "--name-only") == ""
+    finally:
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
 async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
     patch_path = tmp_path / "changes.patch"
     patch_content = (
