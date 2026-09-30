@@ -499,6 +499,8 @@ class BotBaseMixin:
         if self._pending_confirmation_expired(entry):
             self._pending_multi_plan_by_session.pop(session_id, None)
             return None
+        if entry.get("planning"):
+            return None
         return entry
 
     def _pending_multi_plan_remaining_sec(self, session_id: str) -> int:

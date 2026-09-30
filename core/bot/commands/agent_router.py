@@ -16,6 +16,21 @@ from ..messaging import _TelegramHTMLChunker
 
 
 class CommandsAgentRouterMixin:
+    async def _plan_current_multi_request(
+        self, session_id: str, **kwargs
+    ) -> tuple[dict[str, object] | None, str]:
+        pending = self._set_pending_multi_plan(session_id, {"planning": True})
+        try:
+            result = await self._plan_multi_agent_payload(**kwargs)
+        except BaseException:
+            if self._pending_multi_plan_by_session.get(session_id) is pending:
+                self._clear_pending_multi_plan(session_id)
+            raise
+        if self._pending_multi_plan_by_session.get(session_id) is not pending:
+            return None, ""
+        self._clear_pending_multi_plan(session_id)
+        return result
+
     async def _reply_multi_plan_preview(
         self,
         update: Update,
@@ -210,7 +225,8 @@ class CommandsAgentRouterMixin:
                     if label and agent:
                         explicit_pairs.append((label, agent))
                 available = self._available_local_agents()
-                planned, plan_error = await self._plan_multi_agent_payload(
+                planned, plan_error = await self._plan_current_multi_request(
+                    session_id,
                     goal=goal,
                     available_agents=available,
                     explicit_specs=explicit_pairs,
@@ -222,6 +238,8 @@ class CommandsAgentRouterMixin:
                     preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
                     feedback=feedback,
                 )
+                if planned is None:
+                    return
                 if plan_error:
                     await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
                     return
@@ -283,7 +301,8 @@ class CommandsAgentRouterMixin:
                     explicit_pairs.append((label, agent))
 
             available = self._available_local_agents()
-            planned, plan_error = await self._plan_multi_agent_payload(
+            planned, plan_error = await self._plan_current_multi_request(
+                session_id,
                 goal=goal,
                 available_agents=available,
                 explicit_specs=explicit_pairs,
@@ -294,6 +313,8 @@ class CommandsAgentRouterMixin:
                 },
                 preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
             )
+            if planned is None:
+                return
             if plan_error:
                 await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
                 return
