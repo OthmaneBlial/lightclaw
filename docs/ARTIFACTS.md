@@ -54,7 +54,8 @@ change while staging, or a target change while creating its backup, aborts befor
 is replaced. All selected sources are staged and verified before target backups begin. New files
 are created without overwriting a target that appeared concurrently. Existing selected files are
 copied to private `.lightclaw-backups/<run-id>/` directories first; an existing
-backup is never overwritten. Unselected and unrelated files are never touched.
+backup is never overwritten. Failed backup preparation removes backups created in that attempt;
+cleanup failures are reported. Unselected and unrelated files are never touched.
 
 ## Optional pull request
 

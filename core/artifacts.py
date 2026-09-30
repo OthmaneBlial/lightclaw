@@ -511,58 +511,103 @@ def apply_selected_files(
                         if temp_name is not None:
                             _unlink_at(staging_fd, temp_name)
 
-                for (
-                    relative,
-                    _destination,
-                    backup,
-                    _source_sha256,
-                    _source_mode,
-                    target_sha256,
-                    target_mode,
-                ) in planned:
-                    if backup is None:
-                        continue
-                    backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
-                    backup_parent_fd = _open_workspace_directory(
-                        target,
-                        backup_parts[:-1],
-                        label="backup path",
-                        create=True,
-                        private=True,
-                    )
-                    target_fd: int | None = None
-                    temp_name = None
-                    try:
-                        target_fd, target_stat = _open_workspace_file(
-                            target, relative, "target path"
+                created_backups: list[tuple[tuple[str, ...], str, int, int]] = []
+                backups_ready = False
+                try:
+                    for (
+                        relative,
+                        _destination,
+                        backup,
+                        _source_sha256,
+                        _source_mode,
+                        target_sha256,
+                        target_mode,
+                    ) in planned:
+                        if backup is None:
+                            continue
+                        backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
+                        backup_parent_fd = _open_workspace_directory(
+                            target,
+                            backup_parts[:-1],
+                            label="backup path",
+                            create=True,
+                            private=True,
                         )
-                        if stat.S_IMODE(target_stat.st_mode) != target_mode:
-                            raise ArtifactError(
-                                f"selected target permissions changed during apply: {relative}"
-                            )
-                        temp_name, backup_sha256 = _copy_to_temp(
-                            target_fd, backup_parent_fd, backup_parts[-1], target_stat
-                        )
-                        if backup_sha256 != target_sha256:
-                            raise ArtifactError(f"selected target changed during apply: {relative}")
+                        target_fd: int | None = None
+                        temp_name = None
                         try:
-                            os.link(
-                                temp_name,
-                                backup_parts[-1],
-                                src_dir_fd=backup_parent_fd,
-                                dst_dir_fd=backup_parent_fd,
-                                follow_symlinks=False,
+                            target_fd, target_stat = _open_workspace_file(
+                                target, relative, "target path"
                             )
-                        except FileExistsError as exc:
+                            if stat.S_IMODE(target_stat.st_mode) != target_mode:
+                                raise ArtifactError(
+                                    f"selected target permissions changed during apply: {relative}"
+                                )
+                            temp_name, backup_sha256 = _copy_to_temp(
+                                target_fd, backup_parent_fd, backup_parts[-1], target_stat
+                            )
+                            if backup_sha256 != target_sha256:
+                                raise ArtifactError(
+                                    f"selected target changed during apply: {relative}"
+                                )
+                            backup_stat = os.stat(
+                                temp_name, dir_fd=backup_parent_fd, follow_symlinks=False
+                            )
+                            try:
+                                os.link(
+                                    temp_name,
+                                    backup_parts[-1],
+                                    src_dir_fd=backup_parent_fd,
+                                    dst_dir_fd=backup_parent_fd,
+                                    follow_symlinks=False,
+                                )
+                            except FileExistsError as exc:
+                                raise ArtifactError(
+                                    f"backup already exists; refusing to overwrite it: {relative}"
+                                ) from exc
+                            created_backups.append(
+                                (
+                                    backup_parts[:-1],
+                                    backup_parts[-1],
+                                    backup_stat.st_dev,
+                                    backup_stat.st_ino,
+                                )
+                            )
+                        finally:
+                            if target_fd is not None:
+                                os.close(target_fd)
+                            if temp_name is not None:
+                                _unlink_at(backup_parent_fd, temp_name)
+                            os.close(backup_parent_fd)
+                    backups_ready = True
+                finally:
+                    if not backups_ready:
+                        cleanup_failures: list[str] = []
+                        for parent_parts, name, device, inode in created_backups:
+                            parent_fd: int | None = None
+                            try:
+                                parent_fd = _open_workspace_directory(
+                                    target, parent_parts, label="backup cleanup"
+                                )
+                                current_stat = os.stat(
+                                    name, dir_fd=parent_fd, follow_symlinks=False
+                                )
+                                if (current_stat.st_dev, current_stat.st_ino) == (device, inode):
+                                    os.unlink(name, dir_fd=parent_fd)
+                                else:
+                                    cleanup_failures.append(f"{name}: backup changed during cleanup")
+                            except FileNotFoundError:
+                                pass
+                            except (ArtifactError, OSError) as exc:
+                                cleanup_failures.append(f"{name}: {exc}")
+                            finally:
+                                if parent_fd is not None:
+                                    os.close(parent_fd)
+                        if cleanup_failures:
                             raise ArtifactError(
-                                f"backup already exists; refusing to overwrite it: {relative}"
-                            ) from exc
-                    finally:
-                        if target_fd is not None:
-                            os.close(target_fd)
-                        if temp_name is not None:
-                            _unlink_at(backup_parent_fd, temp_name)
-                        os.close(backup_parent_fd)
+                                "backup preparation failed and cleanup was incomplete: "
+                                + "; ".join(cleanup_failures)
+                            )
 
                 for relative, stage_name, expected_sha256, expected_mode, target_sha256 in staged:
                     source_fd, source_stat = _open_workspace_file(

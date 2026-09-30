@@ -78,6 +78,13 @@
     },
     {
       "branch_points": 47,
+      "line": 377,
+      "lines": 294,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
+    },
+    {
+      "branch_points": 47,
       "line": 381,
       "lines": 94,
       "name": "_ingest_claude_progress_obj",
@@ -96,13 +103,6 @@
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
-    },
-    {
-      "branch_points": 40,
-      "line": 377,
-      "lines": 249,
-      "name": "apply_selected_files",
-      "path": "core/artifacts.py"
     },
     {
       "branch_points": 38,
@@ -163,18 +163,18 @@
       "path": "core/bot/commands/skills.py"
     },
     {
+      "branch_points": 47,
+      "line": 377,
+      "lines": 294,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
+    },
+    {
       "branch_points": 42,
       "line": 562,
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
-    },
-    {
-      "branch_points": 40,
-      "line": 377,
-      "lines": 249,
-      "name": "apply_selected_files",
-      "path": "core/artifacts.py"
     },
     {
       "branch_points": 0,
@@ -253,7 +253,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 766,
+      "lines": 811,
       "path": "core/artifacts.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19594,
+  "runtime_lines": 19639,
   "schema_version": 1
 }

@@ -339,6 +339,58 @@ def test_selective_apply_rejects_target_permission_change_during_backup(tmp_path
     assert not (target / ".lightclaw-backups" / "run-mode-race" / "selected.txt").exists()
 
 
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_selective_apply_cleans_earlier_backups_if_a_later_backup_fails(
+    tmp_path, monkeypatch, cleanup_fails
+):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    for name in ("first.txt", "second.txt"):
+        (source / name).write_text(f"approved {name}\n", encoding="utf-8")
+        (target / name).write_text(f"original {name}\n", encoding="utf-8")
+    selected = ["first.txt", "second.txt"]
+    preview = apply_selected_files(source, target, selected, run_id="run-backup-cleanup")
+    open_file = artifact_module._open_workspace_file
+    target_opens = 0
+
+    def change_second_target(root, relative, label):
+        nonlocal target_opens
+        if label == "target path":
+            target_opens += 1
+            if target_opens == 4:
+                (target / "second.txt").write_text("changed during apply\n", encoding="utf-8")
+        return open_file(root, relative, label)
+
+    monkeypatch.setattr("core.artifacts._open_workspace_file", change_second_target)
+    if cleanup_fails:
+        open_directory = artifact_module._open_workspace_directory
+
+        def fail_backup_cleanup(root, parts, *, label, create=False, private=False):
+            if label == "backup cleanup":
+                raise ArtifactError("simulated cleanup failure")
+            return open_directory(root, parts, label=label, create=create, private=private)
+
+        monkeypatch.setattr("core.artifacts._open_workspace_directory", fail_backup_cleanup)
+
+    error = "cleanup was incomplete" if cleanup_fails else "target changed during apply"
+    with pytest.raises(ArtifactError, match=error):
+        apply_selected_files(
+            source,
+            target,
+            selected,
+            run_id="run-backup-cleanup",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
+
+    assert (target / "first.txt").read_text(encoding="utf-8") == "original first.txt\n"
+    assert (target / "second.txt").read_text(encoding="utf-8") == "changed during apply\n"
+    backup_dir = target / ".lightclaw-backups" / "run-backup-cleanup"
+    assert bool(list(backup_dir.rglob("*.txt"))) is cleanup_fails
+
+
 def test_selective_apply_rejects_source_symlink_replaced_after_validation(
     tmp_path, monkeypatch
 ):
