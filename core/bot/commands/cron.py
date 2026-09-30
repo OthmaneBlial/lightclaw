@@ -395,11 +395,9 @@ class CommandsCronMixin:
                 run_at: float | None = None
                 text_start_idx = 3
 
-                # First try single-token datetime forms.
-                run_at = self._parse_cron_at(args[2])
-                if run_at is None and len(args) >= 5:
-                    # Then try split "YYYY-MM-DD HH:MM".
-                    run_at = self._parse_cron_at(f"{args[2]} {args[3]}")
+                split_run_at = self._parse_cron_at(f"{args[2]} {args[3]}") if len(args) >= 5 else None
+                run_at = split_run_at or self._parse_cron_at(args[2])
+                if split_run_at is not None:
                     text_start_idx = 4
 
                 text = " ".join(args[text_start_idx:]).strip()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -117,6 +118,44 @@ def test_cron_store_discards_unrenderable_timestamps_and_intervals(monkeypatch, 
     )
 
     assert [job["id"] for job in bot._read_cron_store()["jobs"]] == ["valid"]
+
+
+@pytest.mark.asyncio
+async def test_split_cron_datetime_uses_time_as_schedule_not_message(tmp_path):
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = lambda *_args: None
+    bot._reply_logged = AsyncMock()
+    bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
+    writes = []
+    bot._write_cron_store = writes.append
+    scheduled = datetime.fromtimestamp(time.time() + 7200).replace(
+        second=0, microsecond=0
+    )
+    context = SimpleNamespace(
+        args=[
+            "add",
+            "at",
+            scheduled.strftime("%Y-%m-%d"),
+            scheduled.strftime("%H:%M"),
+            "Review",
+            "the patch",
+        ],
+        bot=SimpleNamespace(),
+    )
+
+    await bot.cmd_cron(
+        SimpleNamespace(
+            effective_user=SimpleNamespace(id=1), message=object()
+        ),
+        context,
+    )
+
+    assert writes[0]["jobs"][0]["text"] == "Review the patch"
+    assert writes[0]["jobs"][0]["next_run_at"] == scheduled.timestamp()
 
 
 @pytest.mark.asyncio
