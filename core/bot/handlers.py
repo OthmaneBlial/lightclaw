@@ -8,6 +8,7 @@ import time
 
 from telegram import Update
 from telegram.constants import ChatAction, ParseMode
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from skills import SkillError
@@ -98,11 +99,12 @@ class BotHandlersMixin:
             return
         chat_id = update.effective_chat.id if update.effective_chat else 0
 
-        # Send typing indicator immediately
         if update.effective_chat:
-            await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            try:
+                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+            except TelegramError:
+                log.debug("Could not send voice typing indicator")
 
-        # Download voice file
         try:
             voice_file = await voice.get_file()
             voice_bytes = await voice_file.download_as_bytearray()
@@ -111,7 +113,6 @@ class BotHandlersMixin:
             await self._reply_logged(update, "⚠️ Couldn't download voice message.")
             return
 
-        # Transcribe
         text = await transcribe_voice(bytes(voice_bytes), self.config.groq_api_key)
 
         if text:
@@ -137,8 +138,7 @@ class BotHandlersMixin:
                 reply_markup=self._inline_voice_keyboard(approval_id),
             )
             return
-        else:
-            await self._reply_logged(update, VOICE_UNAVAILABLE)
+        await self._reply_logged(update, VOICE_UNAVAILABLE)
 
     # ── Photo Handler ─────────────────────────────────────────
 

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 from telegram import InputFile
+from telegram.error import NetworkError
 
 from core.bot import LightClawBot
 from core.jobs import JobStore
@@ -247,7 +248,7 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
 
 
 @pytest.mark.asyncio
-async def test_voice_transcription_waits_for_explicit_approval(monkeypatch):
+async def test_voice_transcription_survives_typing_failure_and_waits_for_approval(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
     bot.is_update_allowed = lambda _update: True
@@ -264,7 +265,11 @@ async def test_voice_transcription_waits_for_explicit_approval(monkeypatch):
         effective_chat=SimpleNamespace(id=456, type="private"),
         message=message,
     )
-    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+    context = SimpleNamespace(
+        bot=SimpleNamespace(
+            send_chat_action=AsyncMock(side_effect=NetworkError("fixture failure"))
+        )
+    )
 
     await bot.handle_voice(update, context)
 
