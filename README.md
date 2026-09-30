@@ -1,113 +1,85 @@
-# LightClaw
+# 🐾 LightClaw
 
-**Control local Codex and Claude coding agents from your phone via Telegram—and keep the proof of what they delivered.**
+<p align="center">
+  <strong>Give your local coding agents a mission from Telegram.<br />Keep the plan, tests, patch, and receipt.</strong>
+</p>
 
-LightClaw is a self-hosted mission-control layer, not a generic remote terminal. Send a goal,
-review its paths, risk, workers, and acceptance checks before execution, then receive the diff,
-test evidence, artifacts, private run receipt, and scoped recovery instructions.
+<p align="center">
+  <a href="https://othmaneblial.github.io/lightclaw/"><img src="assets/social-preview.png" alt="LightClaw: hand off a task, keep the proof" width="760" /></a>
+</p>
 
-![Silent 24-second LightClaw walkthrough: request, plan, workers, tests, and run receipt](assets/demo.svg)
+<p align="center">
+  <a href="https://www.python.org/"><img alt="Python 3.10 to 3.14" src="https://img.shields.io/badge/Python-3.10%E2%80%933.14-3776AB?style=for-the-badge&logo=python&logoColor=white" /></a>
+  <img alt="macOS and Linux" src="https://img.shields.io/badge/macOS%20%2B%20Linux-ready-2E8B72?style=for-the-badge" />
+  <img alt="Alpha software" src="https://img.shields.io/badge/status-alpha-FF6B4E?style=for-the-badge" />
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-5268E8?style=for-the-badge" /></a>
+</p>
 
-[Live site](https://othmaneblial.github.io/lightclaw/) · [Five-minute demo](#see-it-work-without-a-token) · [Install](docs/INSTALL.md) · [Security boundary](docs/THREAT_MODEL.md) · [Releases](https://github.com/OthmaneBlial/lightclaw/releases) · [Changelog](CHANGELOG.md)
+<p align="center">
+  <a href="https://othmaneblial.github.io/lightclaw/">🌈 Meet LightClaw</a> ·
+  <a href="#-try-the-demo">🧪 Run the demo</a> ·
+  <a href="docs/INSTALL.md">📦 Install</a> ·
+  <a href="docs/THREAT_MODEL.md">🛡️ Security</a> ·
+  <a href="CHANGELOG.md">📝 Changelog</a>
+</p>
 
-> Alpha software with meaningful host access. Telegram access fails closed, delegated workers do not inherit provider secrets, and trusted host execution always requires per-run confirmation.
+> 🚧 **Alpha software with real host access.** Telegram access fails closed. Local agents can change files. Read the [security model](docs/THREAT_MODEL.md) before connecting a bot.
 
-## Why LightClaw
+## 🎯 The short version
 
-Phone access, Telegram, diffs, and multi-agent execution already exist elsewhere. LightClaw's
-narrower job is the **governed handoff**: approve a delivery contract, let bounded local workers
-execute it, and judge the result from durable evidence instead of a reassuring chat summary.
+LightClaw is a self-hosted review desk for **Codex and Claude Code**. Send a goal from your phone, inspect the proposed scope, approve or edit it, then review the actual checks and patch when the work comes back.
 
-| If you need… | Best fit |
-|---|---|
-| A live mobile terminal or full session steering | A dedicated remote-control client |
-| A broad multi-channel personal assistant | A general agent gateway |
-| Pre-run scope review, bounded Codex/Claude workers, acceptance checks, a patch, receipt, and undo path | **LightClaw** |
+**The human approves the plan. The agent does the typing. The receipt keeps score.** 🧾
 
-## One complete story
+## 🗺️ One mission, start to finish
 
-1. From Telegram: “Add a health check, test it, and return only verified work.”
-2. LightClaw shows `builder → verifier`, requested paths, risk, and capability before execution.
-3. You approve, edit, or cancel the plan.
-4. Workers run in a dedicated task directory with a minimal environment.
-5. LightClaw returns actual test evidence, a reviewable Git patch/branch, file hashes, a private JSON/Markdown receipt, and a scoped undo path.
+1. 📩 Send a text or voice goal from Telegram.
+2. 👀 Review paths, risks, worker roles, and acceptance checks.
+3. 🙋 Approve, edit, deny, or cancel. No approval, no run.
+4. 🤖 Local Codex or Claude workers run in a bounded task workspace.
+5. 🧪 Inspect real checks, a Git patch, file evidence, a private receipt, and the scoped recovery path.
 
-That loop—not a long channel list—is the product.
+Nothing is pushed for you. No approval means no delegated run. A green check is evidence about a command, not a promise that generated code is correct.
 
-## See it work without a token
+## 🧪 Try the demo
 
-The deterministic demo contacts no model and needs no Telegram account:
+The deterministic demo needs **no Telegram account, API key, or paid model call**. It creates a disposable repo, runs a real unit test, and saves a patch plus receipts.
 
 ```bash
 git clone https://github.com/OthmaneBlial/lightclaw.git
 cd lightclaw
-python3 -m venv .venv && . .venv/bin/activate
+python3 -m venv .venv
+. .venv/bin/activate
 python -m pip install -e .
 lightclaw demo
 ```
 
-It replays a recorded phone request and approval, creates a disposable Git-backed Python service, runs a real unit test, and finishes with `changes.patch`, `artifact.json`, `receipt.json`, and `receipt.md`. Nothing is pushed. Try every product story:
+Pick a story:
 
 ```bash
-lightclaw demo --scenario memory
 lightclaw demo --scenario repo-task
+lightclaw demo --scenario memory
 lightclaw demo --scenario multi-agent
 ```
 
-| Story | What it proves locally | Replay notes |
-|---|---|---|
-| Repository task | A real unit test, Git patch, artifact, and accepted receipt | [Exact prompt and cleanup](examples/telegram-repo-task/README.md) |
-| Persistent memory | A synthetic fact survives a real SQLite restart and is recalled lexically | [Exact prompt and limits](examples/telegram-memory/README.md) |
-| Multi-agent plan | Dependency order, machine-readable handoffs, visible failure, and one bounded repair | [Exact plan and limits](examples/telegram-multi-agent/README.md) |
-
-For public, sanitized evidence that can be forked and replayed, browse the
-[privacy-checked showcase](showcase/). Its three starting recipes are maintainer fixtures,
-not community submissions or claims about live provider quality.
-
-### Measured proof, not a blanket performance claim
-
-The current full benchmark at commit [`ca1aea7`](bench/results/2026-09-01-macos-arm64-py313.json)
-used macOS 26.6, Python 3.13.1, five runs, and live PyPI resolution with a potentially warm cache.
-
-| Measurement | Result |
-|---|---:|
-| Base direct dependencies | 3 |
-| Clean-wheel installed distributions | 10 |
-| Clean-wheel install | 4.245 s |
-| CLI import median | 223.499 ms |
-| Lexical memory fixture | 8 / 8 top-1 |
-| Orchestration fixture | 4 / 4 contracts |
-
-These numbers describe that commit and machine. They do not predict live Telegram latency,
-provider cost, model quality, or availability. Reproduce them from [`bench/`](bench/).
-
-## LightClaw is / is not
-
-| LightClaw is | LightClaw is not |
+| 🎮 Story | 🧾 What the local replay shows |
 |---|---|
-| A Telegram-first review and control surface for local coding agents | A hosted multi-tenant agent service |
-| Local SQLite memory, task workspaces, receipts, and skills | Fully local inference when a hosted model is configured |
-| Human approval around plans and trusted execution | A guarantee that model-generated changes are correct |
-| A small Python product with optional edges | A feature-for-feature OpenClaw clone |
-| Auditable fixture stories that run for $0 | Proof of real-provider latency, cost, or availability |
+| `repo-task` | A passing unit test, Git patch, artifact, and accepted receipt |
+| `memory` | A synthetic fact recalled after a real SQLite restart |
+| `multi-agent` | Dependency order, worker handoffs, a failed check, and one bounded repair |
 
-## Safe installation
+These are fixture stories, not live-model benchmarks. See the [exact prompts and limits](showcase/).
 
-Supports Python 3.10–3.14 on macOS and Linux.
+## 🛠️ Install for real work
 
-Use an isolated tool environment and install only the SDK for the provider you
-actually use. OpenAI, xAI, DeepSeek, and Z-AI share the `openai` transport extra:
+LightClaw supports **Python 3.10–3.14** on macOS and Linux. Use an isolated tool environment:
 
 ```bash
 pipx install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
-# or
-uv tool install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
+# or: uv tool install 'lightclaw-ai[openai] @ git+https://github.com/OthmaneBlial/lightclaw.git'
 ```
 
-Replace `openai` with `claude` or `gemini`, or use `providers` to install all
-three SDK families. The token-free demo needs no provider extra.
-
-Then:
+Replace `openai` with `claude` or `gemini`; use `providers` for all three SDK families. The demo itself needs no provider extra.
 
 ```bash
 lightclaw demo
@@ -116,117 +88,54 @@ lightclaw doctor
 lightclaw run
 ```
 
-The supported paths are app-specific:
+Your data stays in app-specific locations:
 
-- config: `~/.config/lightclaw/config.env` (mode `0600`);
-- memory, skills, logs, and receipts: `~/.lightclaw/`;
-- owned task workspaces: `~/.lightclaw/workspace/`.
+- 🔐 Config: `~/.config/lightclaw/config.env` (`0600`)
+- 🧠 Memory, skills, logs, receipts: `~/.lightclaw/`
+- 🧰 Owned task workspaces: `~/.lightclaw/workspace/`
 
-Existing configuration is backed up before reset. The compatibility installer uses its own virtual environment and never installs into global Python. See [install, upgrade, undo, and uninstall](docs/INSTALL.md).
+See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorization, upgrades, undo, and uninstall.
 
-## Signature workflow
+## 🧩 What is in the toolbox?
 
-```text
-Telegram text or voice goal
-  -> scoped DAG with risk, paths, and expected outputs
-  -> approve / edit / deny
-  -> isolated Codex or Claude workers
-  -> compact live progress
-  -> tests + Git patch + file evidence + receipt
-  -> accept / reject / selective apply / optional PR preview
-```
+- 📱 Telegram-first text and voice requests, plus terminal chat.
+- 🧭 Reviewed multi-agent plans with owned paths, dependencies, acceptance checks, and bounded repair.
+- 🧪 Codex and Claude profiles: `observe`, `workspace-write`, and `trusted-command`.
+- 🧾 Private JSON/Markdown receipts with commands, results, hashes, artifacts, and recovery context.
+- 🪄 Reviewable patches, local accept/reject, selective file apply, and optional PR previews.
+- 🧠 Namespaced SQLite FTS5 memory with retention, export, and selective delete.
+- 🧰 Permission-manifest skills, inactive by default, with provenance and hash review.
+- 🔌 Provider routes for OpenAI, xAI, Anthropic, Gemini, DeepSeek, and Z-AI.
 
-Current capabilities include:
+## 🛡️ Safety, without magic claims
 
-- fail-closed Telegram allowlisting and privileged-command rate limits;
-- OpenAI, xAI, Anthropic, Gemini, DeepSeek, and Z-AI routing;
-- Codex and Claude delegation profiles: `observe`, `workspace-write`, `trusted-command`;
-- DAG planning, owned paths, JSON handoffs, acceptance checks, and bounded repair;
-- reviewable artifacts, plan-hash-bound selective apply that stages sources and backs up targets before replacement, and optional PR previews;
-- namespaced SQLite FTS5 lexical recall with retention, export, and selective delete;
-- permission-manifest skills with pinned provenance, hash review, and prompt-only activation;
-- plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps;
-- voice transcription (20 MB limit, explicit approval), scheduled jobs, heartbeat, Telegram, and terminal chat;
-- token-free fixture adapters covered by the canonical local quality suite.
+- An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Allowlisted bots accept commands only in private chats because group members share session and approval state. Public group mode requires an explicit acknowledgement and no user allowlist.
+- Delegated workers get a minimal environment without Telegram/provider keys. Workspaces, output, callbacks, files, receipts, and SQLite permissions have explicit bounds.
+- Plans and trusted runs require approval; approvals expire if the clock changes or the machine sleeps.
+- **Acceptance commands run on your host and are not sandboxed by LightClaw.** Review them and use OS/container isolation for untrusted repositories.
+- Secret detection is heuristic. External agent CLIs and hosted providers remain separate trust boundaries.
 
-## Security model
+Read the [threat model](docs/THREAT_MODEL.md), [privacy notes](docs/PRIVACY.md), and [approval guide](docs/APPROVALS.md) before using real repositories.
 
-An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Allowlisted mode accepts commands and callbacks
-only in private chats because group members share session and approval state. Group use requires
-intentionally public mode (`LIGHTCLAW_PUBLIC_BOT_ACK=yes`) with no user allowlist. Delegated agents
-and acceptance subprocesses receive a minimal environment that excludes Telegram/provider keys.
-Delegated CLI output is bounded per line and per stream; LightClaw flags truncation for review.
-Automatic edit retries omit
-common credential paths and files with detectable secrets; model-generated file blocks cannot
-write common credential paths, reject symlinked workspace paths during reads and writes, and cap
-each chat-edited file at 2 MiB. Private metadata, receipt, and message directories are created
-through no-follow directory descriptors with owner-only permissions. Writes replace files
-atomically. Use a delegated local-agent task for larger files. Scheduled `HEARTBEAT.md` input is
-capped at 64 KiB; larger files are skipped. Memory and job SQLite databases, including existing
-WAL/SHM sidecars, are restricted to owner-only permissions before use.
-Acceptance commands are user-approved host processes, not sandboxed by LightClaw; review them and
-use OS/container isolation for untrusted repositories. Secret detection is heuristic. `lightclaw undo`
-refuses paths that lack a LightClaw ownership record.
-Undo reads that record and removes the task relative to the opened workspace directory.
+## 🧭 Is it your kind of tool?
 
-These controls do not protect the host after you explicitly enable `trusted-command`, approve a malicious acceptance command, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
+| Reach for… | When you want… |
+|---|---|
+| A remote-control client | A live terminal or IDE and control over every turn |
+| A general agent gateway | A broad personal assistant across many channels |
+| **LightClaw** | A bounded local coding task with plan approval, checks, patch, receipt, and recovery path |
 
-Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Report vulnerabilities through [private vulnerability reporting](https://github.com/OthmaneBlial/lightclaw/security/advisories/new), never a public issue.
+LightClaw is local-first and lightweight. It is **not** a hosted multi-tenant service, fully local inference, or a guarantee that model-generated changes are correct.
 
-## Documentation
+## 📚 Take a look around
 
-- [Documentation map](docs/README.md) — start, operate, trust, extend, and maintain
-- [Install, upgrade, undo, and uninstall](docs/INSTALL.md)
-- [Telegram approvals and chat file-operation limits](docs/APPROVALS.md)
-- [Architecture and enforced growth budgets](docs/ARCHITECTURE.md)
-- [Run receipts and sanitized Run Cards](docs/RUN_RECEIPTS.md)
-- [Scheduled Telegram reminders and durable job control](docs/JOB_CONTROL.md)
-- [Threat model](docs/THREAT_MODEL.md) and [privacy boundaries](docs/PRIVACY.md)
-- [Provider contract and generated compatibility evidence](docs/PROVIDERS.md)
-- [Multi-agent guide](MULTI_AGENT.md) and [reproducible showcase](showcase/)
-- [Roadmap](ROADMAP.md) and [evidence audit](docs/ROADMAP_AUDIT.md)
+- 🗺️ [Docs map](docs/README.md) · [Quickstart](docs/QUICKSTART.md) · [Install and upgrade](docs/INSTALL.md)
+- 🙋 [Telegram approvals](docs/APPROVALS.md) · [Job control](docs/JOB_CONTROL.md) · [Run receipts](docs/RUN_RECEIPTS.md)
+- 🏗️ [Architecture](docs/ARCHITECTURE.md) · [Threat model](docs/THREAT_MODEL.md) · [Privacy](docs/PRIVACY.md)
+- 🔌 [Provider support](docs/PROVIDERS.md) · [Multi-agent guide](MULTI_AGENT.md) · [Reproducible stories](showcase/)
+- 🧾 [Roadmap](ROADMAP.md) · [Release evidence audit](docs/ROADMAP_AUDIT.md) · [Bench data](bench/results/)
 
-## Honest alpha limits
-
-- Memory retrieval is bounded SQLite FTS5 lexical search, not semantic understanding. Embeddings are an optional adapter and are never required.
-- Fixture demos prove LightClaw contracts, not external model quality.
-- External coding-agent CLIs remain separate security boundaries with their own versions and settings.
-- The package is installable from Git today; the first stable PyPI release follows the release gate in the roadmap.
-
-## Roadmap and release state
-
-- **Now:** make the base install smaller, keep the three fixture stories reproducible, and
-  collect privacy-bounded external install evidence.
-- **Next:** publish `v0.1.0`, PyPI attestations, and a versioned container only after 10–20
-  external self-hosters exercise the clean install and the release gate passes.
-- **Later:** improve acknowledgement/reconnect proof and real-world operator ergonomics before
-  adding new channels or chasing broad assistant parity.
-
-No stable release exists yet. The [release page](https://github.com/OthmaneBlial/lightclaw/releases),
-[draft notes](docs/releases/v0.1.0.md), and [evidence-derived gate](launch/alpha/aggregate.json)
-make that status explicit.
-
-## Help qualify v0.1.0
-
-Follow the [five-minute quickstart](docs/QUICKSTART.md), then submit the
-[bounded alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml).
-Never include prompts, receipts, repository content, local paths, Telegram identities, tokens,
-request IDs, or screenshots. Failures and missing timings remain visible evidence.
-
-## Community and updates
-
-- Help qualify the first stable release through the privacy-bounded
-  [external alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml).
-- Follow the recurring [development updates and release evidence](https://github.com/OthmaneBlial/lightclaw/discussions/20).
-- Ask support questions in [Discussions Q&A](https://github.com/OthmaneBlial/lightclaw/discussions/categories/q-a).
-- Submit reproducible defects, bounded proposals, provider mismatches, or sanitized
-  workflows through the structured issue forms.
-- Report vulnerabilities only through [private vulnerability reporting](https://github.com/OthmaneBlial/lightclaw/security/advisories/new).
-
-Release notes and the update thread publish fixes, workflows, benchmarks, limitations, and
-explicit pauses. See the [maintenance and badge policy](docs/MAINTENANCE.md).
-
-## Development
+## 🧑‍🔧 Hacking on LightClaw
 
 ```bash
 python3 -m venv .venv
@@ -235,14 +144,16 @@ python -m pip install -e '.[dev]'
 python scripts/quality.py
 ```
 
-This is the canonical local quality command. GitHub CI, CodeQL, OpenSSF Scorecard, and showcase
-validation workflows are disabled; run this suite before pushing. The suite resolves
-all three hashed dependency locks without installing them, installs the wheel in a clean environment,
-audits dependencies, and replays all three deterministic stories. To use automation's exact hashed
-dependencies, install `requirements-pip.txt` and
-`requirements-dev.txt` with `--require-hashes`, then install the checkout with
-`--no-deps --no-build-isolation`. Read
-[CONTRIBUTING.md](CONTRIBUTING.md), the [support routes](SUPPORT.md), and the
-[Code of Conduct](CODE_OF_CONDUCT.md) before participating.
+That is the canonical local quality gate: lint, docs, architecture/runtime budgets, dependency audit, 400+ tests, demo replays, and clean-wheel checks. **GitHub CI, CodeQL, OpenSSF Scorecard, and showcase workflows are disabled**; run the local gate before pushing.
 
-Licensed under [MIT](LICENSE).
+Read [contributing](CONTRIBUTING.md), [support](SUPPORT.md), and the [Code of Conduct](CODE_OF_CONDUCT.md) before opening a ticket.
+
+## 🌱 Alpha status
+
+No stable release yet. The first stable release waits for real external self-hosters to try a fresh install. If you test it, send a [privacy-bounded alpha report](https://github.com/OthmaneBlial/lightclaw/issues/new?template=alpha.yml). Please leave prompts, receipts, paths, identities, and tokens out of the report.
+
+Follow [development notes and release evidence](https://github.com/OthmaneBlial/lightclaw/discussions/20) for updates. Failures and missing timings are useful data too. 🪲
+
+## 📄 License
+
+[MIT](LICENSE) — bring your own bot, agents, and good judgment. 🐾

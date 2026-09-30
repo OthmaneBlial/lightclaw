@@ -96,6 +96,22 @@ def test_site_has_complete_share_and_search_metadata() -> None:
     assert struct.unpack(">II", social[16:24]) == (1280, 640)
 
 
+def test_readme_and_site_share_the_playful_brand_assets() -> None:
+    html, _ = _document()
+    css = (SITE / "styles.css").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert '<meta name="theme-color" content="#fff8eb"' in html
+    assert "--paper: #fff8eb" in css
+    assert "--coral: #ff6b4e" in css
+    assert "class=\"top-ribbon\"" in html
+    assert "✨" in html and "🧪" in readme
+    assert "assets/social-preview.png" in readme
+    assert (ROOT / "assets" / "social-preview.png").read_bytes() == (
+        SITE / "assets" / "social-preview.png"
+    ).read_bytes()
+
+
 def test_site_explains_allowlisted_group_chat_boundary() -> None:
     html, _ = _document()
     assert "Allowlisted bots accept commands only in private chats." in html

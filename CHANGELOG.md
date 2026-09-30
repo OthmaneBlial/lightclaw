@@ -38,6 +38,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Refreshed the README and Pages site with a brighter, playful visual identity while keeping
+  alpha status, approval boundaries, and fixture limits explicit.
 - DeepSeek defaults and onboarding now use supported model IDs; retired `deepseek-chat` and
   `deepseek-reasoner` settings resolve to `deepseek-flash`.
 - Verified Python 3.14 support and aligned package metadata, documentation, and alpha evidence
