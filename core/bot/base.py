@@ -85,6 +85,7 @@ class BotBaseMixin:
         self._active_message_clear_events_by_session: dict[
             str, dict[asyncio.Task, asyncio.Event]
         ] = {}
+        self._memory_wipe_lock = asyncio.Lock()
         # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
         self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
         self._pending_multi_plan_ttl_sec: int = 15 * 60
@@ -121,6 +122,19 @@ class BotBaseMixin:
                     first_error = exc
         if first_error is not None:
             raise first_error
+
+    def _get_memory_wipe_lock(self) -> asyncio.Lock:
+        lock = getattr(self, "_memory_wipe_lock", None)
+        if lock is None:
+            lock = self._memory_wipe_lock = asyncio.Lock()
+        return lock
+
+    def _invalidate_active_message_requests(self, session_id: str | None = None) -> None:
+        sessions = getattr(self, "_active_message_clear_events_by_session", {})
+        for active_session, messages in sessions.items():
+            if session_id is None or active_session == session_id:
+                for clear_event in messages.values():
+                    clear_event.set()
 
     def _create_background_task(self, coroutine) -> asyncio.Task:
         task = asyncio.create_task(coroutine)

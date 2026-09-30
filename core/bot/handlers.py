@@ -241,14 +241,15 @@ class BotHandlersMixin:
         session_id = self._session_id_from_update(update)
         current = asyncio.current_task()
         clear_event = asyncio.Event()
-        active_messages = getattr(
-            self, "_active_message_clear_events_by_session", None
-        )
-        if active_messages is None:
-            active_messages = self._active_message_clear_events_by_session = {}
-        session_messages = active_messages.setdefault(session_id, {})
-        if current:
-            session_messages[current] = clear_event
+        async with self._get_memory_wipe_lock():
+            active_messages = getattr(
+                self, "_active_message_clear_events_by_session", None
+            )
+            if active_messages is None:
+                active_messages = self._active_message_clear_events_by_session = {}
+            session_messages = active_messages.setdefault(session_id, {})
+            if current:
+                session_messages[current] = clear_event
         locks = getattr(self, "_session_message_locks", None)
         if locks is None:
             locks = self._session_message_locks = WeakValueDictionary()

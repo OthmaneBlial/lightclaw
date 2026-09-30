@@ -61,7 +61,8 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
 
 
 @pytest.mark.asyncio
-async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch):
+@pytest.mark.parametrize("clear_kind", ["session", "global"])
+async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_kind):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(
         memory_top_k=3,
@@ -93,7 +94,15 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch):
     bot._create_background_task = Mock()
     bot._privileged_rate_limited = Mock(return_value=False)
     bot._clear_pending_actions = Mock()
+    bot._invalidate_active_summaries = Mock()
     bot._invalidate_session_summary = Mock()
+    bot._pending_wipe_confirm = {
+        "chat-42": {
+            "user_id": 42,
+            "expires_at": 9_999_999_999,
+            "expires_monotonic": 9_999_999_999,
+        }
+    }
     bot._summary_key = lambda _session: ("chat-42", "user", "workspace")
     bot._session_summaries = {}
     bot._reply_logged = AsyncMock()
@@ -117,6 +126,7 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch):
         get_recent=Mock(return_value=[]),
         ingest=Mock(),
         clear_session=Mock(),
+        clear_all=Mock(),
     )
     monkeypatch.setattr("core.bot.handlers.build_system_prompt", lambda *_args: "prompt")
 
@@ -141,11 +151,17 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch):
     )
     await asyncio.sleep(0)
     assert len(bot._active_message_clear_events_by_session["chat-42"]) == 2
-    await bot.cmd_clear(update, SimpleNamespace())
+    if clear_kind == "session":
+        await bot.cmd_clear(update, SimpleNamespace())
+    else:
+        await bot.cmd_wipe_memory(update, SimpleNamespace(args=["confirm"]))
     release.set()
     await asyncio.gather(processing, queued)
 
-    bot.memory.clear_session.assert_called_once_with("chat-42")
+    if clear_kind == "session":
+        bot.memory.clear_session.assert_called_once_with("chat-42")
+    else:
+        bot.memory.clear_all.assert_called_once_with()
     bot.memory.ingest.assert_not_called()
     assert chat_calls == 1
     assert bot._active_message_clear_events_by_session == {}

@@ -72,7 +72,7 @@ lightclaw memory clear
 lightclaw memory prune
 ```
 
-After checking the matched IDs or count, add `--apply`. A record ID outside the selected user/workspace scope is never deleted. Telegram `/clear` removes only the current bound session and revokes its pending actions; an in-flight chat reply may finish but cannot restore cleared history. Confirmed `/wipe_memory` removes all local memory and pending actions across chats; in groups, the initiating Telegram user must confirm it within 90 seconds. Confirmation expires on wall-clock changes or machine sleep. Already-active runs continue.
+After checking the matched IDs or count, add `--apply`. A record ID outside the selected user/workspace scope is never deleted. Telegram `/clear` removes only the current bound session and revokes its pending actions; an in-flight chat reply may finish but cannot restore cleared history. Confirmed `/wipe_memory` removes all local memory and pending actions across chats; in-flight chat replies may finish but are not restored. In groups, the initiating Telegram user must confirm it within 90 seconds. Confirmation expires on wall-clock changes or machine sleep. Already-active runs continue.
 
 ## Optional embeddings
 

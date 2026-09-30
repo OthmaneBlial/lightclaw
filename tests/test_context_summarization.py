@@ -259,7 +259,7 @@ async def test_confirmed_global_wipe_revokes_pending_actions_across_chats():
     assert bot._active_run_tasks_by_session == {"other": asyncio.current_task()}
     assert bot._session_summaries == {}
     bot.memory.clear_all.assert_called_once()
-    assert "Already-active runs continue" in bot._reply_logged.await_args.args[1]
+    assert "Active runs continue" in bot._reply_logged.await_args.args[1]
 
 
 @pytest.mark.asyncio

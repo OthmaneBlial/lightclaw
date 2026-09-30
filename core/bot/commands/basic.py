@@ -87,12 +87,7 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/clear")
-        for clear_event in getattr(
-            self, "_active_message_clear_events_by_session", {}
-        ).get(
-            session_id, {}
-        ).values():
-            clear_event.set()
+        self._invalidate_active_message_requests(session_id)
         self._clear_pending_actions(session_id)
         self._invalidate_session_summary(session_id)
         self.memory.clear_session(session_id)
@@ -128,16 +123,19 @@ class CommandsBasicMixin:
 
         if args and args[0] in {"confirm", "yes", "now"}:
             if confirmation_active:
-                self._clear_pending_actions()
-                self._invalidate_active_summaries()
-                await asyncio.to_thread(self.memory.clear_all)
-                self._invalidate_active_summaries()
-                self._session_summaries.clear()
+                async with self._get_memory_wipe_lock():
+                    self._invalidate_active_message_requests()
+                    self._clear_pending_actions()
+                    self._invalidate_active_summaries()
+                    await asyncio.to_thread(self.memory.clear_all)
+                    self._invalidate_active_summaries()
+                    self._session_summaries.clear()
                 await self._reply_logged(
                     update,
                     "🧨 <b>All memory wiped.</b>\n"
                     "Saved interactions and pending approvals were deleted across chats.\n"
-                    "Already-active runs continue; cancel them from their chat.",
+                    "Active runs continue; in-flight chat replies may finish but aren't restored.\n"
+                    "Cancel active runs from their chats.",
                     parse_mode=ParseMode.HTML,
                 )
             else:
