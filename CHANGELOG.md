@@ -77,7 +77,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - High-risk confirmation now scans worker responsibilities, catching risky actions omitted
   from the overall goal text.
 - Plan review now exposes worker outputs and scans them for high-risk actions.
-- High-risk checks now recognize credential/key plurals and branch merges.
+- High-risk checks now recognize credential/key plurals, branch merges, overwrites,
+  purges, erasures, and access revocation.
 - Every plan execution entry point now enforces the second high-risk confirmation.
 
 ## [0.1.0] - Unreleased
