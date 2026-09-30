@@ -602,15 +602,14 @@ async def test_oversized_voice_transcription_is_not_left_pending(monkeypatch):
     assert bot._reply_logged.await_args.kwargs.get("reply_markup") is None
 
 
-@pytest.mark.parametrize("error", [RuntimeError("send failure"), asyncio.CancelledError()])
 @pytest.mark.asyncio
-async def test_failed_voice_approval_delivery_clears_pending(monkeypatch, error):
+async def test_ambiguous_voice_delivery_keeps_callback_state(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
     bot.is_update_allowed = lambda _update: True
     bot._pending_voice_goal_by_session = {}
     bot._privileged_request_times = {}
-    bot._reply_logged = AsyncMock(side_effect=error)
+    bot._reply_logged = AsyncMock(side_effect=RuntimeError("response lost after delivery"))
     monkeypatch.setattr("core.bot.handlers.transcribe_voice", AsyncMock(return_value="hello"))
     voice_file = SimpleNamespace(download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")))
     voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
@@ -621,10 +620,10 @@ async def test_failed_voice_approval_delivery_clears_pending(monkeypatch, error)
     )
     context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
 
-    with pytest.raises(type(error)):
+    with pytest.raises(RuntimeError, match="response lost"):
         await bot.handle_voice(update, context)
 
-    assert bot._pending_voice_goal_by_session == {}
+    assert bot._pending_voice_goal_by_session["456"]["text"] == "[voice transcription: hello]"
 
 
 @pytest.mark.asyncio

@@ -181,18 +181,12 @@ class BotHandlersMixin:
                 "expires_at": now + 10 * 60,
                 "expires_monotonic": time.monotonic() + 10 * 60,
             }
-            try:
-                await self._reply_logged(
-                    update,
-                    preview,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=self._inline_voice_keyboard(approval_id),
-                )
-            except (Exception, asyncio.CancelledError):
-                pending = self._pending_voice_goal_by_session.get(session_id)
-                if pending and pending.get("approval_id") == approval_id:
-                    self._pending_voice_goal_by_session.pop(session_id, None)
-                raise
+            await self._reply_logged(
+                update,
+                preview,
+                parse_mode=ParseMode.HTML,
+                reply_markup=self._inline_voice_keyboard(approval_id),
+            )
             return
         await self._reply_logged(update, VOICE_UNAVAILABLE)
 
