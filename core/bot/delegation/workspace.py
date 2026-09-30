@@ -34,7 +34,14 @@ class DelegationWorkspaceMixin:
                 break
             except FileExistsError:
                 idx += 1
-        register_task_workspace(root, candidate, goal_text)
+        try:
+            register_task_workspace(root, candidate, goal_text)
+        except Exception:
+            try:
+                candidate.rmdir()
+            except OSError:
+                pass
+            raise
         return candidate
 
     def _workspace_rel_label(self, workspace: Path) -> str:
