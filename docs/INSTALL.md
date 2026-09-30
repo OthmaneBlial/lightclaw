@@ -66,9 +66,20 @@ Configuration files are written with mode `0600`. An existing config is kept unl
 
 Malformed or unreadable skill state is preserved; LightClaw reports the problem and refuses skill changes until the JSON is repaired.
 
-At least one numeric `TELEGRAM_ALLOWED_USERS` ID is required. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and should still be isolated from sensitive host data.
+For the Telegram bot, at least one numeric `TELEGRAM_ALLOWED_USERS` ID is required. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and should still be isolated from sensitive host data.
 
 With an allowlist, LightClaw accepts commands and callbacks only in private chats. Group chats share conversation and approval state across members, so they are available only when the bot is intentionally public with `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and no user allowlist.
+
+## Local terminal chat
+
+```bash
+lightclaw chat --session local
+```
+
+Configure an LLM provider first. Terminal input is local to the host and does not
+require a Telegram token or user allowlist. Commands reuse the bot's handlers
+while keeping memory in a separate CLI scope. Replies show text and slash-command
+controls; Telegram buttons are not interactive in the terminal.
 
 ## Optional container
 

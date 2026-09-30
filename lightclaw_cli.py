@@ -837,6 +837,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_chat(args: argparse.Namespace) -> int:
     import asyncio
+    from html import unescape
 
     home = _resolve_home(args.home)
     prep_code = _prepare_runtime_environment(
@@ -891,6 +892,9 @@ def cmd_chat(args: argparse.Namespace) -> int:
         user_namespace=f"cli-user:{cli_user_id}",
         workspace_namespace=Path(config.workspace_path).resolve().as_posix(),
     )
+    # This terminal-only bot trusts local stdin and keeps its CLI memory namespace.
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: session_id
     bot._set_file_mode(session_id, "chat")
 
     print("")
@@ -1039,14 +1043,14 @@ def cmd_chat(args: argparse.Namespace) -> int:
         return final_text
 
     def _render_terminal_reply(text: str, parse_mode: str | None = None):
-        rendered = bot._strip_html_for_log(text) if parse_mode else text
+        rendered = unescape(bot._strip_html_for_log(text)) if parse_mode else text
         print(f"bot> {rendered}\n")
 
     class _CliSentMessage:
         def __init__(self):
             self.text = ""
 
-        async def edit_text(self, text: str, parse_mode: str | None = None):
+        async def edit_text(self, text: str, parse_mode: str | None = None, reply_markup=None):
             _render_terminal_reply(text, parse_mode=parse_mode)
             self.text = text
             return self
@@ -1055,7 +1059,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
         def __init__(self, text: str):
             self.text = text
 
-        async def reply_text(self, text: str, parse_mode: str | None = None):
+        async def reply_text(self, text: str, parse_mode: str | None = None, reply_markup=None):
             _render_terminal_reply(text, parse_mode=parse_mode)
             sent = _CliSentMessage()
             sent.text = text
