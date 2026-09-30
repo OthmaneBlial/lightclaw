@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import shlex
 import signal
-import subprocess
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from ...fs import FileTooLargeError, read_json_object
 from ...security import delegated_process_env
+from ..delegation.streams import BoundedStreamCapture
 
 MAX_MULTI_HANDOFF_JSON_BYTES = 1024 * 1024
 
@@ -343,55 +344,96 @@ class CommandsAgentAcceptanceMixin:
             timeout_sec = 20
         timeout_sec = max(1, min(45, timeout_sec))
 
-        try:
-            process = subprocess.Popen(
-                argv,
-                cwd=str(cwd),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=delegated_process_env(extra={"CI": "1"}),
-                start_new_session=os.name == "posix",
-            )
+        async def run_command() -> str:
             try:
-                stdout, stderr = process.communicate(timeout=timeout_sec)
-            except subprocess.TimeoutExpired:
+                process = await asyncio.create_subprocess_exec(
+                    *argv,
+                    cwd=str(cwd),
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=delegated_process_env(extra={"CI": "1"}),
+                    start_new_session=os.name == "posix",
+                )
+            except Exception as e:
+                return f"command failed to start `{command}`: {e}"
+
+            stdout_capture = BoundedStreamCapture("stdout")
+            stderr_capture = BoundedStreamCapture("stderr")
+
+            async def drain(stream, capture: BoundedStreamCapture) -> None:
+                async for _ in capture.read_lines(stream):
+                    pass
+
+            stream_tasks = (
+                asyncio.create_task(drain(process.stdout, stdout_capture)),
+                asyncio.create_task(drain(process.stderr, stderr_capture)),
+            )
+            wait_task = asyncio.create_task(process.wait())
+
+            async def stop_process_group() -> None:
                 if os.name == "posix":
                     try:
                         os.killpg(process.pid, signal.SIGTERM)
                     except ProcessLookupError:
                         pass
-                    try:
-                        process.wait(timeout=0.2)
-                    except subprocess.TimeoutExpired:
-                        pass
+                    await asyncio.sleep(0.2)
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
-                elif process.poll() is None:
+                elif process.returncode is None:
                     process.kill()
-                process.wait()
-                process.stdout.close()
-                process.stderr.close()
+                await wait_task
+
+            done, pending = await asyncio.wait(
+                (*stream_tasks, wait_task),
+                timeout=timeout_sec,
+                return_when=asyncio.FIRST_EXCEPTION,
+            )
+            stream_error = next(
+                (
+                    task.exception()
+                    for task in stream_tasks
+                    if task in done and not task.cancelled() and task.exception()
+                ),
+                None,
+            )
+            if pending or stream_error:
+                await stop_process_group()
+                try:
+                    await asyncio.wait_for(
+                        asyncio.gather(*stream_tasks), timeout=1
+                    )
+                except Exception:
+                    for task in stream_tasks:
+                        if not task.done():
+                            task.cancel()
+                    await asyncio.gather(*stream_tasks, return_exceptions=True)
+                if stream_error:
+                    return f"command output failed `{command}`: {stream_error}"
                 return f"command timed out after {timeout_sec}s: `{command}`"
+
+            if process.returncode == 0:
+                return ""
+
+            output_parts = [stderr_capture.text(), stdout_capture.text()]
+            output = "\n".join(part.strip() for part in output_parts if part.strip())
+            if stdout_capture.truncated or stderr_capture.truncated:
+                output = f"[acceptance command output truncated]\n{output}"
+            output_preview = (
+                self._short_progress_text(output, max_chars=220) if output else ""
+            )
+            location = f" in `{cwd_rel}`" if cwd_rel else ""
+            detail = f": {output_preview}" if output_preview else ""
+            return (
+                f"command failed{location} (exit {process.returncode}): `{command}`{detail}"
+            )
+
+        try:
+            return asyncio.run(run_command())
         except Exception as e:
-            return f"command failed to start `{command}`: {e}"
-
-        if process.returncode == 0:
-            return ""
-
-        output = "\n".join(
-            part.strip()
-            for part in [stdout or "", stderr or ""]
-            if part and part.strip()
-        )
-        output_preview = self._short_progress_text(output, max_chars=220) if output else ""
-        location = f" in `{cwd_rel}`" if cwd_rel else ""
-        detail = f": {output_preview}" if output_preview else ""
-        return (
-            f"command failed{location} (exit {process.returncode}): `{command}`{detail}"
-        )
+            return f"command failed to run `{command}`: {e}"
 
     def _multi_value_is_nonempty(self, value: Any) -> bool:
         if value is None:

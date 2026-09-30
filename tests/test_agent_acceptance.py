@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shlex
 import sys
 import time
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 
@@ -72,8 +72,12 @@ def test_acceptance_command_rejects_cwd_symlink_outside_workspace(tmp_path, monk
     outside = tmp_path / "outside"
     outside.mkdir()
     (workspace / "external").symlink_to(outside, target_is_directory=True)
-    run = Mock()
-    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.Popen", run)
+    async def run(*_args, **_kwargs):
+        raise AssertionError("an outside cwd must not start a process")
+
+    monkeypatch.setattr(
+        "core.bot.commands.agent_acceptance.asyncio.create_subprocess_exec", run
+    )
     bot = LightClawBot.__new__(LightClawBot)
 
     failure = bot._run_multi_acceptance_command(
@@ -81,7 +85,6 @@ def test_acceptance_command_rejects_cwd_symlink_outside_workspace(tmp_path, monk
     )
 
     assert "outside the workspace" in failure
-    run.assert_not_called()
 
 
 def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monkeypatch):
@@ -89,9 +92,29 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
     workspace.mkdir()
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
     monkeypatch.setenv("LIGHTCLAW_TEST_SECRET", "provider-secret")
-    process = SimpleNamespace(returncode=0, communicate=Mock(return_value=("", "")))
-    run = Mock(return_value=process)
-    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.Popen", run)
+    launched = {}
+
+    async def run(*argv, **kwargs):
+        stdout = asyncio.StreamReader()
+        stderr = asyncio.StreamReader()
+        stdout.feed_eof()
+        stderr.feed_eof()
+        process = SimpleNamespace(
+            pid=123, stdout=stdout, stderr=stderr, returncode=None
+        )
+
+        async def wait():
+            process.returncode = 0
+            return 0
+
+        process.wait = wait
+        launched["argv"] = argv
+        launched["kwargs"] = kwargs
+        return process
+
+    monkeypatch.setattr(
+        "core.bot.commands.agent_acceptance.asyncio.create_subprocess_exec", run
+    )
     bot = LightClawBot.__new__(LightClawBot)
 
     failure = bot._run_multi_acceptance_command(
@@ -99,13 +122,32 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
     )
 
     assert failure == ""
-    child_env = run.call_args.kwargs["env"]
+    child_env = launched["kwargs"]["env"]
     assert "TELEGRAM_BOT_TOKEN" not in child_env
     assert "LIGHTCLAW_TEST_SECRET" not in child_env
     assert child_env["LIGHTCLAW_DELEGATED"] == "1"
     assert child_env["CI"] == "1"
-    process.communicate.assert_called_once_with(timeout=20)
-    assert run.call_args.kwargs["start_new_session"] is True
+    assert launched["kwargs"]["start_new_session"] is (os.name == "posix")
+
+
+def test_acceptance_command_bounds_captured_output_and_keeps_error_detail(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    command = shlex.join(
+        [
+            sys.executable,
+            "-c",
+            "import sys; sys.stdout.write('x' * 8_000_000); "
+            "sys.stderr.write('useful failure'); sys.exit(1)",
+        ]
+    )
+
+    failure = bot._run_multi_acceptance_command(
+        tmp_path, {"command": command, "timeout_sec": 10}
+    )
+
+    assert "acceptance command output truncated" in failure
+    assert "useful failure" in failure
+    assert len(failure) < 500
 
 
 @pytest.mark.skipif(os.name != "posix", reason="acceptance process groups require POSIX")

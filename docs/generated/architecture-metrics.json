@@ -57,7 +57,7 @@
     },
     {
       "branch_points": 56,
-      "line": 461,
+      "line": 503,
       "lines": 183,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
@@ -206,7 +206,7 @@
     },
     {
       "branch_points": 56,
-      "line": 461,
+      "line": 503,
       "lines": 183,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
@@ -257,7 +257,7 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 670,
+      "lines": 712,
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 20013,
+  "runtime_lines": 20055,
   "schema_version": 1
 }
