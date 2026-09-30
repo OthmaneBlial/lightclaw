@@ -65,7 +65,7 @@ class CommandsHeartbeatMixin:
             f"<b>Mode:</b> <code>{_escape_html(mode)}</code>",
             f"<b>Loop task:</b> <code>{_escape_html(task_state)}</code>",
             f"<b>Interval:</b> <code>{interval_min}m</code> (min 5m)",
-            f"<b>Last active chat:</b> <code>{_escape_html(target)}</code>",
+            f"<b>Target chat:</b> <code>{_escape_html(target)}</code>",
             f"<b>Last run:</b> <code>{_escape_html(last_run)}</code>",
             f"<b>HEARTBEAT.md:</b> <code>{_escape_html(heartbeat_path.as_posix())}</code> (exists: {exists})",
             "",
@@ -291,7 +291,6 @@ class CommandsHeartbeatMixin:
             return
 
         session_id = self._session_id_from_update(update)
-        self._heartbeat_last_chat_id = session_id
         args = context.args or []
         self._log_user_message(session_id, f"/heartbeat {' '.join(args)}".strip())
 
@@ -338,6 +337,8 @@ class CommandsHeartbeatMixin:
                     return
 
             self._heartbeat_interval_sec = max(5, interval_min) * 60
+            self._stop_heartbeat_task()
+            self._heartbeat_last_chat_id = session_id
             self._heartbeat_enabled = True
             await self._ensure_heartbeat_task(context.bot)
 

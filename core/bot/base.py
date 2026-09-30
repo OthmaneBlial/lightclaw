@@ -69,7 +69,7 @@ class BotBaseMixin:
         self._llm_backoff_until: float = 0.0
         # Throttle repeated Telegram polling conflict warnings.
         self._last_telegram_conflict_log_at: float = 0.0
-        # Optional HEARTBEAT scheduler state (disabled by default).
+        # Optional HEARTBEAT scheduler; /heartbeat on pins its chat (disabled by default).
         self._heartbeat_enabled: bool = False
         self._heartbeat_interval_sec: int = max(5, config.heartbeat_interval_min) * 60
         self._heartbeat_last_chat_id: str = ""

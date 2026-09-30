@@ -288,7 +288,6 @@ class BotHandlersMixin:
         """
         chat_id = update.effective_chat.id if update.effective_chat else 0
         session_id = self._session_id_from_update(update)
-        self._heartbeat_last_chat_id = session_id
 
         self._log_user_message(session_id, user_text)
 

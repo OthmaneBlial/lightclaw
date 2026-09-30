@@ -22,6 +22,7 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
     bot._send_response = AsyncMock()
     bot._build_single_delegation_memory_entry = Mock(return_value="receipt")
     bot.memory = SimpleNamespace(ingest=Mock())
+    bot._heartbeat_last_chat_id = "chat-1"
 
     active_by_chat: dict[str, int] = {}
     max_active_by_chat: dict[str, int] = {}
@@ -30,6 +31,7 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
 
     async def run_local_agent_task(*, session_id: str, task: str, **_kwargs):
         nonlocal max_active_total
+        assert bot._heartbeat_last_chat_id == "chat-1"
         active_by_chat[session_id] = active_by_chat.get(session_id, 0) + 1
         max_active_by_chat[session_id] = max(
             max_active_by_chat.get(session_id, 0), active_by_chat[session_id]
@@ -59,6 +61,7 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
     assert max_active_by_chat == {"chat-1": 1, "chat-2": 1}
     assert max_active_total == 2
     assert started_by_chat["chat-1"] == ["first", "second"]
+    assert bot._heartbeat_last_chat_id == "chat-1"
 
 
 @pytest.mark.asyncio

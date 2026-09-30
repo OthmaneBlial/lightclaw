@@ -37,7 +37,7 @@
     {
       "branch_points": 69,
       "line": 269,
-      "lines": 356,
+      "lines": 355,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -144,7 +144,7 @@
     {
       "branch_points": 69,
       "line": 269,
-      "lines": 356,
+      "lines": 355,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -265,7 +265,7 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 626,
+      "lines": 625,
       "path": "core/bot/handlers.py"
     },
     {

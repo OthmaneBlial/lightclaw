@@ -37,7 +37,9 @@ Delegated POSIX processes wait for TERM/KILL cleanup and stream draining before 
 
 Cancellation also covers agent startup, before the process group is registered. Before output streaming begins, cleanup closes stdin and discards stdout/stderr in bounded chunks rather than retaining unread pipe buffers. Failed process-group registration still forces immediate termination.
 
-## Schedule Telegram reminders
+## Scheduled Telegram updates and reminders
+
+`/heartbeat on [minutes]` starts the single global heartbeat scheduler for the chat that enables it (minimum five minutes). Ordinary messages and `/heartbeat show` do not change that destination. Running `/heartbeat on` again explicitly changes the destination and user memory scope and restarts the interval. `/heartbeat off` stops it. `HEARTBEAT.md` remains a host-wide file; authorized users share control of this scheduler.
 
 `/cron` manages reminders for the current Telegram chat. The bot must remain running to deliver them.
 

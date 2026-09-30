@@ -8,6 +8,77 @@ import pytest
 from telegram.error import NetworkError
 
 from core.bot import LightClawBot
+from memory import MemoryStore
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chat_ids", [(42, 99), (-7, -7)])
+async def test_heartbeat_target_and_scope_change_only_on_explicit_enable(
+    tmp_path, monkeypatch, chat_ids
+):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot.memory = MemoryStore(tmp_path / "memory.db")
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    bot._heartbeat_enabled = False
+    bot._heartbeat_interval_sec = 300
+    bot._heartbeat_last_chat_id = ""
+    bot._heartbeat_last_run_at = 0
+    bot._heartbeat_task = None
+    bot._background_tasks = set()
+    bot._heartbeat_file_path = lambda: tmp_path / "HEARTBEAT.md"
+    ticks = asyncio.Queue()
+    runs = asyncio.Queue()
+
+    async def wait_for_tick(_seconds):
+        await ticks.get()
+
+    async def record_run(_bot, session_id):
+        runs.put_nowait((session_id, bot.memory.scope_for(session_id)))
+
+    monkeypatch.setattr("core.bot.commands.heartbeat.asyncio.sleep", wait_for_tick)
+    bot._run_heartbeat_once = record_run
+    context = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()), args=["on"])
+
+    def update(user_id, chat_id):
+        return SimpleNamespace(
+            effective_user=SimpleNamespace(id=user_id),
+            effective_chat=SimpleNamespace(id=chat_id),
+            message=SimpleNamespace(),
+        )
+
+    async def next_run():
+        ticks.put_nowait(None)
+        return await asyncio.wait_for(runs.get(), timeout=2)
+
+    try:
+        await bot.cmd_heartbeat(update(42, chat_ids[0]), context)
+        first_task = bot._heartbeat_task
+        expected_first = (
+            str(chat_ids[0]), ("telegram-user:42", str(tmp_path.resolve()))
+        )
+        assert await next_run() == expected_first
+
+        await bot.cmd_heartbeat(update(99, chat_ids[1]), SimpleNamespace(args=["show"]))
+        assert bot._heartbeat_last_chat_id == str(chat_ids[0])
+        assert await next_run() == expected_first
+
+        await bot.cmd_heartbeat(update(99, chat_ids[1]), context)
+        assert bot._heartbeat_task is not first_task
+        await first_task
+        assert await next_run() == (
+            str(chat_ids[1]), ("telegram-user:99", str(tmp_path.resolve()))
+        )
+    finally:
+        task = bot._heartbeat_task
+        bot._heartbeat_enabled = False
+        bot._stop_heartbeat_task()
+        if task:
+            await asyncio.gather(task, return_exceptions=True)
+        bot.memory.db.close()
 
 
 @pytest.mark.asyncio
