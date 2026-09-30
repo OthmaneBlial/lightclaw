@@ -143,6 +143,8 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
         "cp -f /tmp/generated /tmp/important",
         "python -c \"import os; os.replace('/tmp/a', '/tmp/b')\"",
         "python -c \"import shutil; shutil.move('/tmp/a', '/tmp/b')\"",
+        "python -c \"from pathlib import Path; Path('/tmp/a').replace('/tmp/b')\"",
+        "python -c \"from pathlib import Path; Path('/tmp/a').rename('/tmp/b')\"",
         "cat /etc/config",
         "sed -i 's/old/new/' /tmp/config",
         "perl -i -pe 's/old/new/' /tmp/config",

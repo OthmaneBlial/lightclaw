@@ -28,7 +28,7 @@ class BotApprovalsMixin:
         r"\b(push|publish|release|deploy|production|merge|open\s+(?:a\s+)?pr)\b",
         r"\b(tokens?|credentials?|passwords?|secrets?|permissions?|(?:api|access|private)[_ -]?keys?)\b",
         r"\b(outside|external|system|home directory|sudo|doas)\b|/etc/",
-        r"\b(?:os\.(?:replace|rename)|shutil\.(?:move|copy|copy2|copyfile|copytree)|(?:pathlib\.)?Path\.(?:replace|rename))\s*\(",
+        r"\b(?:os\.(?:replace|rename)|shutil\.(?:move|copy|copy2|copyfile|copytree)|(?:pathlib\.)?path(?:\([^)]*\))?\.(?:replace|rename))\s*\(",
         r"\b(curl|wget|ssh|scp|sftp|nc|netcat|ftp|telnet)\b|https?://",
     )
 
