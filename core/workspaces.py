@@ -9,12 +9,11 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 import time
 from pathlib import Path
 
+from .artifacts import ArtifactError, _git
 from .fs import atomic_write_text_at, open_directory_at, read_text_bounded_at
-from .security import delegated_process_env
 
 METADATA_DIRNAME = ".lightclaw-meta"
 TASK_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$")
@@ -77,24 +76,15 @@ def ensure_private_workspace_dir(root: str | Path, *parts: str) -> Path:
 def capture_git_checkpoint(workspace: Path) -> dict[str, object]:
     """Capture starting Git identity without mutating the workspace."""
 
-    def run(*args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            ["git", "-C", workspace.as_posix(), *args],
-            text=True,
-            capture_output=True,
-            timeout=5,
-            check=False, env=delegated_process_env(),
-        )
-
     try:
-        inside = run("rev-parse", "--is-inside-work-tree")
-    except (OSError, subprocess.TimeoutExpired):
+        inside = _git(workspace, "rev-parse", "--is-inside-work-tree", timeout=5)
+    except (ArtifactError, OSError):
         return {"is_git": False, "commit": None, "dirty": False, "status": []}
     if inside.returncode != 0 or inside.stdout.strip() != "true":
         return {"is_git": False, "commit": None, "dirty": False, "status": []}
 
-    commit_result = run("rev-parse", "HEAD")
-    status_result = run("status", "--porcelain=v1", "--untracked-files=all")
+    commit_result = _git(workspace, "rev-parse", "HEAD", timeout=5)
+    status_result = _git(workspace, "status", "--porcelain=v1", "--untracked-files=all", timeout=5)
     status = [line[:500] for line in status_result.stdout.splitlines()[:200]]
     return {
         "is_git": True,

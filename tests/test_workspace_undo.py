@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
+from core.artifacts import initialize_artifact_repository
 from core.workspaces import (
     WorkspaceSafetyError,
     _remove_owned_tree_at,
@@ -26,7 +28,7 @@ def test_git_checkpoint_uses_secret_free_environment(
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
     monkeypatch.setenv("LIGHTCLAW_TEST_SECRET", "provider-secret")
     run = Mock(return_value=subprocess.CompletedProcess([], 1, "", ""))
-    monkeypatch.setattr("core.workspaces.subprocess.run", run)
+    monkeypatch.setattr("core.artifacts.subprocess.run", run)
 
     assert capture_git_checkpoint(tmp_path)["is_git"] is False
 
@@ -34,6 +36,41 @@ def test_git_checkpoint_uses_secret_free_environment(
     assert "TELEGRAM_BOT_TOKEN" not in child_env
     assert "LIGHTCLAW_TEST_SECRET" not in child_env
     assert child_env["LIGHTCLAW_DELEGATED"] == "1"
+
+
+def test_task_git_checkpoint_does_not_use_parent_repository_or_monitor(tmp_path: Path):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "source.txt").write_text("source repository")
+    initialize_artifact_repository(source, "parent-checkpoint")
+    monitor = tmp_path / "monitor"
+    marker = tmp_path / "outside-monitor-marker"
+    monitor.write_text(
+        "#!/bin/sh\nprintf ran > "
+        + shlex.quote(str(marker))
+        + "\nprintf 'token\\000/\\000'\n"
+    )
+    monitor.chmod(0o700)
+    subprocess.run(["git", "-C", str(source), "config", "core.fsmonitor", str(monitor)], check=True)
+    subprocess.run(["git", "-C", str(source), "config", "core.fsmonitorHookVersion", "2"], check=True)
+    subprocess.run(["git", "-C", str(source), "status", "--porcelain"], check=True, capture_output=True)
+    assert marker.exists(), "fixture must exercise the configured parent monitor"
+    marker.unlink()
+    parent_head = subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    parent_index = (source / ".git" / "index").read_bytes()
+    task = source / "20261001_120000_new-task"
+    task.mkdir()
+
+    checkpoint = capture_git_checkpoint(task)
+
+    assert checkpoint == {"is_git": False, "commit": None, "dirty": False, "status": []}
+    assert not marker.exists()
+    assert (source / ".git" / "index").read_bytes() == parent_index
+    assert subprocess.run(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip() == parent_head
 
 
 @pytest.mark.parametrize("parent_alias", [False, True])
