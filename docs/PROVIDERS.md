@@ -30,6 +30,8 @@ missing extra instead of an unscoped import traceback.
 
 All adapters receive the same `ProviderRequest` with user/assistant messages, system prompt, output budget, and timeout. SDK retries are disabled. LightClaw applies one central exponential retry policy only to rate limits, timeouts, network failures, HTTP 408/409, and provider 5xx responses. Authentication, quota, invalid-request, and invalid-response failures do not retry.
 
+Provider-reported timeouts can retry after the attempt ends. A LightClaw deadline timeout is not retried because a synchronous SDK request may continue after its coroutine is canceled.
+
 Configure the bounded policy with:
 
 ```dotenv
