@@ -240,6 +240,28 @@ async def test_voice_transcription_waits_for_explicit_approval(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_voice_without_groq_key_is_rejected_before_download():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="")
+    bot.is_update_allowed = lambda _update: True
+    bot._reply_logged = AsyncMock()
+    get_file = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=SimpleNamespace(get_file=get_file)),
+    )
+    send_chat_action = AsyncMock()
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=send_chat_action))
+
+    await bot.handle_voice(update, context)
+
+    get_file.assert_not_awaited()
+    send_chat_action.assert_not_awaited()
+    assert "unavailable" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
 async def test_high_risk_callback_requires_ordered_second_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True

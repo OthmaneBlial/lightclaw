@@ -15,6 +15,8 @@ from ..markdown import _escape_html
 from ..personality import build_system_prompt
 from ..voice import transcribe_voice
 
+VOICE_UNAVAILABLE = "Voice unavailable; nothing ran. Set GROQ_API_KEY or send text."
+
 
 class BotHandlersMixin:
     async def cmd_show(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -85,6 +87,9 @@ class BotHandlersMixin:
             return
 
         voice = update.message.voice
+        if not self.config.groq_api_key:
+            await self._reply_logged(update, VOICE_UNAVAILABLE)
+            return
         chat_id = update.effective_chat.id if update.effective_chat else 0
 
         # Send typing indicator immediately
@@ -127,10 +132,7 @@ class BotHandlersMixin:
             )
             return
         else:
-            await self._reply_logged(
-                update,
-                "Voice transcription is unavailable. Nothing was executed; send a text goal instead.",
-            )
+            await self._reply_logged(update, VOICE_UNAVAILABLE)
 
     # ── Photo Handler ─────────────────────────────────────────
 
