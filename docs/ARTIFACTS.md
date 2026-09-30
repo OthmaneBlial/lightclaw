@@ -21,6 +21,13 @@ Hook files and repository configuration are preserved. The explicitly selected s
 keeps its normal hooks when creating an optional worktree. These controls cannot prevent another
 host process from rewriting metadata after the final check and do not sandbox configured filters.
 
+Task commands also override `core.fsmonitor` with an empty value, so configured monitor scripts
+and built-in monitor daemons do not run during artifact handling. Git scans the actual files even
+if a previously active monitor left cached index entries. An empty value also disables the
+[legacy pathname-based setting](https://github.com/git/git/blob/v2.35.1/config.c), avoiding older
+Git versions interpreting `false` as an executable pathname. Stored monitor configuration is
+preserved; the explicitly selected source repository keeps its existing monitor behavior.
+
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.

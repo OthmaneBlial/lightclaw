@@ -208,6 +208,42 @@ def test_artifact_acceptance_does_not_execute_task_git_hooks(tmp_path, hook_name
     assert hook.exists()
 
 
+@pytest.mark.parametrize("action", ["accept", "bundle"])
+@pytest.mark.parametrize("reported_changes", ["all", "none"])
+def test_task_artifacts_ignore_configured_monitor_and_stale_index(tmp_path, action, reported_changes):
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / "result.txt").write_text("checkpoint\n")
+    checkpoint = initialize_artifact_repository(task, "monitor-test")
+    marker = tmp_path / "outside-marker"
+    monitor = tmp_path / "monitor-script"
+    response = "token\\000/\\000" if reported_changes == "all" else "token\\000"
+    monitor.write_text(
+        "#!/bin/sh\nprintf monitor-ran > " + shlex.quote(str(marker))
+        + "\nprintf '" + response + "'\n"
+    )
+    monitor.chmod(0o700)
+    _git(task, "config", "core.fsmonitor", str(monitor))
+    _git(task, "config", "core.fsmonitorHookVersion", "2")
+    _git(task, "status", "--porcelain")
+    _git(task, "status", "--porcelain")
+    assert marker.exists(), "fixture monitor must be active before the artifact operation"
+    marker.unlink()
+    (task / "result.txt").write_text("approved result\n")
+
+    if action == "accept":
+        accepted = accept_artifact(task, "monitor-test")
+        assert accepted["commit"] != checkpoint["base_commit"]
+        assert _git(task, "show", "HEAD:result.txt") == "approved result"
+    else:
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="monitor-test")
+        assert bundle["changed_paths"] == [{"path": "result.txt", "status": "M"}]
+        assert "+approved result" in Path(str(bundle["patch"])).read_text()
+    assert not marker.exists()
+    assert _git(task, "config", "--get", "core.fsmonitor") == str(monitor)
+    assert monitor.exists()
+
+
 @pytest.mark.parametrize("phase", ["before_open", "launch"])
 def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeypatch, phase):
     workspace = tmp_path / "workspace"
