@@ -8,10 +8,15 @@ import os
 import re
 import stat
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 from .security import redact_text
+
+_JSON_LOG_MAX_BYTES = 5 * 1024 * 1024
+_JSON_LOG_BACKUP_COUNT = 3
+_JSON_LOG_FIELD_MAX_CHARS = 4096
 
 
 class _SecretRedactionFilter(logging.Filter):
@@ -29,7 +34,7 @@ class _SecretRedactionFilter(logging.Filter):
         return True
 
 
-class _PrivateFileHandler(logging.FileHandler):
+class _PrivateFileHandler(RotatingFileHandler):
     def _open(self):
         flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
         fd = os.open(self.baseFilename, flags, 0o600)
@@ -110,6 +115,8 @@ class _JsonLogFormatter(logging.Formatter):
             session_id = matched.group("session")
             body = matched.group("body")
 
+        if session_id and len(session_id) > _JSON_LOG_FIELD_MAX_CHARS:
+            session_id = session_id[:_JSON_LOG_FIELD_MAX_CHARS] + "…[truncated]"
         payload: dict[str, Any] = {
             "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
@@ -121,6 +128,11 @@ class _JsonLogFormatter(logging.Formatter):
         }
         if record.exc_info or record.exc_text:
             payload["exception"] = record.exc_text or self.formatException(record.exc_info)
+
+        for field in ("message", "exception"):
+            value = payload.get(field)
+            if isinstance(value, str) and len(value) > _JSON_LOG_FIELD_MAX_CHARS:
+                payload[field] = value[:_JSON_LOG_FIELD_MAX_CHARS] + "…[truncated]"
 
         return json.dumps(payload, ensure_ascii=False)
 
@@ -152,7 +164,13 @@ def configure_optional_json_logging(runtime_root: str | Path | None = None) -> P
             return path
 
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    file_handler = _PrivateFileHandler(path, mode="a", encoding="utf-8")
+    file_handler = _PrivateFileHandler(
+        path,
+        mode="a",
+        encoding="utf-8",
+        maxBytes=_JSON_LOG_MAX_BYTES,
+        backupCount=_JSON_LOG_BACKUP_COUNT,
+    )
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(_JsonLogFormatter())
     logger.addHandler(file_handler)

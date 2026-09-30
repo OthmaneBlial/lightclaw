@@ -4,6 +4,7 @@ import stat
 
 import pytest
 
+from core import logging_setup
 from core.logging_setup import configure_optional_json_logging
 
 
@@ -124,3 +125,29 @@ def test_jsonl_logging_secures_existing_file_and_rejects_symlinks(
         configure_optional_json_logging(tmp_path)
 
     assert target.read_text(encoding="utf-8") == "leave unchanged\n"
+
+
+def test_jsonl_logs_rotate_with_private_permissions_and_truncate_large_fields(
+    tmp_path, monkeypatch, isolated_lightclaw_logger
+):
+    _clear_logging_environment(monkeypatch)
+    path = tmp_path / "events.jsonl"
+    monkeypatch.setenv("JSON_LOG_ENABLED", "1")
+    monkeypatch.setenv("JSON_LOG_PATH", str(path))
+    monkeypatch.setattr(logging_setup, "_JSON_LOG_MAX_BYTES", 1024)
+    monkeypatch.setattr(logging_setup, "_JSON_LOG_BACKUP_COUNT", 2)
+    monkeypatch.setattr(logging_setup, "_JSON_LOG_FIELD_MAX_CHARS", 64)
+    isolated_lightclaw_logger.setLevel(logging.INFO)
+    configure_optional_json_logging(tmp_path)
+
+    for index in range(20):
+        isolated_lightclaw_logger.info("event %s: %s", index, "y" * 180)
+    isolated_lightclaw_logger.info("large message %s", "x" * 5000)
+
+    files = sorted(path.parent.glob("events.jsonl*"))
+    assert len(files) == 3
+    assert all(file.stat().st_size <= 1024 for file in files)
+    assert all(stat.S_IMODE(file.stat().st_mode) == 0o600 for file in files)
+    entries = [json.loads(line) for file in files for line in file.read_text().splitlines()]
+    large = next(entry for entry in entries if entry["message"].startswith("large message"))
+    assert large["message"].endswith("…[truncated]")

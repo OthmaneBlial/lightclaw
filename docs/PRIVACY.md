@@ -18,7 +18,9 @@ explicitly sends a prompt to a chosen provider or performs a separate publicatio
 | Sanitized Run Card | explicit local destination after `run export --apply` | never |
 | Showcase entry | manually reviewed Git commit/pull request | only by that explicit action |
 
-Optional JSONL logs use owner-only files. LightClaw rejects a symlink at the configured log file path.
+Optional JSONL logs use owner-only files. LightClaw rotates them at 5 MiB and retains up to
+three backups; message, exception, and session fields are capped at 4,096 characters. LightClaw
+rejects a symlink at the configured log file path.
 
 Responses too large for inline Telegram messages, and responses that look like code dumps, are saved under the configured workspace's `.lightclaw-meta/messages/` directory before attachment. LightClaw does not automatically prune these files; delete old `response-*.md` files manually when no longer needed.
 
