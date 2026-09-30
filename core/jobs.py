@@ -672,6 +672,8 @@ class JobStore:
             raise JobStateError(f"unknown lane: {label}")
         if lane["status"] != "failed":
             raise JobStateError("only a failed lane may be retried")
+        if not job["resumable"] or not lane["resumable"]:
+            raise JobStateError("job or lane is explicitly non-resumable")
         if not lane["idempotent"]:
             raise JobStateError("lane is explicitly non-idempotent")
         if int(lane["attempt"]) >= int(lane["max_attempts"]):

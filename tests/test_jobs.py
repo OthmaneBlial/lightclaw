@@ -45,6 +45,7 @@ def _create(
     plan=None,
     status="queued",
     session_id="fixture",
+    resumable=True,
 ):
     return store.create_job(
         workspace=workspace,
@@ -56,6 +57,7 @@ def _create(
         plan=plan or _plan(),
         priority=priority,
         status=status,
+        resumable=resumable,
     )
 
 
@@ -495,6 +497,29 @@ def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
     store.request_cancel(job["run_id"])
     assert store.claim_next(workspace=tmp_path / "repo")["run_id"] == queued["run_id"]
     store.close()
+
+
+@pytest.mark.parametrize("disabled", ["job", "lane", "idempotence"])
+def test_lane_retry_respects_explicit_recovery_restrictions(tmp_path, disabled):
+    store = JobStore(tmp_path / "jobs.db")
+    workspace = tmp_path / "repo"
+    plan = _plan()
+    if disabled == "lane":
+        plan[0]["resumable"] = False
+    elif disabled == "idempotence":
+        plan[0]["idempotent"] = False
+    job = _create(store, workspace, plan=plan, resumable=disabled != "job")
+    store.claim_next(workspace=workspace)
+    store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+    store.update_lane(job["run_id"], "backend", "failed")
+    failed = store.finish(job["run_id"], succeeded=False)
+    try:
+        reason = "non-idempotent" if disabled == "idempotence" else "non-resumable"
+        with pytest.raises(JobStateError, match=reason):
+            store.retry_lane(job["run_id"], "backend")
+        assert store.get_job(job["run_id"]) == failed
+    finally:
+        store.close()
 
 
 def test_job_diagnostics_can_be_scoped_to_one_telegram_session(tmp_path):
