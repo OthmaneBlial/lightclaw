@@ -143,6 +143,8 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
         "python -c \"import shutil; shutil.rmtree('/tmp/workspace')\"",
         "mv /tmp/important /tmp/old",
         "cp -f /tmp/generated /tmp/important",
+        "git restore --source=HEAD --worktree .",
+        "git checkout -- .",
         "python -c \"import os; os.replace('/tmp/a', '/tmp/b')\"",
         "python -c \"import shutil; shutil.move('/tmp/a', '/tmp/b')\"",
         "python -c \"from pathlib import Path; Path('/tmp/a').replace('/tmp/b')\"",
