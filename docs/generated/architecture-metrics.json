@@ -29,8 +29,8 @@
     },
     {
       "branch_points": 71,
-      "line": 909,
-      "lines": 389,
+      "line": 849,
+      "lines": 404,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -92,7 +92,7 @@
     },
     {
       "branch_points": 47,
-      "line": 375,
+      "line": 315,
       "lines": 94,
       "name": "_ingest_claude_progress_obj",
       "path": "core/bot/delegation/execution.py"
@@ -106,7 +106,7 @@
     },
     {
       "branch_points": 42,
-      "line": 556,
+      "line": 496,
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
@@ -136,8 +136,8 @@
     },
     {
       "branch_points": 71,
-      "line": 909,
-      "lines": 389,
+      "line": 849,
+      "lines": 404,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -171,7 +171,7 @@
     },
     {
       "branch_points": 42,
-      "line": 556,
+      "line": 496,
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
@@ -225,12 +225,12 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1297,
-      "path": "core/bot/delegation/execution.py"
-    },
-    {
       "lines": 1279,
       "path": "core/bot/delegation/planning.py"
+    },
+    {
+      "lines": 1252,
+      "path": "core/bot/delegation/execution.py"
     },
     {
       "lines": 1194,
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20782,
+  "runtime_lines": 20813,
   "schema_version": 1
 }

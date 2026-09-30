@@ -17,18 +17,19 @@ from ...artifacts import ArtifactError, create_patch_bundle
 from ...logging_setup import log
 from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
+from .agents import DelegationAgentsMixin
 from .streams import BoundedStreamCapture
 from .workspace import await_thread_completion
 
 
 class DelegationExecutionMixin:
+    _strip_ansi = staticmethod(DelegationAgentsMixin._strip_ansi)
+    _parse_codex_exec_output = DelegationAgentsMixin._parse_codex_exec_output
+    _parse_claude_cli_output = DelegationAgentsMixin._parse_claude_cli_output
+
     @staticmethod
     def _utc_now() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-    @staticmethod
-    def _strip_ansi(text: str) -> str:
-        return re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text or "")
 
     @staticmethod
     def _compact_external_agent_summary(text: str, max_chars: int = 900) -> str:
@@ -158,67 +159,6 @@ class DelegationExecutionMixin:
                 lines.append(f"  highlight: {highlight}")
 
         return "\n".join(lines)
-
-    def _parse_codex_exec_output(self, stdout: str) -> str:
-        parts: list[str] = []
-        last_error = ""
-        for line in (stdout or "").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                obj = json.loads(line)
-            except Exception:
-                continue
-            event_type = str(obj.get("type") or "")
-            if event_type == "item.completed":
-                item = obj.get("item") or {}
-                if isinstance(item, dict) and item.get("type") == "agent_message":
-                    text = str(item.get("text") or "").strip()
-                    if text:
-                        parts.append(text)
-            elif event_type == "error":
-                last_error = str(obj.get("message") or last_error)
-            elif event_type == "turn.failed":
-                err = obj.get("error") or {}
-                if isinstance(err, dict):
-                    last_error = str(err.get("message") or last_error)
-
-        if parts:
-            # Codex streams interim messages; keep only the final assistant message.
-            return parts[-1].strip()
-        if last_error:
-            return f"Error: {last_error}"
-        return (stdout or "").strip()[-2000:]
-
-    def _parse_claude_cli_output(self, stdout: str) -> str:
-        cleaned = self._strip_ansi(stdout).strip()
-        if not cleaned:
-            return ""
-
-        parsed_obj = None
-        try:
-            parsed_obj = json.loads(cleaned)
-        except Exception:
-            for line in reversed(cleaned.splitlines()):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    parsed_obj = json.loads(line)
-                    break
-                except Exception:
-                    continue
-
-        if isinstance(parsed_obj, dict):
-            result = str(parsed_obj.get("result") or "").strip()
-            if result:
-                return result
-            msg = str(parsed_obj.get("message") or "").strip()
-            if msg:
-                return msg
-
-        return cleaned[-2000:]
 
     def _build_local_agent_command(
         self,
@@ -1095,30 +1035,27 @@ class DelegationExecutionMixin:
                     await heartbeat_task
                 except asyncio.CancelledError:
                     pass
-        try:
-            after = await await_thread_completion(
+        after = await self._await_durable_run_phase(
+            await_thread_completion(
                 self._snapshot_workspace_state, target_workspace
-            )
-            durable_error = (
-                await self._finalize_durable_delegation(durable_store, run_id, result)
-                if durable_store is not None
-                else ""
-            )
-        except asyncio.CancelledError:
-            if durable_store is not None:
-                await self._cancel_durable_delegation(durable_store, session_id, run_id)
-            raise
+            ),
+            durable_store,
+            session_id,
+            run_id,
+        )
 
         summary = self._compact_external_agent_summary(str(result.get("summary") or ""))
         delta_summary = self._summarize_workspace_delta(before, after)
         stderr_excerpt = self._compact_external_agent_summary(
             self._strip_ansi(str(result.get("stderr") or ""))
         )
-        file_changes = await asyncio.to_thread(
-            self._workspace_file_changes,
-            target_workspace,
-            before,
-            after,
+        file_changes = await self._await_durable_run_phase(
+            await_thread_completion(
+                self._workspace_file_changes, target_workspace, before, after
+            ),
+            durable_store,
+            session_id,
+            run_id,
         )
         command_name = f"{agent} delegated invocation; prompt passed through stdin"
         reported_commands = result.get("commands")
@@ -1147,11 +1084,16 @@ class DelegationExecutionMixin:
         artifact_bundle: dict[str, object] | None = None
         if initialize_artifact:
             try:
-                artifact_bundle = await asyncio.to_thread(
-                    create_patch_bundle,
-                    target_workspace,
-                    receipt_output,
-                    run_id=run_id,
+                artifact_bundle = await self._await_durable_run_phase(
+                    await_thread_completion(
+                        create_patch_bundle,
+                        target_workspace,
+                        receipt_output,
+                        run_id=run_id,
+                    ),
+                    durable_store,
+                    session_id,
+                    run_id,
                 )
             except ArtifactError as exc:
                 artifact_bundle = {"error": str(exc), "diff_stat": "patch generation failed"}
@@ -1169,7 +1111,20 @@ class DelegationExecutionMixin:
                     ),
                 }
             )
+        run_ok = bool(result.get("ok")) and artifact_ok
+        durable_error = ""
         if durable_store is not None:
+            artifact_error = (
+                str(artifact_bundle.get("error") or "") if artifact_bundle else ""
+            )
+            durable_error = await self._await_durable_run_phase(
+                self._finalize_durable_delegation(
+                    durable_store, run_id, result, artifact_error
+                ),
+                durable_store,
+                session_id,
+                run_id,
+            )
             checks.append(
                 {
                     "name": "durable job finalization",
@@ -1177,7 +1132,7 @@ class DelegationExecutionMixin:
                     "evidence": durable_error or "terminal job state recorded",
                 }
             )
-        run_ok = bool(result.get("ok")) and artifact_ok and not durable_error
+        run_ok = run_ok and not durable_error
         artifact_paths = [
             item["path"] for item in file_changes if item.get("change") != "deleted"
         ]

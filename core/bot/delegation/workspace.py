@@ -114,6 +114,14 @@ class DelegationWorkspaceMixin:
             log.exception("Durable job heartbeat failed; retrying run %s", run_id)
             return None, False
 
+    async def _await_durable_run_phase(self, operation, store, session_id: str, run_id: str):
+        try:
+            return await operation
+        except asyncio.CancelledError:
+            if store is not None:
+                await self._cancel_durable_delegation(store, session_id, run_id)
+            raise
+
     async def _cancel_durable_delegation(
         self,
         store,
@@ -229,10 +237,12 @@ class DelegationWorkspaceMixin:
             )
         return error
 
-    async def _finalize_durable_delegation(self, store, run_id: str, result) -> str:
-        succeeded = bool(result.get("ok"))
+    async def _finalize_durable_delegation(
+        self, store, run_id: str, result, artifact_error: str = ""
+    ) -> str:
+        succeeded = bool(result.get("ok")) and not artifact_error
         lane_status = "succeeded" if succeeded else "failed"
-        error = "" if succeeded else str(result.get("stderr") or "delegation failed")[:500]
+        error = "" if succeeded else str(artifact_error or result.get("stderr") or "delegation failed")[:500]
         for attempt in range(2):
             try:
                 await await_thread_completion(

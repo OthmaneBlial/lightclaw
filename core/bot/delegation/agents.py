@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -11,6 +12,71 @@ from ...security import delegated_process_env
 
 
 class DelegationAgentsMixin:
+    @staticmethod
+    def _strip_ansi(text: str) -> str:
+        return re.sub(r"\x1B\[[0-?]*[ -/]*[@-~]", "", text or "")
+
+    def _parse_codex_exec_output(self, stdout: str) -> str:
+        parts: list[str] = []
+        last_error = ""
+        for line in (stdout or "").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            event_type = str(obj.get("type") or "")
+            if event_type == "item.completed":
+                item = obj.get("item") or {}
+                if isinstance(item, dict) and item.get("type") == "agent_message":
+                    text = str(item.get("text") or "").strip()
+                    if text:
+                        parts.append(text)
+            elif event_type == "error":
+                last_error = str(obj.get("message") or last_error)
+            elif event_type == "turn.failed":
+                err = obj.get("error") or {}
+                if isinstance(err, dict):
+                    last_error = str(err.get("message") or last_error)
+
+        if parts:
+            # Codex streams interim messages; keep only the final assistant message.
+            return parts[-1].strip()
+        if last_error:
+            return f"Error: {last_error}"
+        return (stdout or "").strip()[-2000:]
+
+    def _parse_claude_cli_output(self, stdout: str) -> str:
+        cleaned = self._strip_ansi(stdout).strip()
+        if not cleaned:
+            return ""
+
+        parsed_obj = None
+        try:
+            parsed_obj = json.loads(cleaned)
+        except Exception:
+            for line in reversed(cleaned.splitlines()):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    parsed_obj = json.loads(line)
+                    break
+                except Exception:
+                    continue
+
+        if isinstance(parsed_obj, dict):
+            result = str(parsed_obj.get("result") or "").strip()
+            if result:
+                return result
+            msg = str(parsed_obj.get("message") or "").strip()
+            if msg:
+                return msg
+
+        return cleaned[-2000:]
+
     @staticmethod
     def _agent_aliases() -> dict[str, str]:
         return {

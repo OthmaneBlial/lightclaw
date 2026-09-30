@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from core.artifacts import ArtifactError
 from core.bot import LightClawBot
 from core.jobs import JobStore
 
@@ -76,6 +77,52 @@ def test_real_delegation_path_emits_private_structured_receipt(
     assert "[REDACTED]" in receipt["original_goal"]
     assert "sk-receipt-fixture" not in receipt_path.read_text(encoding="utf-8")
     assert "Receipt:" in result
+
+
+def test_patch_failure_marks_single_agent_job_failed(tmp_path, monkeypatch):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+
+    async def successful_invoke(**kwargs):
+        (Path(kwargs["workspace"]) / "result.txt").write_text("done\n")
+        return {"ok": True, "exit_code": 0, "stdout": "", "stderr": ""}
+
+    def fail_patch(*_args, **_kwargs):
+        raise ArtifactError("fixture patch failure")
+
+    bot._invoke_local_agent_streaming = successful_invoke
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    monkeypatch.setattr("core.bot.delegation.execution.create_patch_bundle", fail_patch)
+    evidence: dict[str, object] = {}
+    try:
+        asyncio.run(
+            bot._run_local_agent_task(
+                "fixture-session", "codex", "create result.txt", evidence_sink=evidence
+            )
+        )
+        job = bot.jobs.get_job(str(evidence["run_id"]))
+    finally:
+        bot.jobs.close()
+
+    receipt = json.loads(Path(str(evidence["receipt_json"])).read_text())
+    assert job["status"] == "failed"
+    assert job["lanes"][0]["status"] == "failed"
+    assert receipt["disposition"] == "failed"
+    assert receipt["checks"][1]["passed"] is False
+    assert receipt["checks"][2]["passed"] is True
 
 
 @pytest.mark.asyncio
