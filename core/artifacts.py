@@ -24,7 +24,7 @@ class ArtifactError(ValueError):
 
 def _git(workspace: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
     try:
-        with directory_command_at(workspace, (), "git", "-C", ".", *args) as (command, pass_fds):
+        with directory_command_at(workspace, (), "git", "--git-dir=.git", "--work-tree=.", "-C", ".", *args) as (command, pass_fds):
             return subprocess.run(
                 command,
                 pass_fds=pass_fds,
@@ -70,7 +70,7 @@ def initialize_artifact_repository(workspace: str | Path, run_id: str) -> dict[s
     workspace_path = Path(workspace).expanduser()
     if workspace_path.is_symlink() or not workspace_path.is_dir():
         raise ArtifactError("artifact workspace must be a real directory")
-    root = workspace_path.resolve()
+    root = workspace_path.absolute()
     inside = _git(root, "rev-parse", "--is-inside-work-tree")
     if inside.returncode != 0:
         initialized = _git(root, "init", "-b", "main")
@@ -141,7 +141,7 @@ def create_patch_bundle(
     run_id: str,
 ) -> dict[str, object]:
     """Stage an isolated workspace and write a private patch plus manifest."""
-    root = Path(workspace).expanduser().resolve()
+    root = Path(workspace).expanduser().absolute()
     output = Path(output_dir).expanduser().resolve()
     _require_git(root, "add", "-A")
     status = _git(root, "diff", "--cached", "--name-status", "-z", "--no-renames", "HEAD")
@@ -207,7 +207,7 @@ def create_patch_bundle(
 
 def accept_artifact(workspace: str | Path, run_id: str) -> dict[str, object]:
     """Commit the staged result locally; never push."""
-    root = Path(workspace).expanduser().resolve()
+    root = Path(workspace).expanduser().absolute()
     _require_git(root, "add", "-A")
     staged = _git(root, "diff", "--cached", "--quiet", "HEAD")
     if staged.returncode not in {0, 1}:
@@ -234,7 +234,7 @@ def accept_artifact(workspace: str | Path, run_id: str) -> dict[str, object]:
 
 def reject_artifact(workspace: str | Path, run_id: str) -> dict[str, object]:
     """Unstage a rejected result while preserving every workspace file for review."""
-    root = Path(workspace).expanduser().resolve()
+    root = Path(workspace).expanduser().absolute()
     _require_git(root, "reset", "--mixed", "HEAD")
     return {
         "run_id": run_id,
@@ -647,7 +647,7 @@ def build_pull_request_preview(
     base: str = "main",
 ) -> dict[str, object]:
     """Build a complete PR preview without network writes."""
-    root = Path(workspace).expanduser().resolve()
+    root = Path(workspace).expanduser().absolute()
     receipt_file = Path(receipt_path).expanduser()
     try:
         receipt = read_receipt(receipt_file)

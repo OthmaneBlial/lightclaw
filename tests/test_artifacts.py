@@ -36,6 +36,100 @@ def _git(root: Path, *args: str) -> str:
     return completed.stdout.strip()
 
 
+def test_task_checkpoint_does_not_commit_or_switch_its_parent_repository(tmp_path):
+    parent = tmp_path / "source-repository"
+    parent.mkdir()
+    _git(parent, "init", "-b", "main")
+    _git(parent, "config", "user.name", "Fixture")
+    _git(parent, "config", "user.email", "fixture@local.invalid")
+    source = parent / "source.py"
+    source.write_text("original source\n")
+    _git(parent, "add", "source.py")
+    _git(parent, "commit", "-m", "source checkpoint")
+    source.write_text("staged user changes\n")
+    _git(parent, "add", "source.py")
+    (parent / "private.txt").write_text("unrelated untracked content")
+    workspace = parent / "owned-task"
+    workspace.mkdir()
+    (workspace / "AGENTS.md").write_text("approved task plan")
+    parent_head = _git(parent, "rev-parse", "HEAD")
+    parent_status = _git(parent, "status", "--porcelain")
+    parent_index = (parent / ".git" / "index").read_bytes()
+
+    checkpoint = initialize_artifact_repository(workspace, "nested-task")
+
+    assert _git(parent, "rev-parse", "HEAD") == parent_head
+    assert (parent / ".git" / "index").read_bytes() == parent_index
+    assert _git(parent, "branch", "--show-current") == "main"
+    assert _git(parent, "status", "--porcelain") == parent_status
+    assert Path(_git(workspace, "rev-parse", "--show-toplevel")) == workspace.resolve()
+    assert _git(workspace, "ls-files") == "AGENTS.md"
+    assert checkpoint["branch"] == "lightclaw/nested-task"
+
+
+def test_checkpoint_refuses_workspace_swapped_after_directory_check(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (outside / "private.txt").write_text("preserve outside content")
+    is_dir = Path.is_dir
+
+    def swap_after_check(path):
+        result = is_dir(path)
+        if path == workspace:
+            workspace.rename(tmp_path / "original-workspace")
+            workspace.symlink_to(outside, target_is_directory=True)
+        return result
+
+    monkeypatch.setattr(Path, "is_dir", swap_after_check)
+    try:
+        initialize_artifact_repository(workspace, "swapped-checkpoint")
+    except ArtifactError:
+        pass
+    assert not (outside / ".git").exists()
+    assert (outside / "private.txt").read_text() == "preserve outside content"
+
+
+@pytest.mark.parametrize("operation", ["bundle", "accept", "reject", "preview"])
+@pytest.mark.parametrize("workspace_kind", ["nested", "symlink"])
+def test_artifact_operations_cannot_use_another_repository(tmp_path, operation, workspace_kind):
+    parent = tmp_path / "source"
+    parent.mkdir()
+    (parent / "source.py").write_text("original\n")
+    initialize_artifact_repository(parent, "source")
+    _git(parent, "remote", "add", "origin", "https://example.invalid/source.git")
+    (parent / "source.py").write_text("staged user changes\n")
+    _git(parent, "add", "source.py")
+    workspace = parent / "task" if workspace_kind == "nested" else tmp_path / "alias"
+    if workspace_kind == "nested":
+        workspace.mkdir()
+        (workspace / "result.py").write_text("agent output\n")
+    else:
+        workspace.symlink_to(parent, target_is_directory=True)
+    receipt, _, _ = write_receipt(_receipt("task"), tmp_path / "receipts")
+    head = _git(parent, "rev-parse", "HEAD")
+    branch = _git(parent, "branch", "--show-current")
+    index = (parent / ".git" / "index").read_bytes()
+    actions = {
+        "bundle": lambda: create_patch_bundle(workspace, tmp_path / "bundle", run_id="task"),
+        "accept": lambda: accept_artifact(workspace, "task"),
+        "reject": lambda: reject_artifact(workspace, "task"),
+        "preview": lambda: build_pull_request_preview(
+            workspace, receipt, run_id="task", title="Review task"
+        ),
+    }
+
+    with pytest.raises(ArtifactError):
+        actions[operation]()
+
+    assert _git(parent, "rev-parse", "HEAD") == head
+    assert _git(parent, "branch", "--show-current") == branch
+    assert (parent / ".git" / "index").read_bytes() == index
+    assert (parent / "source.py").read_text() == "staged user changes\n"
+    assert not (tmp_path / "bundle").exists()
+
+
 @pytest.mark.parametrize("phase", ["before_open", "launch"])
 def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeypatch, phase):
     workspace = tmp_path / "workspace"
@@ -735,12 +829,20 @@ def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path):
     )
 
     target = tmp_path / "worktree"
+    source_head = _git(source, "rev-parse", "HEAD")
     created = create_isolated_worktree(source, target, "real-task")
 
     assert created["branch"] == "lightclaw/real-task"
     assert _git(source, "branch", "--show-current") == "main"
     assert _git(target, "branch", "--show-current") == "lightclaw/real-task"
     assert (target / "README.md").read_text(encoding="utf-8") == "fixture\n"
+    (target / "README.md").write_text("reviewed worktree change\n", encoding="utf-8")
+    bundle = create_patch_bundle(target, tmp_path / "review", run_id="real-task")
+    accepted = accept_artifact(target, "real-task")
+    assert bundle["changed_paths"] == [{"status": "M", "path": "README.md"}]
+    assert accepted["commit"] != source_head
+    assert _git(source, "rev-parse", "HEAD") == source_head
+    assert (source / "README.md").read_text(encoding="utf-8") == "fixture\n"
 
 
 def test_pr_preview_contains_receipt_evidence_and_requires_exact_confirmation(tmp_path):
@@ -906,6 +1008,46 @@ def test_artifact_cli_defaults_to_preview_and_exposes_publish_confirmation():
     assert parsed.confirm_publish == "run-123"
     assert parsed.confirm_plan is None
     assert parsed.apply is False
+
+
+@pytest.mark.parametrize("action", ["accept", "reject", "pr"])
+def test_artifact_cli_refuses_a_symlinked_run_workspace(tmp_path, monkeypatch, capsys, action):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "source.py").write_text("original\n")
+    initialize_artifact_repository(outside, "outside")
+    _git(outside, "remote", "add", "origin", "https://example.invalid/source.git")
+    (outside / "source.py").write_text("staged user changes\n")
+    _git(outside, "add", "source.py")
+    head = _git(outside, "rev-parse", "HEAD")
+    index = (outside / ".git" / "index").read_bytes()
+    workspace = tmp_path / "run"
+    workspace.symlink_to(outside, target_is_directory=True)
+    receipt, _, _ = write_receipt(_receipt("run"), tmp_path / "receipts")
+    store = SimpleNamespace(
+        get_job=lambda _run_id: {
+            "workspace": str(workspace),
+            "status": "accepted" if action == "pr" else "succeeded",
+        },
+        accept=Mock(), reject=Mock(), close=Mock(),
+    )
+    config = SimpleNamespace(
+        memory_db_path=str(tmp_path / "memory.db"), workspace_path=str(tmp_path)
+    )
+    monkeypatch.setattr("config.load_config", lambda: config)
+    monkeypatch.setattr("core.jobs.JobStore", lambda _path: store)
+    argv = ["artifact", action, "run", "--home", str(tmp_path / "home"), "--receipt", str(receipt)]
+    if action != "pr":
+        argv.append("--apply")
+
+    assert cmd_artifact(build_parser().parse_args(argv)) == 2
+    assert "refused" in capsys.readouterr().out
+    assert _git(outside, "rev-parse", "HEAD") == head
+    assert (outside / ".git" / "index").read_bytes() == index
+    assert (outside / "source.py").read_text() == "staged user changes\n"
+    store.accept.assert_not_called()
+    store.reject.assert_not_called()
+    store.close.assert_called_once()
 
 
 def test_artifact_cli_passes_the_confirmed_plan_to_selected_apply(tmp_path, monkeypatch, capsys):

@@ -1527,7 +1527,7 @@ def cmd_artifact(args: argparse.Namespace) -> int:
     store = JobStore(Path(config.memory_db_path).resolve().with_name("jobs.db"))
     try:
         job = store.get_job(args.run_id)
-        workspace = Path(str(job["workspace"])).resolve()
+        workspace = Path(str(job["workspace"])).absolute()
         receipt = (
             Path(args.receipt).expanduser().resolve()
             if args.receipt

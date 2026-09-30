@@ -5,6 +5,8 @@ Every delegated code run starts from a local Git checkpoint on a `lightclaw/<run
 - `changes.patch`: a standard binary-safe Git patch;
 - `artifact.json`: the base commit, branch, changed paths, diff stat, and patch SHA-256.
 
+A task directory inside another Git repository gets its own repository before checkpoint staging. Every artifact Git command explicitly uses the opened directory's own `.git` and work tree, including linked worktrees. If the task repository is missing, review, acceptance, rejection, and publication fail rather than operating on a parent repository. These operations retain the requested directory path for the no-follow opener, so a root symlink cannot redirect them to another checkout.
+
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.
