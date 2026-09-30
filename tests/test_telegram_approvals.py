@@ -51,6 +51,30 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
     assert "does not sandbox" in rendered
 
 
+def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
+    bot = LightClawBot.__new__(LightClawBot)
+    responsibilities = ["Update the API", "Add regression coverage"]
+    owned_paths = ["api/routes.py", "api/models.py", "tests/test_api.py", "docs/api.md"]
+
+    rendered = bot._render_multi_plan_preview(
+        goal="Update the sample API",
+        workers=[("builder", "codex")],
+        plan_payload={
+            "workers": [
+                {
+                    "label": "builder",
+                    "role": "implementation",
+                    "depends_on": [],
+                    "responsibilities": responsibilities,
+                    "owned_paths": owned_paths,
+                }
+            ]
+        },
+    )
+
+    assert all(item in rendered for item in responsibilities + owned_paths)
+
+
 @pytest.mark.asyncio
 async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
     bot = LightClawBot.__new__(LightClawBot)

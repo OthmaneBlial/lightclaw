@@ -1230,14 +1230,16 @@ class DelegationMultiPlanningMixin:
                 else []
             )
             deps_text = ", ".join(depends_on) if depends_on else "(none)"
-            first_resp = ""
             responsibilities = contract.get("responsibilities")
-            if isinstance(responsibilities, list):
-                for item in responsibilities:
-                    candidate = str(item or "").strip()
-                    if candidate:
-                        first_resp = candidate
-                        break
+            first_resp = (
+                " · ".join(
+                    str(item).strip()
+                    for item in responsibilities
+                    if str(item).strip()
+                )
+                if isinstance(responsibilities, list)
+                else ""
+            )
             owned_paths_obj = contract.get("owned_paths")
             owned_paths = (
                 [str(path).strip() for path in owned_paths_obj]
@@ -1250,9 +1252,7 @@ class DelegationMultiPlanningMixin:
             if first_resp:
                 lines.append(f"  task: {_escape_html(first_resp)}")
             if owned_paths:
-                owned_text = ", ".join(owned_paths[:3])
-                if len(owned_paths) > 3:
-                    owned_text += ", ..."
+                owned_text = ", ".join(owned_paths)
                 lines.append(f"  owns: <code>{_escape_html(owned_text)}</code>")
 
         if warnings:
