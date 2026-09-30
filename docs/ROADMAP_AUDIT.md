@@ -49,10 +49,10 @@ roadmap's “proof over claims” rule.
 - Canonical local quality command: lint, provider matrix, architecture/runtime budgets,
   skill contract, showcase privacy/replay, alpha aggregate, versioned release notes,
   launch-pack validation, full tests, and package build.
-- Test suite: 392 passing tests in the local audit on Python 3.14; four third-party
-  deprecation warnings came from `python-telegram-bot` and `google-genai`.
-- Latest `main` commit `b949622` passed the canonical local quality suite. GitHub CI, CodeQL,
-  OpenSSF Scorecard, and showcase validation are disabled, so this commit has no GitHub CI run.
+- Canonical local quality suite on 2026-09-30: 393 tests passed on Python 3.14; four
+  third-party deprecation warnings came from `python-telegram-bot` and `google-genai`.
+- GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
+  run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
   ([run](https://github.com/OthmaneBlial/lightclaw/actions/runs/32774972863)); PyPI, GHCR,
   and GitHub Release publication jobs remained skipped by contract.

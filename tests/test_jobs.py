@@ -110,6 +110,25 @@ def test_job_store_does_not_chmod_database_symlink_target(tmp_path, monkeypatch)
     assert stat.S_IMODE(victim.stat().st_mode) == 0o644
 
 
+def test_job_store_rejects_preexisting_database_symlink_without_changing_target(tmp_path):
+    database = tmp_path / "jobs.db"
+    victim = tmp_path / "victim.db"
+    legacy = sqlite3.connect(victim)
+    legacy.execute("CREATE TABLE private_data (value TEXT)")
+    legacy.execute("INSERT INTO private_data VALUES ('keep this database intact')")
+    legacy.commit()
+    legacy.close()
+    victim.chmod(0o644)
+    original = victim.read_bytes()
+    database.symlink_to(victim)
+
+    with pytest.raises(OSError):
+        JobStore(database)
+
+    assert victim.read_bytes() == original
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+
+
 @pytest.mark.parametrize("suffix", ("-wal", "-shm"))
 def test_job_store_rejects_symlinked_sidecar_without_chmod_target(tmp_path, suffix):
     database = tmp_path / "jobs.db"

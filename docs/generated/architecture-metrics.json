@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 831,
+      "lines": 832,
       "path": "core/jobs.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19986,
+  "runtime_lines": 19987,
   "schema_version": 1
 }

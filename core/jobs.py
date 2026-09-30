@@ -117,8 +117,9 @@ class JobStore:
     """Persist jobs, lanes, leases, retries, and bounded event evidence."""
 
     def __init__(self, db_path: str | Path):
-        self.path = Path(db_path).expanduser().resolve()
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        requested_path = Path(db_path).expanduser()
+        requested_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.path = requested_path.parent.resolve() / requested_path.name
         secure_sqlite_files(self.path)
         self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
         self.db.row_factory = sqlite3.Row
