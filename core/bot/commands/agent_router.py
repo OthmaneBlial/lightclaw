@@ -343,6 +343,12 @@ class CommandsAgentRouterMixin:
                         parse_mode=ParseMode.HTML,
                     )
                     return
+                if pending.get("user_id") != update.effective_user.id:
+                    await self._reply_logged(
+                        update,
+                        "Only the Telegram user who requested this trusted run can confirm it.",
+                    )
+                    return
                 self._pending_trusted_agent_run_by_session.pop(session_id, None)
                 agent = str(pending.get("agent") or "")
                 task = str(pending.get("task") or "")
@@ -374,6 +380,7 @@ class CommandsAgentRouterMixin:
             if sub == "trusted":
                 now = time.time()
                 self._pending_trusted_agent_run_by_session[session_id] = {
+                    "user_id": update.effective_user.id,
                     "agent": agent,
                     "task": task,
                     "expires_at": now + 90,
@@ -384,7 +391,8 @@ class CommandsAgentRouterMixin:
                     "⚠️ <b>Trusted host execution requested.</b>\n"
                     "This disables the coding agent sandbox for one run and may affect "
                     "files or processes outside the task workspace.\n\n"
-                    "Confirm within 90 seconds with <code>/agent trusted confirm</code>.",
+                    "The requesting Telegram user must confirm within 90 seconds with "
+                    "<code>/agent trusted confirm</code>.",
                     parse_mode=ParseMode.HTML,
                 )
                 return

@@ -12,6 +12,7 @@ import pytest
 from telegram import InputFile
 from telegram.error import NetworkError
 
+from config import Config
 from core.bot import LightClawBot
 from core.jobs import JobStore
 from core.workspaces import WorkspaceSafetyError
@@ -892,6 +893,50 @@ async def test_expired_voice_approval_does_not_process_transcription():
     bot._process_user_message.assert_not_awaited()
     assert "456" not in bot._pending_voice_goal_by_session
     assert "expired" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+async def test_trusted_confirmation_requires_requesting_group_user_and_runs_once():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_public_bot_ack=True)
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._log_user_message = Mock()
+    bot._pending_trusted_agent_run_by_session = {}
+    bot._reply_logged = AsyncMock()
+    bot._execute_one_shot_delegation = AsyncMock()
+
+    def update(user_id):
+        return SimpleNamespace(
+            effective_user=SimpleNamespace(id=user_id),
+            effective_chat=SimpleNamespace(id=-7, type="group"),
+            message=SimpleNamespace(),
+        )
+
+    requester = update(42)
+    await bot.cmd_agent(
+        requester, SimpleNamespace(args=["trusted", "codex", "inspect", "external", "files"])
+    )
+    pending = dict(bot._pending_trusted_agent_run_by_session["-7"])
+    confirm = SimpleNamespace(args=["trusted", "confirm"])
+
+    await bot.cmd_agent(update(99), confirm)
+
+    bot._execute_one_shot_delegation.assert_not_awaited()
+    assert bot._pending_trusted_agent_run_by_session["-7"] == pending
+    assert "requested" in bot._reply_logged.await_args.args[1]
+
+    await bot.cmd_agent(requester, confirm)
+    bot._execute_one_shot_delegation.assert_awaited_once_with(
+        requester,
+        session_id="-7",
+        agent="codex",
+        task="inspect external files",
+        capability_profile="trusted-command",
+    )
+    assert "-7" not in bot._pending_trusted_agent_run_by_session
+
+    await bot.cmd_agent(requester, confirm)
+    assert bot._execute_one_shot_delegation.await_count == 1
 
 
 @pytest.mark.asyncio

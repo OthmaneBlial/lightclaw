@@ -21,9 +21,9 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 85,
+      "branch_points": 86,
       "line": 39,
-      "lines": 496,
+      "lines": 504,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -121,9 +121,9 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 85,
+      "branch_points": 86,
       "line": 39,
-      "lines": 496,
+      "lines": 504,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -269,7 +269,7 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 587,
+      "lines": 595,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 20936,
+  "runtime_lines": 20944,
   "schema_version": 1
 }
