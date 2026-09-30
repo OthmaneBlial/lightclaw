@@ -26,10 +26,12 @@ timestamps, but its output still requires human review.
 
 The public [showcase](../showcase/) accepts only synthetic or explicitly publishable input,
 declared provenance and consent, a sanitized Run Card, and a token-free reproducible recipe
-or permission-manifest skill. `scripts/quality.py` and the active Showcase privacy and
-reproducibility workflow check known secret/path patterns and replay recipes. No automated
-sanitizer can prove anonymity, so a maintainer also reviews the full contribution.
+or permission-manifest skill. `scripts/quality.py` checks known secret/path patterns and
+replays recipes locally. The corresponding GitHub Showcase privacy and reproducibility
+workflow is disabled. No automated sanitizer can prove anonymity, so a maintainer also
+reviews the full contribution.
 
-GitHub Actions artifacts are restricted to package distributions, coverage, security
-results, and generated benchmark/runtime evidence. A regression test rejects workflow
-artifact blocks that mention receipts, prompts, runtime homes, workspaces, or repositories.
+The checked-in GitHub Actions artifact rules restrict uploads to package distributions,
+coverage, security results, and generated benchmark/runtime evidence. A regression test
+rejects workflow artifact blocks that mention receipts, prompts, runtime homes, workspaces,
+or repositories.
