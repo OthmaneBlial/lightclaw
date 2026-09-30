@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <a href="https://www.python.org/"><img alt="Python 3.10 to 3.14" src="https://img.shields.io/badge/Python-3.10%E2%80%933.14-3776AB?style=for-the-badge&logo=python&logoColor=white" /></a>
-  <img alt="macOS and Linux" src="https://img.shields.io/badge/macOS%20%2B%20Linux-ready-2E8B72?style=for-the-badge" />
-  <img alt="Alpha software" src="https://img.shields.io/badge/status-alpha-FF6B4E?style=for-the-badge" />
+  <a href="docs/INSTALL.md"><img alt="Python 3.10 to 3.14" src="https://img.shields.io/badge/Python-3.10%E2%80%933.14-3776AB?style=for-the-badge&logo=python&logoColor=white" /></a>
+  <a href="docs/INSTALL.md"><img alt="macOS and Linux" src="https://img.shields.io/badge/macOS%20%2B%20Linux-ready-2E8B72?style=for-the-badge" /></a>
+  <a href="launch/status.json"><img alt="Alpha software" src="https://img.shields.io/badge/status-alpha-FF6B4E?style=for-the-badge" /></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-5268E8?style=for-the-badge" /></a>
 </p>
 

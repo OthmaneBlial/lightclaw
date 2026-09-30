@@ -25,7 +25,7 @@ or infer adoption from stars, traffic, forks, or private messages.
 Maintainer-controlled target, reverified on 2026-09-30:
 
 - homepage URL: `https://othmaneblial.github.io/lightclaw/`;
-- repository description: `Supervise local Codex and Claude agents from Telegram. Review plans, approve scoped work, inspect diffs and tests, and keep private run receipts.`;
+- repository description: `Review-first Telegram missions for local Codex and Claude agents. Approve scope, then inspect checks, patches, and private receipts.`;
 - topics: `agent-orchestration`, `audit-trail`, `claude-code`, `code-review`, `codex`,
   `coding-agent`, `developer-tools`, `human-in-the-loop`, `local-first`, `multi-agent`,
   `python`, `remote-coding`, `self-hosted`, `telegram`, and `telegram-bot`;
@@ -38,10 +38,10 @@ than treated as permanent facts.
 
 ## Badge admission policy
 
-A README badge must link directly to a signal that exists and can be independently opened.
-The current README intentionally uses no badges so the product story and evidence lead the
-page. Do not add stars, downloads, coverage, release, container, PyPI, security-grade, or
-compatibility badges until the linked public signal is live and its scope is accurately
+Each README badge must link to its current source: Python and OS support link to the
+installation contract, alpha status links to `launch/status.json`, and the license links to
+`LICENSE`. Do not add stars, downloads, coverage, release, container, PyPI, security-grade,
+or compatibility metrics until each linked public signal is live and its scope is accurately
 labeled. Remove a badge when its source is retired.
 
 Marketing milestones never override failed local quality checks, an open critical/high
