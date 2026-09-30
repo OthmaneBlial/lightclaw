@@ -39,6 +39,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 ### Changed
 
 - `/clear` now discards the current chat's pending approvals and confirmations, including in-flight voice transcripts.
+- Confirmed `/wipe_memory` now discards pending actions across chats while leaving active runs untouched.
 - LightClaw console and JSONL logs now redact environment secrets from messages and exception traces.
 - Optional JSONL logs use owner-only files and reject final-component symlinks.
 - Telegram `/show` now limits durable-job counts to the current chat.

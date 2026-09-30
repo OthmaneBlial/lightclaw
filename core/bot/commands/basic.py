@@ -87,11 +87,7 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/clear")
-        self._pending_wipe_confirm.pop(session_id, None)
-        self._clear_pending_multi_plan(session_id)
-        self._pending_trusted_agent_run_by_session.pop(session_id, None)
-        self._pending_voice_goal_by_session.pop(session_id, None)
-        self._voice_request_ids_by_session.pop(session_id, None)
+        self._clear_pending_actions(session_id)
         self._invalidate_session_summary(session_id)
         self.memory.clear_session(session_id)
         self._session_summaries.pop(session_id, None)
@@ -120,15 +116,16 @@ class CommandsBasicMixin:
 
         if args and args[0] in {"confirm", "yes", "now"}:
             if pending_until and now <= pending_until:
+                self._clear_pending_actions()
                 self._invalidate_active_summaries()
                 await asyncio.to_thread(self.memory.clear_all)
                 self._invalidate_active_summaries()
                 self._session_summaries.clear()
-                self._pending_wipe_confirm.pop(session_id, None)
                 await self._reply_logged(
                     update,
                     "🧨 <b>All memory wiped.</b>\n"
-                    "All sessions/interactions were deleted. The bot now starts fresh.",
+                    "Saved interactions and pending approvals were deleted across chats.\n"
+                    "Already-active runs continue; cancel them from their chat.",
                     parse_mode=ParseMode.HTML,
                 )
             else:
