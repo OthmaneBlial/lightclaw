@@ -13,6 +13,7 @@ LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in
 - Parallel lanes with overlapping owned path trees are rejected before execution. An overlap is allowed only when the DAG orders those lanes sequentially.
 - Retry attempts are stored per lane and cannot exceed `max_attempts`.
 - Running jobs heartbeat. Startup recovery marks a job `stalled` only after its worker process exits or its PID is reused, so a stale heartbeat cannot release a live workspace writer. Failed or permission-denied process probes retain the workspace lock; they do not prove the worker is gone. `lightclaw doctor` flags stale heartbeats for review.
+- Process cleanup and stale-worker recovery check the observed job state and worker identity. A delayed recovery cannot stop or mark stalled a run that another instance has resumed with a new worker.
 
 ## Inspect the queue
 

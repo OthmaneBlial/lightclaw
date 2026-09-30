@@ -312,9 +312,9 @@ def test_concurrent_stall_recovery_writes_one_event_across_connections(tmp_path)
     for store in stores:
         stop_process_groups = store._stop_process_groups
 
-        def wait_for_recovery(run_id, stop=stop_process_groups):
+        def wait_for_recovery(run_id, stop=stop_process_groups, **kwargs):
             barrier.wait(timeout=5)
-            return stop(run_id)
+            return stop(run_id, **kwargs)
 
         store._stop_process_groups = wait_for_recovery
 
@@ -331,6 +331,67 @@ def test_concurrent_stall_recovery_writes_one_event_across_connections(tmp_path)
     finally:
         for store in stores:
             store.close()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="delegated process groups require POSIX")
+@pytest.mark.parametrize("operation", ["recovery", "resume", "cancel", "retry"])
+def test_stale_job_control_cannot_stop_a_resumed_run(tmp_path, monkeypatch, operation):
+    database = tmp_path / "jobs.db"
+    stale = JobStore(database)
+    current = JobStore(database)
+    job = _create(stale, tmp_path / "repo")
+    stale.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    stale.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+    stale.update_lane(job["run_id"], "backend", "failed")
+    if operation != "recovery":
+        assert current.recover_stalled() == [job["run_id"]]
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"], start_new_session=True
+    )
+
+    def restart_run():
+        if operation == "recovery":
+            assert current.recover_stalled() == [job["run_id"]]
+        current.retry_lane(job["run_id"], "backend")
+        current.claim_next(workspace=tmp_path / "repo", worker_pid=os.getpid())
+        current.register_process_group(job["run_id"], process.pid)
+
+    def resume_before_probe_completes(_pid, _token):
+        restart_run()
+        return False
+
+    get_job = stale.get_job
+
+    def read_old_job(run_id):
+        snapshot = get_job(run_id)
+        monkeypatch.setattr(stale, "get_job", get_job)
+        restart_run()
+        return snapshot
+
+    try:
+        if operation == "recovery":
+            monkeypatch.setattr(stale, "_worker_process_alive", resume_before_probe_completes)
+            assert stale.recover_stalled() == []
+        else:
+            monkeypatch.setattr(stale, "get_job", read_old_job)
+            with pytest.raises(JobStateError):
+                if operation == "retry":
+                    stale.retry_lane(job["run_id"], "backend")
+                elif operation == "resume":
+                    stale.resume(job["run_id"])
+                else:
+                    stale.request_cancel(job["run_id"])
+        assert current.get_job(job["run_id"])["status"] == "running"
+        assert process.poll() is None
+        assert current.db.execute(
+            "SELECT pgid FROM job_process_groups WHERE run_id = ?", (job["run_id"],)
+        ).fetchone()["pgid"] == process.pid
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait(timeout=5)
+        stale.close()
+        current.close()
 
 
 def test_priority_queue_and_one_active_writer_per_workspace(tmp_path):

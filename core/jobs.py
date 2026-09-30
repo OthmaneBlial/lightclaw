@@ -320,6 +320,7 @@ class JobStore:
             "retry_count": row["retry_count"],
             "max_retries": row["max_retries"],
             "worker_pid": row["worker_pid"],
+            "worker_start_token": row["worker_start_token"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "started_at": row["started_at"],
@@ -474,11 +475,11 @@ class JobStore:
                 (run_id, pgid, start_token),
             )
 
-    def unregister_process_group(self, run_id: str, pgid: int) -> None:
+    def unregister_process_group(self, run_id: str, pgid: int, *, start_token: str | None = None) -> None:
         with self._lock, self.db:
             self.db.execute(
-                "DELETE FROM job_process_groups WHERE run_id = ? AND pgid = ?",
-                (run_id, pgid),
+                "DELETE FROM job_process_groups WHERE run_id = ? AND pgid = ? AND (? IS NULL OR start_token = ?)",
+                (run_id, pgid, start_token, start_token),
             )
 
     @staticmethod
@@ -541,24 +542,32 @@ class JobStore:
         except OSError:
             return True
 
-    def _stop_process_groups(self, run_id: str) -> bool:
+    def _stop_process_groups(self, run_id: str, *, expected_job: dict[str, object] | sqlite3.Row | None = None) -> bool:
+        clause = ""
+        params: list[object] = [run_id]
+        if expected_job is not None:
+            clause = (
+                " AND EXISTS (SELECT 1 FROM jobs WHERE jobs.run_id = job_process_groups.run_id "
+                "AND status = ? AND worker_pid IS ? AND worker_start_token = ?)"
+            )
+            params.extend(expected_job[key] for key in ("status", "worker_pid", "worker_start_token"))
         with self._lock:
             rows = self.db.execute(
-                "SELECT pgid, start_token FROM job_process_groups WHERE run_id = ?",
-                (run_id,),
+                f"SELECT pgid, start_token FROM job_process_groups WHERE run_id = ?{clause}",
+                params,
             ).fetchall()
         stopped = True
         for row in rows:
             pgid = int(row["pgid"])
             if self._terminate_process_group(pgid, str(row["start_token"])):
-                self.unregister_process_group(run_id, pgid)
+                self.unregister_process_group(run_id, pgid, start_token=str(row["start_token"]))
             else:
                 stopped = False
         return stopped
 
     def request_cancel(self, run_id: str) -> dict[str, object]:
         job = self.get_job(run_id)
-        if job["status"] == "stalled" and not self._stop_process_groups(run_id):
+        if job["status"] == "stalled" and not self._stop_process_groups(run_id, expected_job=job):
             raise JobStateError("cannot cancel while delegated processes may still be running")
         if job["status"] in {"awaiting_approval", "queued", "paused", "stalled"}:
             return self._transition(run_id, {str(job["status"])}, "canceled", "canceled")
@@ -576,7 +585,7 @@ class JobStore:
         job = self.get_job(run_id)
         if str(job["status"]) not in RESUMABLE_STATUSES:
             raise JobStateError(f"cannot resume job in state {job['status']}")
-        if job["status"] == "stalled" and not self._stop_process_groups(run_id):
+        if job["status"] == "stalled" and not self._stop_process_groups(run_id, expected_job=job):
             raise JobStateError("cannot resume while delegated processes may still be running")
         if not job["resumable"]:
             raise JobStateError("job is explicitly non-resumable")
@@ -656,7 +665,7 @@ class JobStore:
         job = self.get_job(run_id)
         if job["status"] not in {"failed", "paused", "stalled"}:
             raise JobStateError(f"cannot retry a lane while job is {job['status']}")
-        if job["status"] == "stalled" and not self._stop_process_groups(run_id):
+        if job["status"] == "stalled" and not self._stop_process_groups(run_id, expected_job=job):
             raise JobStateError("cannot retry while delegated processes may still be running")
         lane = next((item for item in job["lanes"] if item["label"] == label), None)
         if lane is None:
@@ -730,7 +739,7 @@ class JobStore:
         for row in rows:
             if self._worker_process_alive(row["worker_pid"], row["worker_start_token"]):
                 continue
-            groups_stopped = self._stop_process_groups(str(row["run_id"]))
+            groups_stopped = self._stop_process_groups(str(row["run_id"]), expected_job=row)
             if row["status"] == "stalled":
                 continue
             reason = "worker process is absent or replaced"
@@ -739,8 +748,8 @@ class JobStore:
             with self._lock, self.db:
                 updated = self.db.execute(
                     "UPDATE jobs SET status = 'stalled', updated_at = ?, last_error = ? "
-                    "WHERE run_id = ? AND status = ?",
-                    (current, reason, row["run_id"], row["status"]),
+                    "WHERE run_id = ? AND status = ? AND worker_pid IS ? AND worker_start_token = ?",
+                    (current, reason, row["run_id"], row["status"], row["worker_pid"], row["worker_start_token"]),
                 )
                 if updated.rowcount != 1:
                     continue
