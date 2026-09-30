@@ -110,14 +110,14 @@ def test_plan_review_makes_directional_controls_visible_in_paths_and_commands():
     rendered = bot._render_plan_review(
         {
             "review": {
-                "changed_paths": ["safe.py\u202eevil.txt"],
+                "changed_paths": ["safe.py\u202eevil.txt\ud800"],
                 "proposed_commands": ["cat safe.py\u202eevil.txt"],
             }
         }
     )
 
-    assert "\u202e" not in rendered
-    assert rendered.count("�") == 2
+    assert "\u202e" not in rendered and "\ud800" not in rendered
+    assert rendered.count("�") == 3
 
 
 def test_mobile_diff_preview_makes_directional_controls_visible():
@@ -538,7 +538,7 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
         download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")),
     )
     voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
-    message = SimpleNamespace(voice=voice, caption="", reply_text=AsyncMock())
+    message = SimpleNamespace(voice=voice, caption="Review this change", reply_text=AsyncMock())
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=123),
         effective_chat=SimpleNamespace(id=456, type="private"),
@@ -554,8 +554,14 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
 
     bot._process_user_message.assert_not_awaited()
     assert bot._pending_voice_goal_by_session["456"]["transcription"] == "Build the fixture"
+    assert bot._pending_voice_goal_by_session["456"]["text"] == (
+        "Review this change\n[voice transcription: Build the fixture]"
+    )
     call = bot._reply_logged.await_args
     assert "not executed" in call.args[1]
+    assert "Review this change" in call.args[1]
+    assert "Build the fixture" in call.args[1]
+    assert "complete request" in call.args[1]
     assert call.kwargs["reply_markup"] is not None
     voice_buttons = [
         button.callback_data
@@ -564,6 +570,61 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
     ]
     approval_id = bot._pending_voice_goal_by_session["456"]["approval_id"]
     assert f"lc:voice:approve:{approval_id}" in voice_buttons
+
+
+@pytest.mark.asyncio
+async def test_oversized_voice_transcription_is_not_left_pending(monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
+    bot._reply_logged = AsyncMock()
+    monkeypatch.setattr(
+        "core.bot.handlers.transcribe_voice", AsyncMock(return_value="🙂" * 2100)
+    )
+    voice_file = SimpleNamespace(
+        file_size=None,
+        download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")),
+    )
+    voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=voice, caption=""),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+
+    await bot.handle_voice(update, context)
+
+    assert bot._pending_voice_goal_by_session == {}
+    assert "too long to review" in bot._reply_logged.await_args.args[1]
+    assert bot._reply_logged.await_args.kwargs.get("reply_markup") is None
+
+
+@pytest.mark.parametrize("error", [RuntimeError("send failure"), asyncio.CancelledError()])
+@pytest.mark.asyncio
+async def test_failed_voice_approval_delivery_clears_pending(monkeypatch, error):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
+    bot._reply_logged = AsyncMock(side_effect=error)
+    monkeypatch.setattr("core.bot.handlers.transcribe_voice", AsyncMock(return_value="hello"))
+    voice_file = SimpleNamespace(download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")))
+    voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=voice, caption=""),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+
+    with pytest.raises(type(error)):
+        await bot.handle_voice(update, context)
+
+    assert bot._pending_voice_goal_by_session == {}
 
 
 @pytest.mark.asyncio

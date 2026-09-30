@@ -157,10 +157,20 @@ class BotHandlersMixin:
         voice_requests.pop(session_id, None)
 
         if text:
-            caption = update.message.caption or ""
-            user_text = f"[voice transcription: {text}]"
-            if caption:
-                user_text = f"{caption}\n{user_text}"
+            caption = self._visible_review_text(update.message.caption or "").strip()
+            text = self._visible_review_text(text)
+            user_text = (f"{caption}\n" if caption else "") + f"[voice transcription: {text}]"
+            preview = (
+                "🎙 <b>Voice request — not executed</b>\n\n"
+                + (f"<b>Caption</b>\n{_escape_html(caption)}\n\n" if caption else "")
+                + f"<b>Transcription</b>\n{_escape_html(text)}\n\nReview the complete request, then explicitly approve or discard it."
+            )
+            if len(preview.encode("utf-16-le")) // 2 > 4096:
+                await self._reply_logged(
+                    update,
+                    "⚠️ Voice request too long to review; send shorter audio. Nothing is pending.",
+                )
+                return
             log.info("Voice message transcribed and awaiting approval")
             approval_id = secrets.token_hex(8)
             now = time.time()
@@ -171,14 +181,18 @@ class BotHandlersMixin:
                 "expires_at": now + 10 * 60,
                 "expires_monotonic": time.monotonic() + 10 * 60,
             }
-            await self._reply_logged(
-                update,
-                "🎙 <b>Voice transcription — not executed</b>\n\n"
-                f"{_escape_html(text)}\n\n"
-                "Review the transcription, then explicitly approve or discard it.",
-                parse_mode=ParseMode.HTML,
-                reply_markup=self._inline_voice_keyboard(approval_id),
-            )
+            try:
+                await self._reply_logged(
+                    update,
+                    preview,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=self._inline_voice_keyboard(approval_id),
+                )
+            except (Exception, asyncio.CancelledError):
+                pending = self._pending_voice_goal_by_session.get(session_id)
+                if pending and pending.get("approval_id") == approval_id:
+                    self._pending_voice_goal_by_session.pop(session_id, None)
+                raise
             return
         await self._reply_logged(update, VOICE_UNAVAILABLE)
 

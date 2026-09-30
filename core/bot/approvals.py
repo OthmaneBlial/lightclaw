@@ -24,7 +24,7 @@ from ..receipts import read_receipt
 MAX_REVIEWED_COMMANDS = 6
 MAX_DIFF_PREVIEW_BYTES = 32 * 1024
 _UNSAFE_REVIEW_CONTROLS = re.compile(
-    r"[\x00-\x1f\x7f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u206f\ufeff]"
+    r"[\x00-\x1f\x7f-\x9f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u206f\ufeff\ud800-\udfff]"
 )
 
 
