@@ -185,7 +185,7 @@
     },
     {
       "branch_points": 29,
-      "line": 301,
+      "line": 312,
       "lines": 212,
       "name": "_cmd_cron",
       "path": "core/bot/commands/cron.py"
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 21098,
+  "runtime_lines": 21109,
   "schema_version": 1
 }

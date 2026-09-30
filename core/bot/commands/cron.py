@@ -198,6 +198,17 @@ class CommandsCronMixin:
                     updates[job_id] = None
                     continue
 
+                # Persisted reminders must obey the policy of this bot startup.
+                if chat_id > 0:
+                    if not self.is_allowed(chat_id):
+                        continue
+                elif not (
+                    chat_id < 0
+                    and self.config.telegram_public_bot_ack
+                    and not self.config.telegram_allowed_users
+                ):
+                    continue
+
                 message = f"⏰ Cron reminder\n\n{message_text}"
                 html = markdown_to_telegram_html(message)
 

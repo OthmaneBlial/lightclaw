@@ -9,12 +9,69 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from telegram.error import NetworkError, RetryAfter
 
+from config import Config
+from core.bot.base import BotBaseMixin
 from core.bot.commands.cron import CommandsCronMixin
 from core.bot.messaging import BotMessagingMixin
 
 
-class CronHarness(CommandsCronMixin, BotMessagingMixin):
-    pass
+class CronHarness(CommandsCronMixin, BotMessagingMixin, BotBaseMixin):
+    def __init__(self):
+        self.config = Config(telegram_allowed_users=["123"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["at", "every"])
+@pytest.mark.parametrize(
+    ("allowed_users", "public_ack", "chat_id", "should_send"),
+    [
+        (["123"], False, "123", True),
+        (["456"], False, "123", False),
+        ([], False, "123", False),
+        ([], True, "123", True),
+        ([], True, "-123", True),
+        ([], False, "-123", False),
+        (["123"], True, "-123", False),
+        (["456"], True, "123", False),
+    ],
+)
+async def test_saved_cron_jobs_respect_current_access_policy(
+    tmp_path, mode, allowed_users, public_ack, chat_id, should_send
+):
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot._cron_iteration_lock = asyncio.Lock()
+    bot._cron_poll_sec = 15
+    bot._cron_last_run_at = 0
+    bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
+    bot._write_cron_store({"jobs": [{
+        "id": "saved", "chat_id": chat_id, "mode": mode, "interval_sec": 60,
+        "text": "Private reminder", "next_run_at": time.time() - 1,
+    }]})
+    original = bot._cron_jobs_path().read_bytes()
+    bot.config = Config(
+        telegram_allowed_users=allowed_users, telegram_public_bot_ack=public_ack
+    )
+    telegram_bot = SimpleNamespace(send_message=AsyncMock())
+
+    await bot._run_due_cron_jobs(telegram_bot)
+
+    if should_send:
+        telegram_bot.send_message.assert_awaited_once()
+        assert telegram_bot.send_message.await_args.kwargs["chat_id"] == int(chat_id)
+    else:
+        telegram_bot.send_message.assert_not_awaited()
+        assert bot._cron_jobs_path().read_bytes() == original
+        assert bot._cron_last_run_at == 0
+        bot.config = Config(telegram_public_bot_ack=True)
+        await bot._run_due_cron_jobs(telegram_bot)
+        telegram_bot.send_message.assert_awaited_once()
+
+    remaining = bot._read_cron_store()["jobs"]
+    if mode == "at":
+        assert remaining == []
+    else:
+        assert remaining[0]["next_run_at"] > time.time()
 
 
 @pytest.mark.asyncio

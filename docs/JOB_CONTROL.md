@@ -51,3 +51,5 @@ Cancellation also covers agent startup, before the process group is registered. 
 ```
 
 Date and time use the bot host's local timezone. `/cron` with no arguments lists reminders. Each reminder is scoped to the chat that created it.
+
+Saved reminders are checked against the current Telegram access policy before delivery. Removing a private-chat user from `TELEGRAM_ALLOWED_USERS`, or disabling public group access, pauses delivery to that chat without deleting its jobs. Restoring access allows overdue reminders to run on the next scheduler check; remove unwanted jobs before restoring access.
