@@ -7,6 +7,7 @@ import os
 import re
 import shlex
 import signal
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -317,6 +318,8 @@ class CommandsAgentAcceptanceMixin:
         self,
         workspace: Path,
         check: dict[str, Any],
+        *,
+        cancel_event: threading.Event | None = None,
     ) -> str:
         command = str(check.get("command") or "").strip()
         if not command:
@@ -343,6 +346,8 @@ class CommandsAgentAcceptanceMixin:
         except Exception:
             timeout_sec = 20
         timeout_sec = max(1, min(45, timeout_sec))
+        if cancel_event and cancel_event.is_set():
+            return f"command canceled: `{command}`"
 
         async def run_command() -> str:
             try:
@@ -370,6 +375,15 @@ class CommandsAgentAcceptanceMixin:
                 asyncio.create_task(drain(process.stderr, stderr_capture)),
             )
             wait_task = asyncio.create_task(process.wait())
+            stream_completion = asyncio.gather(*stream_tasks, wait_task)
+
+            async def wait_for_cancel() -> None:
+                while cancel_event and not cancel_event.is_set():
+                    await asyncio.sleep(0.05)
+
+            cancel_task = (
+                asyncio.create_task(wait_for_cancel()) if cancel_event else None
+            )
 
             async def stop_process_group() -> None:
                 if os.name == "posix":
@@ -386,49 +400,62 @@ class CommandsAgentAcceptanceMixin:
                     process.kill()
                 await wait_task
 
-            done, pending = await asyncio.wait(
-                (*stream_tasks, wait_task),
-                timeout=timeout_sec,
-                return_when=asyncio.FIRST_EXCEPTION,
-            )
-            stream_error = next(
-                (
-                    task.exception()
-                    for task in stream_tasks
-                    if task in done and not task.cancelled() and task.exception()
-                ),
-                None,
-            )
-            if pending or stream_error:
-                await stop_process_group()
-                try:
-                    await asyncio.wait_for(
-                        asyncio.gather(*stream_tasks), timeout=1
-                    )
-                except Exception:
-                    for task in stream_tasks:
-                        if not task.done():
-                            task.cancel()
-                    await asyncio.gather(*stream_tasks, return_exceptions=True)
-                if stream_error:
-                    return f"command output failed `{command}`: {stream_error}"
-                return f"command timed out after {timeout_sec}s: `{command}`"
+            try:
+                tasks = [stream_completion]
+                if cancel_task:
+                    tasks.append(cancel_task)
+                done, _ = await asyncio.wait(
+                    tasks,
+                    timeout=timeout_sec,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                canceled = bool(
+                    cancel_task in done and cancel_event and cancel_event.is_set()
+                )
+                timed_out = not canceled and stream_completion not in done
+                stream_error = None
+                if not canceled and not timed_out:
+                    try:
+                        await stream_completion
+                    except Exception as e:
+                        stream_error = e
 
-            if process.returncode == 0:
-                return ""
+                if canceled or timed_out or stream_error:
+                    await stop_process_group()
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*stream_tasks), timeout=1
+                        )
+                    except Exception:
+                        for task in stream_tasks:
+                            if not task.done():
+                                task.cancel()
+                        await asyncio.gather(*stream_tasks, return_exceptions=True)
+                    if canceled:
+                        return f"command canceled: `{command}`"
+                    if stream_error:
+                        return f"command output failed `{command}`: {stream_error}"
+                    return f"command timed out after {timeout_sec}s: `{command}`"
 
-            output_parts = [stderr_capture.text(), stdout_capture.text()]
-            output = "\n".join(part.strip() for part in output_parts if part.strip())
-            if stdout_capture.truncated or stderr_capture.truncated:
-                output = f"[acceptance command output truncated]\n{output}"
-            output_preview = (
-                self._short_progress_text(output, max_chars=220) if output else ""
-            )
-            location = f" in `{cwd_rel}`" if cwd_rel else ""
-            detail = f": {output_preview}" if output_preview else ""
-            return (
-                f"command failed{location} (exit {process.returncode}): `{command}`{detail}"
-            )
+                if process.returncode == 0:
+                    return ""
+
+                output_parts = [stderr_capture.text(), stdout_capture.text()]
+                output = "\n".join(part.strip() for part in output_parts if part.strip())
+                if stdout_capture.truncated or stderr_capture.truncated:
+                    output = f"[acceptance command output truncated]\n{output}"
+                output_preview = (
+                    self._short_progress_text(output, max_chars=220) if output else ""
+                )
+                location = f" in `{cwd_rel}`" if cwd_rel else ""
+                detail = f": {output_preview}" if output_preview else ""
+                return (
+                    f"command failed{location} (exit {process.returncode}): `{command}`{detail}"
+                )
+            finally:
+                if cancel_task:
+                    cancel_task.cancel()
+                    await asyncio.gather(cancel_task, return_exceptions=True)
 
         try:
             return asyncio.run(run_command())
@@ -505,6 +532,8 @@ class CommandsAgentAcceptanceMixin:
         workspace: Path,
         label: str,
         worker_contract: dict[str, object],
+        *,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[bool, list[str], dict[str, Any]]:
         checks_obj = worker_contract.get("acceptance_checks")
         checks = (
@@ -543,6 +572,8 @@ class CommandsAgentAcceptanceMixin:
             return reported_files_cache
 
         for check in checks:
+            if cancel_event and cancel_event.is_set():
+                return False, ["acceptance checks canceled"], handoff_data
             kind = str(check.get("type") or "").strip().lower()
 
             if kind == "file_exists":
@@ -603,7 +634,9 @@ class CommandsAgentAcceptanceMixin:
                 continue
 
             if kind == "command_succeeds":
-                command_failure = self._run_multi_acceptance_command(workspace, check)
+                command_failure = self._run_multi_acceptance_command(
+                    workspace, check, cancel_event=cancel_event
+                )
                 if command_failure:
                     failures.append(command_failure)
                 continue

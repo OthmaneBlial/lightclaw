@@ -150,6 +150,37 @@ def test_acceptance_command_bounds_captured_output_and_keeps_error_detail(tmp_pa
     assert len(failure) < 500
 
 
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "posix", reason="process-group cancellation requires POSIX")
+async def test_acceptance_command_cancellation_kills_descendant_processes(tmp_path):
+    marker = tmp_path / "canceled-command-finished"
+    program = (
+        "import pathlib,time;time.sleep(1.4);"
+        f"pathlib.Path({str(marker)!r}).write_text('survived')"
+    )
+    command = shlex.join([sys.executable, "-c", program])
+    bot = LightClawBot.__new__(LightClawBot)
+    contract = {
+        "acceptance_checks": [
+            {"type": "command_succeeds", "command": command, "timeout_sec": 10}
+        ]
+    }
+
+    async def run_acceptance():
+        return await bot._evaluate_multi_worker_acceptance_off_thread(
+            tmp_path, "builder", contract
+        )
+
+    task = asyncio.create_task(run_acceptance())
+    await asyncio.sleep(0.2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    await asyncio.sleep(1.6)
+
+    assert not marker.exists()
+
+
 @pytest.mark.skipif(os.name != "posix", reason="acceptance process groups require POSIX")
 def test_acceptance_timeout_kills_descendant_processes(tmp_path):
     marker = tmp_path / "orphan-finished"

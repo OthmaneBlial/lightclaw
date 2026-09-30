@@ -8,8 +8,8 @@
   "highest_branch_functions": [
     {
       "branch_points": 98,
-      "line": 134,
-      "lines": 694,
+      "line": 155,
+      "lines": 693,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -49,18 +49,18 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
+      "branch_points": 58,
+      "line": 530,
+      "lines": 189,
+      "name": "_evaluate_multi_worker_acceptance",
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
       "branch_points": 57,
       "line": 838,
       "lines": 333,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 56,
-      "line": 503,
-      "lines": 183,
-      "name": "_evaluate_multi_worker_acceptance",
-      "path": "core/bot/commands/agent_acceptance.py"
     },
     {
       "branch_points": 49,
@@ -92,6 +92,13 @@
     },
     {
       "branch_points": 43,
+      "line": 317,
+      "lines": 147,
+      "name": "_run_multi_acceptance_command",
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
+      "branch_points": 43,
       "line": 143,
       "lines": 73,
       "name": "validate_skill_manifest",
@@ -103,20 +110,13 @@
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
-    },
-    {
-      "branch_points": 38,
-      "line": 155,
-      "lines": 149,
-      "name": "_parse_multi_agent_args",
-      "path": "core/bot/delegation/agents.py"
     }
   ],
   "largest_functions": [
     {
       "branch_points": 98,
-      "line": 134,
-      "lines": 694,
+      "line": 155,
+      "lines": 693,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -198,18 +198,18 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
+      "branch_points": 58,
+      "line": 530,
+      "lines": 189,
+      "name": "_evaluate_multi_worker_acceptance",
+      "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
       "branch_points": 48,
       "line": 251,
       "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
-    },
-    {
-      "branch_points": 56,
-      "line": 503,
-      "lines": 183,
-      "name": "_evaluate_multi_worker_acceptance",
-      "path": "core/bot/commands/agent_acceptance.py"
     },
     {
       "branch_points": 9,
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 835,
-      "path": "core/jobs.py"
+      "lines": 847,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 827,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 835,
+      "path": "core/jobs.py"
     },
     {
       "lines": 817,
@@ -257,7 +257,7 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 712,
+      "lines": 745,
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 20055,
+  "runtime_lines": 20108,
   "schema_version": 1
 }

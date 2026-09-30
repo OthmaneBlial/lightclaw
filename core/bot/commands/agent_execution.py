@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
+from pathlib import Path
 from typing import Any
 
 from telegram import Update
@@ -16,6 +18,25 @@ from ...receipts import write_receipt
 
 
 class CommandsAgentExecutionMixin:
+    async def _evaluate_multi_worker_acceptance_off_thread(
+        self,
+        workspace: Path,
+        label: str,
+        worker_contract: dict[str, object],
+    ) -> tuple[bool, list[str], dict[str, Any]]:
+        cancel_event = threading.Event()
+        try:
+            return await asyncio.to_thread(
+                self._evaluate_multi_worker_acceptance,
+                workspace,
+                label,
+                worker_contract,
+                cancel_event=cancel_event,
+            )
+        except asyncio.CancelledError:
+            cancel_event.set()
+            raise
+
     async def _execute_pending_multi_plan(self, update: Update, session_id: str):
         locks = getattr(self, "_session_run_locks", None)
         if locks is None:
@@ -393,8 +414,7 @@ class CommandsAgentExecutionMixin:
                 runtime_ok = _is_success_result(result)
                 handoff_data: dict[str, Any] = {}
                 if runtime_ok:
-                    acceptance_ok, acceptance_failures, handoff_data = await asyncio.to_thread(
-                        self._evaluate_multi_worker_acceptance,
+                    acceptance_ok, acceptance_failures, handoff_data = await self._evaluate_multi_worker_acceptance_off_thread(
                         multi_workspace,
                         label,
                         worker_contract,
