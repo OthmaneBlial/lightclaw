@@ -74,6 +74,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Shared memory reads now wait for scope clears to finish, avoiding partial state on the
   SQLite connection.
 - Ctrl+C and termination signals now cancel tracked agent runs before Telegram drains updates.
+- High-risk confirmation now scans worker responsibilities, catching risky actions omitted
+  from the overall goal text.
 
 ## [0.1.0] - Unreleased
 

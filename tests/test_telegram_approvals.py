@@ -52,6 +52,27 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
     assert "does not sandbox" in rendered
 
 
+def test_plan_responsibilities_trigger_second_confirmation():
+    bot = LightClawBot.__new__(LightClawBot)
+
+    pending = bot._decorate_pending_plan(
+        {
+            "goal": "Improve project documentation",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "label": "maintainer",
+                        "responsibilities": ["Delete old credential files"],
+                    }
+                ]
+            },
+        }
+    )
+
+    assert pending["review"]["risk_level"] == "high"
+    assert pending["review"]["second_confirmation_required"] is True
+
+
 def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     bot = LightClawBot.__new__(LightClawBot)
     responsibilities = ["Update the API", "Add regression coverage"]

@@ -147,9 +147,13 @@ class BotApprovalsMixin:
         contracts = plan.get("workers") if isinstance(plan.get("workers"), list) else []
         paths: list[str] = []
         commands: list[str] = []
+        responsibilities: list[str] = []
         for contract in contracts:
             if not isinstance(contract, dict):
                 continue
+            tasks = contract.get("responsibilities")
+            if isinstance(tasks, list):
+                responsibilities.extend(str(task).strip() for task in tasks if str(task).strip())
             owned = contract.get("owned_paths")
             if isinstance(owned, list):
                 paths.extend(str(path).strip() for path in owned if str(path).strip())
@@ -164,7 +168,7 @@ class BotApprovalsMixin:
                         cwd = str(check.get("cwd") or "").strip()
                         location = f" (cwd: {cwd})" if cwd else ""
                         commands.append(f"{label}{location}: {command}")
-        combined = " ".join([goal, *paths, *commands]).lower()
+        combined = " ".join([goal, *responsibilities, *paths, *commands]).lower()
         high_risk = any(re.search(pattern, combined) for pattern in self._SECOND_CONFIRM_PATTERNS)
         worker_count = max(1, len(contracts))
         item["review"] = {

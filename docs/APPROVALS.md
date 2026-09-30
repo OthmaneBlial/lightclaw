@@ -24,6 +24,8 @@ Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or sy
 
 Destructive language, publishing/deployment, credential changes, or external-system scope requires two ordered confirmations. A forged second-confirmation callback is rejected unless the first approval was recorded. Trusted host execution retains its separate confirmation gate.
 
+The risk scan checks the goal, worker responsibilities, owned paths, and acceptance commands. These text checks are heuristic; review the full plan before approving.
+
 ## Voice goals
 
 Voice transcription is limited to 20 MB. Oversized declared files are rejected before download; any oversized downloaded data is discarded. A new valid voice request invalidates an older pending approval, and late results from older requests are discarded. Accepted input is displayed as “not executed” and retained in memory only as a short-lived pending action. Pending plans, voice approvals, and trusted-run confirmations carry wall-clock and monotonic deadlines; whichever is reached first expires them. Monotonic time prevents clock rollback from extending them, while wall time makes sleep consume their lifetime. Nothing enters the normal agent loop until the user taps Use transcription. Discard and expiry execute nothing.
