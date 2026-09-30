@@ -837,6 +837,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_chat(args: argparse.Namespace) -> int:
     import asyncio
+    from contextlib import closing
     from html import unescape
 
     home = _resolve_home(args.home)
@@ -877,303 +878,298 @@ def cmd_chat(args: argparse.Namespace) -> int:
         )
         return 2
 
-    bot = LightClawBot(config)
+    with closing(LightClawBot(config)) as bot:
+        session_id = (args.session or "cli").strip() or "cli"
+        cli_user_id = (
+            (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
+        )
+        bot.memory.bind_session(
+            session_id,
+            user_namespace=f"cli-user:{cli_user_id}",
+            workspace_namespace=Path(config.workspace_path).resolve().as_posix(),
+        )
+        # This terminal-only bot trusts local stdin and keeps its CLI memory namespace.
+        bot.is_update_allowed = lambda _update: True
+        bot._session_id_from_update = lambda _update: session_id
+        bot._set_file_mode(session_id, "chat")
 
-    def _close_chat() -> int:
-        bot.close()
-        return 0
+        print("")
+        print("🦞 LightClaw terminal chat")
+        print(f"Provider: {config.llm_provider} ({config.llm_model})")
+        print(f"Session: {session_id}")
+        print(f"File mode: {bot._get_file_mode(session_id)} (use /mode edit to enable writes)")
+        print("Type /help for commands, /exit to quit.")
+        print("")
 
-    session_id = (args.session or "cli").strip() or "cli"
-    cli_user_id = (
-        (config.telegram_allowed_users[0] if config.telegram_allowed_users else "cli-user")
-    )
-    bot.memory.bind_session(
-        session_id,
-        user_namespace=f"cli-user:{cli_user_id}",
-        workspace_namespace=Path(config.workspace_path).resolve().as_posix(),
-    )
-    # This terminal-only bot trusts local stdin and keeps its CLI memory namespace.
-    bot.is_update_allowed = lambda _update: True
-    bot._session_id_from_update = lambda _update: session_id
-    bot._set_file_mode(session_id, "chat")
+        async def _chat_once(user_text: str) -> str:
+            if bot._llm_backoff_active():
+                remaining = bot._llm_backoff_remaining_sec()
+                wait_hint = f"{remaining}s" if remaining > 0 else "a short while"
+                bot.memory.ingest("user", user_text, session_id)
+                return (
+                    f"⚠️ {config.llm_provider} is temporarily unavailable "
+                    "(quota/billing or rate limit).\n"
+                    f"Please retry in about {wait_hint}, or top up your provider balance."
+                )
 
-    print("")
-    print("🦞 LightClaw terminal chat")
-    print(f"Provider: {config.llm_provider} ({config.llm_model})")
-    print(f"Session: {session_id}")
-    print(f"File mode: {bot._get_file_mode(session_id)} (use /mode edit to enable writes)")
-    print("Type /help for commands, /exit to quit.")
-    print("")
-
-    async def _chat_once(user_text: str) -> str:
-        if bot._llm_backoff_active():
-            remaining = bot._llm_backoff_remaining_sec()
-            wait_hint = f"{remaining}s" if remaining > 0 else "a short while"
-            bot.memory.ingest("user", user_text, session_id)
-            return (
-                f"⚠️ {config.llm_provider} is temporarily unavailable "
-                "(quota/billing or rate limit).\n"
-                f"Please retry in about {wait_hint}, or top up your provider balance."
+            memories = bot.memory.recall(
+                user_text,
+                top_k=config.memory_top_k,
+                session_id=session_id,
             )
+            memories = bot._filter_recalled_memories(memories)
+            memories_text = bot.memory.format_memories_for_prompt(memories)
 
-        memories = bot.memory.recall(
-            user_text,
-            top_k=config.memory_top_k,
-            session_id=session_id,
-        )
-        memories = bot._filter_recalled_memories(memories)
-        memories_text = bot.memory.format_memories_for_prompt(memories)
+            recent = bot.memory.get_recent(session_id, limit=20)
+            recent = bot._clean_orphan_messages(recent)
+            recent = bot._filter_recent_context(recent)
 
-        recent = bot.memory.get_recent(session_id, limit=20)
-        recent = bot._clean_orphan_messages(recent)
-        recent = bot._filter_recent_context(recent)
+            summary = bot._get_session_summary(session_id)
+            skills_text = await asyncio.to_thread(bot.skills.prompt_context, session_id)
+            file_mode = bot._get_file_mode(session_id)
 
-        summary = bot._get_session_summary(session_id)
-        skills_text = await asyncio.to_thread(bot.skills.prompt_context, session_id)
-        file_mode = bot._get_file_mode(session_id)
-
-        system_prompt = build_system_prompt(
-            config, bot.personality, memories_text, summary, skills_text
-        )
-        if file_mode != "edit":
-            system_prompt += (
-                "\n\n## Chat Mode Constraint\n"
-                "You are in chat mode (read-only). Do not output file-writing instructions or fenced code blocks "
-                "intended for saving to files. Give a direct conversational answer."
+            system_prompt = build_system_prompt(
+                config, bot.personality, memories_text, summary, skills_text
             )
-        messages = list(recent)
-        messages.append({"role": "user", "content": user_text})
+            if file_mode != "edit":
+                system_prompt += (
+                    "\n\n## Chat Mode Constraint\n"
+                    "You are in chat mode (read-only). Do not output file-writing instructions or fenced code blocks "
+                    "intended for saving to files. Give a direct conversational answer."
+                )
+            messages = list(recent)
+            messages.append({"role": "user", "content": user_text})
 
-        response = None
-        max_retries = 2
-        for retry in range(max_retries + 1):
-            try:
-                response = await bot.llm.chat(messages, system_prompt)
-                break
-            except Exception as e:
-                if retry < max_retries and bot._is_context_error(str(e)) and len(messages) > 4:
-                    mid = len(messages) // 2
-                    messages = (
-                        messages[:1]
-                        + [{"role": "system", "content": "[Emergency context compression]"}]
-                        + messages[mid:]
-                    )
-                    continue
-                response = f"⚠️ Error communicating with {config.llm_provider}: {e}"
-                break
+            response = None
+            max_retries = 2
+            for retry in range(max_retries + 1):
+                try:
+                    response = await bot.llm.chat(messages, system_prompt)
+                    break
+                except Exception as e:
+                    if retry < max_retries and bot._is_context_error(str(e)) and len(messages) > 4:
+                        mid = len(messages) // 2
+                        messages = (
+                            messages[:1]
+                            + [{"role": "system", "content": "[Emergency context compression]"}]
+                            + messages[mid:]
+                        )
+                        continue
+                    response = f"⚠️ Error communicating with {config.llm_provider}: {e}"
+                    break
 
-        if response is None:
-            response = "⚠️ Failed to get a response after retries. Please try again."
+            if response is None:
+                response = "⚠️ Failed to get a response after retries. Please try again."
 
-        provider_error_response = bot._is_provider_error_text(response)
-        if provider_error_response:
-            bot._set_llm_backoff()
-        else:
-            bot._clear_llm_backoff()
-
-        bot.memory.ingest("user", user_text, session_id)
-
-        requested_file_intent = bot._is_file_intent(user_text)
-        allow_file_writes = file_mode == "edit" and requested_file_intent
-        mode_hint = ""
-        if requested_file_intent and file_mode != "edit":
-            mode_hint = (
-                "ℹ️ File writes are currently disabled (`/mode chat`). "
-                "Use `/mode edit` to enable workspace changes."
-            )
-
-        file_ops, cleaned_response = await bot._process_file_blocks(
-            response,
-            allow_file_writes=allow_file_writes,
-        )
-        if file_mode != "edit":
-            cleaned_response = bot._strip_fenced_code_for_chat(cleaned_response)
-        repair_ops = (
-            await bot._repair_incomplete_html(session_id, user_text, file_ops)
-            if allow_file_writes
-            else []
-        )
-        if repair_ops:
-            repaired_paths = {op.path for op in repair_ops if op.action != "error"}
-            if repaired_paths:
-                file_ops = [op for op in file_ops if op.path not in repaired_paths]
-            file_ops.extend(repair_ops)
-
-        success_ops = [op for op in file_ops if op.action != "error" and op.path]
-        if success_ops:
-            bot._last_file_by_session[session_id] = success_ops[-1].path
-
-        workspace_label = bot._workspace_display_path()
-        visible_response = cleaned_response
-        if file_ops:
-            success_count = sum(1 for op in file_ops if op.action != "error")
-            if success_count > 0:
-                visible_response = "Done. Saved requested changes to files."
+            provider_error_response = bot._is_provider_error_text(response)
+            if provider_error_response:
+                bot._set_llm_backoff()
             else:
-                visible_response = bot._compact_response_for_file_ops(cleaned_response)
+                bot._clear_llm_backoff()
 
-        response_parts = [visible_response] if visible_response else []
-        if file_ops:
-            response_parts.append(
-                bot._render_file_operations(
-                    file_ops,
-                    include_diffs=False,
-                    workspace_label=workspace_label,
+            bot.memory.ingest("user", user_text, session_id)
+
+            requested_file_intent = bot._is_file_intent(user_text)
+            allow_file_writes = file_mode == "edit" and requested_file_intent
+            mode_hint = ""
+            if requested_file_intent and file_mode != "edit":
+                mode_hint = (
+                    "ℹ️ File writes are currently disabled (`/mode chat`). "
+                    "Use `/mode edit` to enable workspace changes."
                 )
-            )
-        if mode_hint and not file_ops:
-            response_parts.append(mode_hint)
-        final_text = "\n\n".join(part for part in response_parts if part).strip() or "Done."
 
-        memory_text = visible_response if file_ops else cleaned_response
-        memory_parts = [memory_text] if memory_text else []
-        if file_ops:
-            memory_parts.append(
-                bot._render_file_operations(
-                    file_ops,
-                    include_diffs=False,
-                    workspace_label=workspace_label,
+            file_ops, cleaned_response = await bot._process_file_blocks(
+                response,
+                allow_file_writes=allow_file_writes,
+            )
+            if file_mode != "edit":
+                cleaned_response = bot._strip_fenced_code_for_chat(cleaned_response)
+            repair_ops = (
+                await bot._repair_incomplete_html(session_id, user_text, file_ops)
+                if allow_file_writes
+                else []
+            )
+            if repair_ops:
+                repaired_paths = {op.path for op in repair_ops if op.action != "error"}
+                if repaired_paths:
+                    file_ops = [op for op in file_ops if op.path not in repaired_paths]
+                file_ops.extend(repair_ops)
+
+            success_ops = [op for op in file_ops if op.action != "error" and op.path]
+            if success_ops:
+                bot._last_file_by_session[session_id] = success_ops[-1].path
+
+            workspace_label = bot._workspace_display_path()
+            visible_response = cleaned_response
+            if file_ops:
+                success_count = sum(1 for op in file_ops if op.action != "error")
+                if success_count > 0:
+                    visible_response = "Done. Saved requested changes to files."
+                else:
+                    visible_response = bot._compact_response_for_file_ops(cleaned_response)
+
+            response_parts = [visible_response] if visible_response else []
+            if file_ops:
+                response_parts.append(
+                    bot._render_file_operations(
+                        file_ops,
+                        include_diffs=False,
+                        workspace_label=workspace_label,
+                    )
                 )
-            )
-        memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
-        bot.memory.ingest("assistant", memory_response, session_id)
+            if mode_hint and not file_ops:
+                response_parts.append(mode_hint)
+            final_text = "\n\n".join(part for part in response_parts if part).strip() or "Done."
 
-        if not provider_error_response:
-            await bot.maybe_summarize(session_id)
-        return final_text
+            memory_text = visible_response if file_ops else cleaned_response
+            memory_parts = [memory_text] if memory_text else []
+            if file_ops:
+                memory_parts.append(
+                    bot._render_file_operations(
+                        file_ops,
+                        include_diffs=False,
+                        workspace_label=workspace_label,
+                    )
+                )
+            memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
+            bot.memory.ingest("assistant", memory_response, session_id)
 
-    def _render_terminal_reply(text: str, parse_mode: str | None = None):
-        rendered = unescape(bot._strip_html_for_log(text)) if parse_mode else text
-        print(f"bot> {rendered}\n")
+            if not provider_error_response:
+                await bot.maybe_summarize(session_id)
+            return final_text
 
-    class _CliSentMessage:
-        def __init__(self):
-            self.text = ""
+        def _render_terminal_reply(text: str, parse_mode: str | None = None):
+            rendered = unescape(bot._strip_html_for_log(text)) if parse_mode else text
+            print(f"bot> {rendered}\n")
 
-        async def edit_text(self, text: str, parse_mode: str | None = None, reply_markup=None):
-            _render_terminal_reply(text, parse_mode=parse_mode)
-            self.text = text
-            return self
+        class _CliSentMessage:
+            def __init__(self):
+                self.text = ""
 
-    class _CliIncomingMessage:
-        def __init__(self, text: str):
-            self.text = text
+            async def edit_text(self, text: str, parse_mode: str | None = None, reply_markup=None):
+                _render_terminal_reply(text, parse_mode=parse_mode)
+                self.text = text
+                return self
 
-        async def reply_text(self, text: str, parse_mode: str | None = None, reply_markup=None):
-            _render_terminal_reply(text, parse_mode=parse_mode)
-            sent = _CliSentMessage()
-            sent.text = text
-            return sent
+        class _CliIncomingMessage:
+            def __init__(self, text: str):
+                self.text = text
 
-    class _CliBotAPI:
-        async def send_chat_action(self, chat_id, action):
-            return None
+            async def reply_text(self, text: str, parse_mode: str | None = None, reply_markup=None):
+                _render_terminal_reply(text, parse_mode=parse_mode)
+                sent = _CliSentMessage()
+                sent.text = text
+                return sent
 
-    class _CliContext:
-        def __init__(self, args_list: list[str]):
-            self.args = args_list
-            self.bot = _CliBotAPI()
+        class _CliBotAPI:
+            async def send_chat_action(self, chat_id, action):
+                return None
 
-    async def _run_terminal_command(raw_line: str) -> bool:
-        if raw_line.lower() in {"/exit", "/quit"}:
-            print("bye.")
-            return True
+        class _CliContext:
+            def __init__(self, args_list: list[str]):
+                self.args = args_list
+                self.bot = _CliBotAPI()
 
-        try:
-            parts = shlex.split(raw_line[1:])
-        except ValueError as e:
-            print(f"bot> ⚠️ Invalid command syntax: {e}\n")
-            return False
+        async def _run_terminal_command(raw_line: str) -> bool:
+            if raw_line.lower() in {"/exit", "/quit"}:
+                print("bye.")
+                return True
 
-        if not parts:
-            return False
-
-        command = parts[0].lower()
-        args_list = parts[1:]
-
-        handler_map = {
-            "start": bot.cmd_start,
-            "help": bot.cmd_help,
-            "clear": bot.cmd_clear,
-            "wipe_memory": bot.cmd_wipe_memory,
-            "wipe": bot.cmd_wipe_memory,
-            "memory": bot.cmd_memory,
-            "recall": bot.cmd_recall,
-            "skills": bot.cmd_skills,
-            "agent": bot.cmd_agent,
-            "mode": bot.cmd_mode,
-            "heartbeat": bot.cmd_heartbeat,
-            "cron": bot.cmd_cron,
-            "show": bot.cmd_show,
-        }
-        handler = handler_map.get(command)
-        if not handler:
-            print("bot> Unknown command. Type /help for available commands.\n")
-            return False
-
-        class _CliUpdate:
-            def __init__(self, line_text: str):
-                self.effective_user = type("U", (), {"id": cli_user_id})()
-                self.effective_chat = type("C", (), {"id": session_id})()
-                self.message = _CliIncomingMessage(line_text)
-
-        update = _CliUpdate(raw_line)
-        context = _CliContext(args_list)
-        await handler(update, context)
-        return False
-
-    while True:
-        try:
-            user_text = input("you> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\nbye.")
-            return _close_chat()
-
-        if not user_text:
-            continue
-
-        pending_multi = bot._get_pending_multi_plan(session_id)
-        if pending_multi and not user_text.startswith("/"):
-            decision = bot._classify_pending_multi_reply(user_text)
-            if decision == "confirm":
-                try:
-                    should_exit = asyncio.run(_run_terminal_command(
-                        f"/agent multi confirm {pending_multi['approval_id']}"
-                    ))
-                except Exception as e:
-                    print(f"bot> ⚠️ Command failed: {e}\n")
-                    should_exit = False
-                if should_exit:
-                    return _close_chat()
-                continue
-            if decision == "cancel":
-                try:
-                    should_exit = asyncio.run(_run_terminal_command("/agent multi cancel"))
-                except Exception as e:
-                    print(f"bot> ⚠️ Command failed: {e}\n")
-                    should_exit = False
-                if should_exit:
-                    return _close_chat()
-                continue
-            reminder = bot._render_pending_multi_reminder(session_id)
-            print(f"bot> {bot._strip_html_for_log(reminder)}\n")
-            continue
-
-        if user_text.startswith("/"):
             try:
-                should_exit = asyncio.run(_run_terminal_command(user_text))
-            except Exception as e:
-                print(f"bot> ⚠️ Command failed: {e}\n")
-                should_exit = False
-            if should_exit:
-                return _close_chat()
-            continue
+                parts = shlex.split(raw_line[1:])
+            except ValueError as e:
+                print(f"bot> ⚠️ Invalid command syntax: {e}\n")
+                return False
 
-        try:
-            reply = asyncio.run(_chat_once(user_text))
-        except Exception as e:
-            reply = f"⚠️ Internal error: {e}"
-        print(f"bot> {reply}\n")
+            if not parts:
+                return False
+
+            command = parts[0].lower()
+            args_list = parts[1:]
+
+            handler_map = {
+                "start": bot.cmd_start,
+                "help": bot.cmd_help,
+                "clear": bot.cmd_clear,
+                "wipe_memory": bot.cmd_wipe_memory,
+                "wipe": bot.cmd_wipe_memory,
+                "memory": bot.cmd_memory,
+                "recall": bot.cmd_recall,
+                "skills": bot.cmd_skills,
+                "agent": bot.cmd_agent,
+                "mode": bot.cmd_mode,
+                "heartbeat": bot.cmd_heartbeat,
+                "cron": bot.cmd_cron,
+                "show": bot.cmd_show,
+            }
+            handler = handler_map.get(command)
+            if not handler:
+                print("bot> Unknown command. Type /help for available commands.\n")
+                return False
+
+            class _CliUpdate:
+                def __init__(self, line_text: str):
+                    self.effective_user = type("U", (), {"id": cli_user_id})()
+                    self.effective_chat = type("C", (), {"id": session_id})()
+                    self.message = _CliIncomingMessage(line_text)
+
+            update = _CliUpdate(raw_line)
+            context = _CliContext(args_list)
+            await handler(update, context)
+            return False
+
+        while True:
+            try:
+                user_text = input("you> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nbye.")
+                return 0
+
+            if not user_text:
+                continue
+
+            pending_multi = bot._get_pending_multi_plan(session_id)
+            if pending_multi and not user_text.startswith("/"):
+                decision = bot._classify_pending_multi_reply(user_text)
+                if decision == "confirm":
+                    try:
+                        should_exit = asyncio.run(_run_terminal_command(
+                            f"/agent multi confirm {pending_multi['approval_id']}"
+                        ))
+                    except Exception as e:
+                        print(f"bot> ⚠️ Command failed: {e}\n")
+                        should_exit = False
+                    if should_exit:
+                        return 0
+                    continue
+                if decision == "cancel":
+                    try:
+                        should_exit = asyncio.run(_run_terminal_command("/agent multi cancel"))
+                    except Exception as e:
+                        print(f"bot> ⚠️ Command failed: {e}\n")
+                        should_exit = False
+                    if should_exit:
+                        return 0
+                    continue
+                reminder = bot._render_pending_multi_reminder(session_id)
+                print(f"bot> {bot._strip_html_for_log(reminder)}\n")
+                continue
+
+            if user_text.startswith("/"):
+                try:
+                    should_exit = asyncio.run(_run_terminal_command(user_text))
+                except Exception as e:
+                    print(f"bot> ⚠️ Command failed: {e}\n")
+                    should_exit = False
+                if should_exit:
+                    return 0
+                continue
+
+            try:
+                reply = asyncio.run(_chat_once(user_text))
+            except Exception as e:
+                reply = f"⚠️ Internal error: {e}"
+            print(f"bot> {reply}\n")
 
 
 def _managed_uninstall_targets(home: Path, purge_data: bool = False) -> list[tuple[Path, str]]:

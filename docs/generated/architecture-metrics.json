@@ -58,7 +58,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 339,
+      "lines": 335,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -151,7 +151,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 339,
+      "lines": 335,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -178,7 +178,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1657,
+      "line": 1653,
       "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -221,7 +221,7 @@
   ],
   "largest_modules": [
     {
-      "lines": 1915,
+      "lines": 1911,
       "path": "lightclaw_cli.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 21157,
+  "runtime_lines": 21153,
   "schema_version": 1
 }

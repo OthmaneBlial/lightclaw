@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -9,6 +10,54 @@ from config import Config
 from core.bot import LightClawBot
 from lightclaw_cli import cmd_chat
 from memory import MemoryStore
+
+
+@pytest.mark.parametrize("stage", ["bind", "input", "model", "exit"])
+def test_terminal_closes_resources_on_every_exit(tmp_path, monkeypatch, stage):
+    config = Config(
+        llm_provider="fixture", workspace_path=str(tmp_path / "workspace"),
+        memory_db_path=str(tmp_path / "memory.db"), skills_state_path=str(tmp_path / "skills.json"),
+    )
+    error = {
+        "bind": RuntimeError("bind failed"), "input": OSError("input failed"),
+        "model": KeyboardInterrupt("model interrupted"), "exit": None,
+    }[stage]
+    llm = SimpleNamespace(close=Mock(), chat=AsyncMock(side_effect=error))
+    monkeypatch.setattr("core.bot.base.LLMClient", lambda _config: llm)
+    monkeypatch.setattr("lightclaw_cli._prepare_runtime_environment", lambda *_a, **_k: 0)
+    monkeypatch.setattr("config.load_config", lambda: config)
+    monkeypatch.setenv("LIGHTCLAW_CHAT_MODE", "0")
+    bots = []
+
+    def create_bot(config):
+        bot = LightClawBot(config)
+        bots.append(bot)
+        if stage == "bind":
+            bot.memory.bind_session = Mock(side_effect=error)
+        return bot
+
+    def read_input(_prompt):
+        if stage == "input":
+            raise error
+        return "/exit" if stage == "exit" else "hello"
+
+    monkeypatch.setattr("main.LightClawBot", create_bot)
+    monkeypatch.setattr("builtins.input", read_input)
+    args = SimpleNamespace(home=str(tmp_path), provider="", model="", session="terminal")
+    try:
+        if error is None:
+            assert cmd_chat(args) == 0
+        else:
+            with pytest.raises(type(error), match=str(error)):
+                cmd_chat(args)
+        llm.close.assert_called_once_with()
+        for database in (bots[0].memory.db, bots[0].jobs.db):
+            with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+                database.execute("SELECT 1")
+    finally:
+        for bot in bots:
+            bot.memory.db.close()
+            bot.jobs.close()
 
 
 @pytest.mark.parametrize("allowed_users", [[], ["42"]])

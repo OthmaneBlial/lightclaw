@@ -82,6 +82,8 @@ while keeping memory in a separate CLI scope. Replies show text and slash-comman
 controls; Telegram buttons are not interactive in the terminal.
 Multi-agent reviews print `/agent multi confirm <review-id>`; a terminal `yes`
 passes the ID of the latest fully printed review to the same approval gate.
+The terminal closes its local databases and provider client on exit, input failure,
+or interruption during a command or model response.
 
 ## Optional container
 
