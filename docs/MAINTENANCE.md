@@ -25,6 +25,7 @@ or infer adoption from stars, traffic, forks, or private messages.
 Maintainer-controlled target, reverified on 2026-09-30:
 
 - homepage URL: `https://othmaneblial.github.io/lightclaw/`;
+- repository description: `Supervise local Codex and Claude agents from Telegram. Review plans, approve scoped work, inspect diffs and tests, and keep private run receipts.`;
 - topics: `agent-orchestration`, `audit-trail`, `claude-code`, `code-review`, `codex`,
   `coding-agent`, `developer-tools`, `human-in-the-loop`, `local-first`, `multi-agent`,
   `python`, `remote-coding`, `self-hosted`, `telegram`, and `telegram-bot`;
