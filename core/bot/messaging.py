@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import re
 import secrets
-import tempfile
 import time
 from html import escape, unescape
 from html.parser import HTMLParser
@@ -17,6 +15,7 @@ from telegram.error import BadRequest, Conflict, NetworkError, RetryAfter, Timed
 from telegram.ext import ContextTypes
 
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
+from ..fs import atomic_write_text
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
@@ -89,19 +88,7 @@ class BotMessagingMixin:
             self.config.workspace_path, ".lightclaw-meta", "messages"
         )
         path = output / f"response-{int(time.time())}-{secrets.token_hex(4)}.md"
-        fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=output)
-        temp = Path(raw_temp)
-        try:
-            os.fchmod(fd, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as handle:
-                handle.write(redact_text(text))
-                handle.write("\n")
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temp, path)
-            path.chmod(0o600)
-        finally:
-            temp.unlink(missing_ok=True)
+        atomic_write_text(path, f"{redact_text(text)}\n", mode=0o600)
         return path
 
     async def _send_response(self, placeholder, update: Update, markdown_response: str):

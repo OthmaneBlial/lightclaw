@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-import json
-import os
 import re
 import shutil
 import subprocess
-import tempfile
 import time
 from pathlib import Path
 
-from .fs import read_json_object
+from .fs import atomic_write_json, read_json_object
 from .security import delegated_process_env
 
 METADATA_DIRNAME = ".lightclaw-meta"
@@ -27,19 +24,7 @@ def _atomic_private_json(path: Path, payload: dict[str, object]) -> None:
         raise WorkspaceSafetyError("task metadata directory must not be a symlink")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     path.parent.chmod(0o700)
-    fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    temp = Path(raw_temp)
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2, sort_keys=True)
-            handle.write("\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp, path)
-        path.chmod(0o600)
-    finally:
-        temp.unlink(missing_ok=True)
+    atomic_write_json(path, payload, mode=0o600, trailing_newline=True)
 
 
 def validate_workspace_root(raw_root: str | Path) -> Path:
