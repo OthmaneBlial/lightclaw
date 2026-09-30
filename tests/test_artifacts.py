@@ -779,6 +779,48 @@ def test_selective_apply_rejects_symlinked_workspace_roots(tmp_path):
         apply_selected_files(source, target_link, ["file.txt"], run_id="root-link")
 
 
+@pytest.mark.parametrize("side", ["source", "target"])
+def test_selective_apply_refuses_root_swapped_after_directory_check(tmp_path, monkeypatch, side):
+    source, target, outside = (tmp_path / name for name in ("source", "target", "outside"))
+    for root in (source, target, outside):
+        root.mkdir()
+        (root / "selected.txt").write_text(f"{root.name} content\n")
+    replaced = source if side == "source" else target
+    is_dir = Path.is_dir
+
+    def swap_after_check(path):
+        result = is_dir(path)
+        if path == replaced:
+            replaced.rename(tmp_path / "original")
+            replaced.symlink_to(outside, target_is_directory=True)
+        return result
+
+    monkeypatch.setattr(Path, "is_dir", swap_after_check)
+    with pytest.raises(ArtifactError, match="symlink"):
+        apply_selected_files(source, target, ["selected.txt"], run_id="swapped-root")
+    assert (outside / "selected.txt").read_text() == "outside content\n"
+    assert not (outside / ".lightclaw-backups").exists()
+    assert (tmp_path / "original" / "selected.txt").read_text() == f"{side} content\n"
+
+
+def test_selective_apply_preserves_parent_directory_aliases(tmp_path):
+    parent = tmp_path / "real"
+    parent.mkdir()
+    source, target = parent / "source", parent / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("reviewed content\n")
+    alias = tmp_path / "alias"
+    alias.symlink_to(parent, target_is_directory=True)
+    preview = apply_selected_files(alias / "source", alias / "target", ["selected.txt"], run_id="alias")
+    applied = apply_selected_files(
+        alias / "source", alias / "target", ["selected.txt"], run_id="alias",
+        apply=True, confirm_plan=preview["plan_sha256"],
+    )
+    assert applied["applied"] is True
+    assert (target / "selected.txt").read_text() == "reviewed content\n"
+
+
 def test_artifact_checkpoint_rejects_symlinked_workspace_root(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()

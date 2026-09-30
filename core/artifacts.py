@@ -361,8 +361,8 @@ def apply_selected_files(
         or not target_path.is_dir()
     ):
         raise ArtifactError("source and target must be real directories")
-    source = source_path.resolve()
-    target = target_path.resolve()
+    source = source_path.absolute()
+    target = target_path.absolute()
     paths = list(dict.fromkeys(_safe_selected_path(path) for path in selected_paths))
     if not paths:
         raise ArtifactError("at least one selected file is required")
