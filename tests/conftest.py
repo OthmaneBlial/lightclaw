@@ -25,6 +25,7 @@ SENSITIVE_ENV_KEYS = (
 
 @pytest.fixture(autouse=True)
 def isolated_lightclaw_environment(monkeypatch: pytest.MonkeyPatch, tmp_path):
+    monkeypatch.setenv("PTB_TIMEDELTA", "1")
     for key in SENSITIVE_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("LIGHTCLAW_CONFIG", str(tmp_path / "missing-config.env"))

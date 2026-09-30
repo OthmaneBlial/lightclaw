@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from html.parser import HTMLParser
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -53,12 +52,7 @@ async def test_network_error_log_redacts_telegram_bot_token(caplog):
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_log_formats_retry_after_timedelta(monkeypatch, caplog):
-    monkeypatch.setattr(
-        RetryAfter,
-        "retry_after",
-        property(lambda _self: timedelta(seconds=120)),
-    )
+async def test_rate_limit_log_formats_retry_after_timedelta(caplog):
     bot = MessagingHarness()
     caplog.set_level(logging.WARNING, logger="lightclaw")
 

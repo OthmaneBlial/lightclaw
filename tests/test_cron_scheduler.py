@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -19,18 +18,17 @@ class CronHarness(CommandsCronMixin, BotMessagingMixin):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("error", "minimum_delay", "retry_after"),
+    ("error_type", "minimum_delay", "retry_after"),
     [
-        pytest.param(NetworkError("timed out"), 60, None, id="network"),
-        pytest.param(RetryAfter(120), 120, None, id="integer"),
-        pytest.param(
-            RetryAfter(120), 120, timedelta(seconds=120), id="duration"
-        ),
+        pytest.param(NetworkError, 60, None, id="network"),
+        pytest.param(RetryAfter, 120, None, id="duration"),
+        pytest.param(RetryAfter, 120, 120, id="integer"),
     ],
 )
 async def test_failed_cron_delivery_is_retained_with_retry_delay(
-    error, minimum_delay, retry_after, monkeypatch
+    error_type, minimum_delay, retry_after, monkeypatch
 ):
+    error = error_type("timed out" if error_type is NetworkError else 120)
     if retry_after is not None:
         monkeypatch.setattr(
             RetryAfter,
