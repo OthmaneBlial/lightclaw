@@ -366,6 +366,29 @@ async def test_shared_execution_gate_requires_second_confirmation():
 
 
 @pytest.mark.asyncio
+async def test_multi_agent_setup_failure_explains_approval_was_consumed():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._get_pending_multi_plan = lambda _session: {
+        "goal": "review the patch",
+        "workers": [("builder", "codex"), ("auditor", "claude")],
+        "plan_payload": {"workers": []},
+        "review": {"second_confirmation_required": False},
+    }
+    bot._clear_pending_multi_plan = Mock(return_value=None)
+    bot._active_run_ids_by_session = {}
+    bot._reply_logged = AsyncMock()
+    bot._execute_multi_agent_plan = AsyncMock(side_effect=OSError("workspace unavailable"))
+
+    await bot._execute_pending_multi_plan_impl(SimpleNamespace(), "456")
+
+    bot._execute_multi_agent_plan.assert_awaited_once()
+    bot._clear_pending_multi_plan.assert_called_once_with("456")
+    response = bot._reply_logged.await_args.args[1]
+    assert "No agent was started" in response
+    assert "approve a new plan" in response
+
+
+@pytest.mark.asyncio
 async def test_text_confirmation_refuses_hidden_commands():
     bot = LightClawBot.__new__(LightClawBot)
     bot._session_id_from_update = lambda _update: "456"

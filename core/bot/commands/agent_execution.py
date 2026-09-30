@@ -202,6 +202,15 @@ class CommandsAgentExecutionMixin:
             if self._active_run_ids_by_session.get(session_id) == run_id:
                 self._active_run_ids_by_session.pop(session_id, None)
             raise
+        except Exception:
+            if getattr(self, "_active_run_ids_by_session", {}).get(session_id) == run_id:
+                raise
+            log.exception("Multi-agent run failed before worker execution")
+            await self._reply_logged(
+                update,
+                "⚠️ Could not prepare the approved run. No agent was started. "
+                "Create and approve a new plan to retry.",
+            )
 
     def _release_multi_run_tracking(self, session_id: str, run_id: str) -> None:
         self._active_worker_tasks_by_run.pop(run_id, None)
