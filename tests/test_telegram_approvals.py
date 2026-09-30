@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import stat
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -1003,6 +1004,60 @@ async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_p
     assert worker_cleaned.is_set()
     assert heartbeat_holder[0].cancelled()
     assert "456" not in bot._active_run_ids_by_session
+    bot.jobs.close()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_multi_workspace_creation_removes_late_owned_directory(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(root))
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_multi_plan_ttl_sec = 900
+    bot._set_pending_multi_plan(
+        "456",
+        {
+            "goal": "cancel during workspace creation",
+            "workers": [("builder", "codex"), ("reviewer", "claude")],
+            "plan_payload": {"workers": []},
+        },
+    )
+    bot._active_run_ids_by_session = {}
+    bot._active_run_tasks_by_session = {}
+    bot._active_worker_tasks_by_run = {}
+    bot._active_run_heartbeats_by_run = {}
+    bot._reply_logged = AsyncMock()
+    started = threading.Event()
+    release = threading.Event()
+    from core.bot.delegation.workspace import register_task_workspace
+
+    def delayed_register(workspace_root, candidate, goal):
+        started.set()
+        assert release.wait(timeout=5)
+        register_task_workspace(workspace_root, candidate, goal)
+
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.register_task_workspace", delayed_register
+    )
+    execution = asyncio.create_task(
+        bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+    )
+    assert await asyncio.to_thread(started.wait, 5)
+    execution.cancel()
+    await asyncio.sleep(0)
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await execution
+
+    assert [path.name for path in root.iterdir()] == [".lightclaw-meta"]
+    metadata = list((root / ".lightclaw-meta").glob("*.json"))
+    assert len(metadata) == 1
+    assert json.loads(metadata[0].read_text(encoding="utf-8"))["state"] == "undone"
     bot.jobs.close()
 
 

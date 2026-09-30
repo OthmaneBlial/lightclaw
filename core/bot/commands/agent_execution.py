@@ -16,9 +16,63 @@ from ...jobs import JobConflictError, JobStateError
 from ...logging_setup import log
 from ...markdown import _escape_html
 from ...receipts import write_receipt
+from ...workspaces import undo_owned_task
+
+
+async def _to_thread_completion(function, *args, **kwargs):
+    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.shield(task)
+        except Exception:
+            log.exception("Off-thread operation failed during cancellation")
+        raise
 
 
 class CommandsAgentExecutionMixin:
+    async def _cleanup_unclaimed_multi_workspace(self, run_id: str, workspace: Path) -> None:
+        try:
+            await _to_thread_completion(self.jobs.get_job, run_id)
+        except JobStateError:
+            try:
+                await _to_thread_completion(
+                    undo_owned_task,
+                    self.config.workspace_path,
+                    workspace.name,
+                    apply=True,
+                )
+            except Exception:
+                log.exception("Could not remove unclaimed multi-agent workspace %s", workspace)
+        except Exception:
+            log.exception(
+                "Could not establish durable ownership of multi-agent workspace %s; preserving it",
+                workspace,
+            )
+
+    async def _create_multi_workspace(self, goal: str, run_id: str) -> Path:
+        creation = asyncio.create_task(asyncio.to_thread(self._create_task_workspace, goal))
+        try:
+            return await asyncio.shield(creation)
+        except asyncio.CancelledError:
+            try:
+                workspace = await asyncio.shield(creation)
+            except Exception:
+                log.exception("Multi-agent workspace creation failed during cancellation")
+            else:
+                await self._cleanup_unclaimed_multi_workspace(run_id, workspace)
+            raise
+
+    async def _await_multi_preflight_thread(
+        self, run_id: str, workspace: Path, function, *args
+    ):
+        try:
+            return await _to_thread_completion(function, *args)
+        except asyncio.CancelledError:
+            await self._cleanup_unclaimed_multi_workspace(run_id, workspace)
+            raise
+
     async def _evaluate_multi_worker_acceptance_off_thread(
         self,
         workspace: Path,
@@ -229,16 +283,20 @@ class CommandsAgentExecutionMixin:
     ):
         run_started_clock = time.monotonic()
         run_started_at = self._utc_now()
-        multi_workspace = await asyncio.to_thread(self._create_task_workspace, goal)
+        multi_workspace = await self._create_multi_workspace(goal, run_id)
         multi_workspace_label = self._workspace_rel_label(multi_workspace)
-        agents_path = await asyncio.to_thread(
+        agents_path = await self._await_multi_preflight_thread(
+            run_id,
+            multi_workspace,
             self._write_agents_plan_file, multi_workspace, plan_payload
         )
 
         handoff_dir = multi_workspace / "handoff"
         handoff_dir.mkdir(parents=True, exist_ok=True)
         try:
-            checkpoint = await asyncio.to_thread(
+            checkpoint = await self._await_multi_preflight_thread(
+                run_id,
+                multi_workspace,
                 initialize_artifact_repository,
                 multi_workspace,
                 run_id,
@@ -246,11 +304,14 @@ class CommandsAgentExecutionMixin:
         except ArtifactError as exc:
             await self._reply_logged(
                 update,
-                f"🛑 Could not create the isolated Git checkpoint: {_escape_html(str(exc))}",
+                f"🛑 Could not create the isolated Git checkpoint: {_escape_html(str(exc))}\n"
+                f"Owned workspace preserved for inspection: <code>{_escape_html(multi_workspace_label)}</code>",
                 parse_mode=ParseMode.HTML,
             )
             return
-        before_multi = await asyncio.to_thread(
+        before_multi = await self._await_multi_preflight_thread(
+            run_id,
+            multi_workspace,
             self._snapshot_workspace_state, multi_workspace
         )
 
@@ -273,9 +334,6 @@ class CommandsAgentExecutionMixin:
                 parse_mode=ParseMode.HTML,
             )
             worker_msgs.append(worker_msg)
-
-        def _is_success_result(worker_result: str) -> bool:
-            return self._delegation_result_state(worker_result) == "success"
 
         worker_contracts = plan_payload.get("workers")
         contract_list = worker_contracts if isinstance(worker_contracts, list) else []
@@ -336,7 +394,7 @@ class CommandsAgentExecutionMixin:
                 }
             )
         try:
-            await asyncio.to_thread(
+            await _to_thread_completion(
                 self.jobs.create_job,
                 workspace=multi_workspace,
                 session_id=session_id,
@@ -351,7 +409,7 @@ class CommandsAgentExecutionMixin:
                 status="queued",
                 run_id=run_id,
             )
-            claimed_job = await asyncio.to_thread(
+            claimed_job = await _to_thread_completion(
                 self.jobs.claim_next,
                 workspace=multi_workspace,
                 worker_pid=None,
@@ -477,7 +535,7 @@ class CommandsAgentExecutionMixin:
                         }
                     )
 
-                runtime_ok = _is_success_result(result)
+                runtime_ok = self._delegation_result_state(result) == "success"
                 handoff_data: dict[str, Any] = {}
                 if runtime_ok:
                     acceptance_ok, acceptance_failures, handoff_data = await self._evaluate_multi_worker_acceptance_off_thread(
