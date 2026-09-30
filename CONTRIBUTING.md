@@ -119,8 +119,9 @@ platform resolution.
 
 It checks lint, generated provider/architecture contracts, runtime budgets, the safe-skill
 fixture, tracked Markdown links and anchors, the full test suite, package construction, and
-installed wheel data files. CI adds the supported OS/Python matrix, coverage evidence,
-dependency review, and clean-wheel smoke tests.
+installed wheel data files. The disabled `.github/workflows/ci.yml` defines a supported
+OS/Python matrix, coverage evidence, dependency review, and clean-wheel smoke tests, but GitHub
+does not currently run those checks on pushes or pull requests.
 
 Check documentation links alone with `python scripts/check_doc_links.py`. Fix a missing-file
 error by correcting the path relative to its Markdown file or adding the intended tracked file.
