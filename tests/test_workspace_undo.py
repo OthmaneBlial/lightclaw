@@ -1,16 +1,35 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
 from core.workspaces import (
     WorkspaceSafetyError,
+    capture_git_checkpoint,
     register_task_workspace,
     resolve_owned_task,
     undo_owned_task,
     validate_workspace_root,
 )
+
+
+def test_git_checkpoint_uses_secret_free_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
+    monkeypatch.setenv("LIGHTCLAW_TEST_SECRET", "provider-secret")
+    run = Mock(return_value=subprocess.CompletedProcess([], 1, "", ""))
+    monkeypatch.setattr("core.workspaces.subprocess.run", run)
+
+    assert capture_git_checkpoint(tmp_path)["is_git"] is False
+
+    child_env = run.call_args.kwargs["env"]
+    assert "TELEGRAM_BOT_TOKEN" not in child_env
+    assert "LIGHTCLAW_TEST_SECRET" not in child_env
+    assert child_env["LIGHTCLAW_DELEGATED"] == "1"
 
 
 def test_owned_task_undo_is_dry_run_by_default_and_scoped(tmp_path: Path):

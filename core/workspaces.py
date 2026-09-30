@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from .fs import read_json_object
+from .security import delegated_process_env
 
 METADATA_DIRNAME = ".lightclaw-meta"
 TASK_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$")
@@ -83,7 +84,7 @@ def capture_git_checkpoint(workspace: Path) -> dict[str, object]:
             text=True,
             capture_output=True,
             timeout=5,
-            check=False,
+            check=False, env=delegated_process_env(),
         )
 
     try:
