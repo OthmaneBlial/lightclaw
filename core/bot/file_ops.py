@@ -26,10 +26,12 @@ def _read_chat_file(workspace: Path, relative: str) -> str:
         raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE) from exc
 
 
-def _write_workspace_text(workspace: Path, relative: str, content: str) -> None:
+def _write_workspace_text(
+    workspace: Path, relative: str, content: str, *, create_only: bool = False
+) -> None:
     if len(content) > MAX_CHAT_FILE_BYTES or len(content.encode("utf-8")) > MAX_CHAT_FILE_BYTES:
         raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE)
-    atomic_write_text_at(workspace, relative, content)
+    atomic_write_text_at(workspace, relative, content, create_only=create_only)
 
 
 class BotFileOpsMixin:
@@ -307,7 +309,7 @@ class BotFileOpsMixin:
                 return f"[Save failed: {rel_path}]"
 
             try:
-                _write_workspace_text(workspace, rel_path, content)
+                _write_workspace_text(workspace, rel_path, content, create_only=before is None)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Save failed: {rel_path}]"

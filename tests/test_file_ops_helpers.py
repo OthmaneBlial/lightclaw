@@ -79,13 +79,13 @@ async def test_file_write_rejects_parent_swapped_to_symlink_before_write(
     write = file_ops._write_workspace_text
     swapped = False
 
-    def swap_then_write(root, relative, content):
+    def swap_then_write(root, relative, content, **kwargs):
         nonlocal swapped
         if relative == "nested/file.txt" and not swapped:
             swapped = True
             nested.rename(workspace / "moved-nested")
             nested.symlink_to(outside, target_is_directory=True)
-        return write(root, relative, content)
+        return write(root, relative, content, **kwargs)
 
     monkeypatch.setattr(file_ops, "_write_workspace_text", swap_then_write)
 

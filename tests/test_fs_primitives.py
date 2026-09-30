@@ -149,6 +149,25 @@ def test_workspace_bounded_reader_rejects_named_pipe(tmp_path):
         read_text_bounded_at(workspace, "pipe", 100)
 
 
+def test_workspace_create_does_not_replace_file_that_appears_at_commit(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    destination = workspace / "new.txt"
+    link = os.link
+
+    def create_user_file_before_link(source, target, **kwargs):
+        destination.write_text("user content", encoding="utf-8")
+        return link(source, target, **kwargs)
+
+    monkeypatch.setattr("core.fs.os.link", create_user_file_before_link)
+
+    with pytest.raises(FileExistsError):
+        atomic_write_text_at(workspace, "new.txt", "model content", create_only=True)
+
+    assert destination.read_text(encoding="utf-8") == "user content"
+    assert not list(workspace.glob(".new.txt.*.tmp"))
+
+
 def test_json_reader_rejects_dangling_symlink_instead_of_using_default(tmp_path):
     target = tmp_path / "missing-state.json"
     linked = tmp_path / "state.json"

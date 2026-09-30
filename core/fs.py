@@ -138,6 +138,7 @@ def atomic_write_text_at(
     relative: str | Path,
     content: str,
     *,
+    create_only: bool = False,
     encoding: str = "utf-8",
 ) -> None:
     """Atomically write beneath a workspace using symlink-safe directory handles."""
@@ -152,6 +153,8 @@ def atomic_write_text_at(
         except FileNotFoundError:
             mode = 0o600
         else:
+            if create_only:
+                raise FileExistsError(errno.EEXIST, "workspace file appeared before creation")
             if stat.S_ISLNK(current.st_mode):
                 raise OSError(errno.ELOOP, "refusing to replace a symlink")
             if not stat.S_ISREG(current.st_mode):
@@ -172,22 +175,32 @@ def atomic_write_text_at(
             os.fchmod(handle.fileno(), mode)
             os.fsync(handle.fileno())
 
-        try:
-            current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-        except FileNotFoundError:
-            pass
+        if create_only:
+            os.link(
+                temp_name,
+                name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
+            os.unlink(temp_name, dir_fd=directory_fd)
         else:
-            if stat.S_ISLNK(current.st_mode):
-                raise OSError(errno.ELOOP, "refusing to replace a symlink")
-            if not stat.S_ISREG(current.st_mode):
-                raise OSError(errno.EINVAL, "workspace target is not a regular file")
+            try:
+                current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                pass
+            else:
+                if stat.S_ISLNK(current.st_mode):
+                    raise OSError(errno.ELOOP, "refusing to replace a symlink")
+                if not stat.S_ISREG(current.st_mode):
+                    raise OSError(errno.EINVAL, "workspace target is not a regular file")
 
-        os.replace(
-            temp_name,
-            name,
-            src_dir_fd=directory_fd,
-            dst_dir_fd=directory_fd,
-        )
+            os.replace(
+                temp_name,
+                name,
+                src_dir_fd=directory_fd,
+                dst_dir_fd=directory_fd,
+            )
         temp_name = None
         try:
             os.fsync(directory_fd)
