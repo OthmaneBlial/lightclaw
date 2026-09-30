@@ -16,42 +16,21 @@ from ...jobs import JobConflictError, JobStateError
 from ...logging_setup import log
 from ...markdown import _escape_html
 from ...receipts import write_receipt
-from ...workspaces import undo_owned_task
 from ..delegation.workspace import await_thread_completion
 
 
 class CommandsAgentExecutionMixin:
-    async def _cleanup_unclaimed_multi_workspace(self, run_id: str, workspace: Path) -> None:
-        try:
-            await await_thread_completion(self.jobs.get_job, run_id)
-        except JobStateError:
-            try:
-                await await_thread_completion(
-                    undo_owned_task,
-                    self.config.workspace_path,
-                    workspace.name,
-                    apply=True,
-                )
-            except Exception:
-                log.exception("Could not remove unclaimed multi-agent workspace %s", workspace)
-        except Exception:
-            log.exception(
-                "Could not establish durable ownership of multi-agent workspace %s; preserving it",
-                workspace,
-            )
-
     async def _await_multi_preflight_thread(
         self, run_id: str, workspace: Path, function, *args, **kwargs
     ):
-        try:
-            return await await_thread_completion(function, *args, **kwargs)
-        except asyncio.CancelledError:
-            await self._cleanup_unclaimed_multi_workspace(run_id, workspace)
-            raise
-        except Exception as exc:
-            if not isinstance(exc, ArtifactError):
-                await self._cleanup_unclaimed_multi_workspace(run_id, workspace)
-            raise
+        return await self._await_task_workspace_preflight(
+            workspace,
+            function,
+            *args,
+            run_id=run_id,
+            job_store=self.jobs,
+            **kwargs,
+        )
 
     async def _evaluate_multi_worker_acceptance_off_thread(
         self,

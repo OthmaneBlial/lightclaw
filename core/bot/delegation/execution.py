@@ -13,24 +13,19 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ...artifacts import ArtifactError, create_patch_bundle, initialize_artifact_repository
+from ...artifacts import ArtifactError, create_patch_bundle
 from ...jobs import JobStateError
 from ...logging_setup import log
 from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
-from ...workspaces import capture_git_checkpoint, ensure_private_workspace_dir
 from .streams import BoundedStreamCapture
+from .workspace import await_thread_completion
 
 
 class DelegationExecutionMixin:
     @staticmethod
     def _utc_now() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-    def _receipt_output_dir(self, run_id: str) -> Path:
-        return ensure_private_workspace_dir(
-            self.config.workspace_path, ".lightclaw-meta", "receipts", run_id
-        )
 
     @staticmethod
     def _strip_ansi(text: str) -> str:
@@ -952,26 +947,20 @@ class DelegationExecutionMixin:
         if profile not in {"observe", "workspace-write", "trusted-command"}:
             profile = "workspace-write"
 
-        target_workspace: Path
-        if workspace_dir is None:
-            target_workspace = await self._create_task_workspace_safely(task)
-        else:
-            target_workspace = Path(workspace_dir).expanduser().resolve()
-            target_workspace.mkdir(parents=True, exist_ok=True)
+        target_workspace, owns_workspace = await self._resolve_task_workspace(task, workspace_dir)
         workspace_label = self._workspace_rel_label(target_workspace)
         started_at = self._utc_now()
         run_id = f"run-{int(time.time())}-{secrets.token_hex(4)}"
-        if initialize_artifact:
-            try:
-                checkpoint = await asyncio.to_thread(
-                    initialize_artifact_repository,
-                    target_workspace,
-                    run_id,
-                )
-            except ArtifactError as exc:
-                return f"⚠️ Could not create the isolated Git checkpoint: {exc}"
-        else:
-            checkpoint = await asyncio.to_thread(capture_git_checkpoint, target_workspace)
+        try:
+            checkpoint = await self._prepare_task_workspace_checkpoint(
+                target_workspace,
+                run_id,
+                initialize_artifact=initialize_artifact,
+                owns_workspace=owns_workspace,
+            )
+        except ArtifactError as exc:
+            return f"⚠️ Could not create the isolated Git checkpoint: {exc}\n" \
+                f"Task workspace preserved for inspection: {workspace_label}"
         for attribute in (
             "_active_run_ids_by_session",
             "_active_run_tasks_by_session",
@@ -996,7 +985,7 @@ class DelegationExecutionMixin:
                 }
             ]
             try:
-                durable = await asyncio.to_thread(
+                durable = await await_thread_completion(
                     durable_store.create_job,
                     workspace=target_workspace,
                     session_id=session_id,
@@ -1010,7 +999,7 @@ class DelegationExecutionMixin:
                     max_retries=0,
                     run_id=run_id,
                 )
-                claimed = await asyncio.to_thread(
+                claimed = await await_thread_completion(
                     durable_store.claim_next,
                     workspace=target_workspace,
                     worker_pid=os.getpid(),
@@ -1021,7 +1010,7 @@ class DelegationExecutionMixin:
                 current_run_task = asyncio.current_task()
                 if current_run_task:
                     self._active_run_tasks_by_session[session_id] = current_run_task
-                await asyncio.to_thread(
+                await await_thread_completion(
                     durable_store.update_lane,
                     run_id,
                     "delegation",
@@ -1046,24 +1035,41 @@ class DelegationExecutionMixin:
                             return
 
                 heartbeat_task = asyncio.create_task(durable_heartbeat())
+            except asyncio.CancelledError:
+                await self._cancel_unstarted_delegation(
+                    durable_store,
+                    session_id,
+                    run_id,
+                    target_workspace,
+                    owns_workspace=owns_workspace,
+                )
+                raise
             except JobStateError as exc:
+                await self._cancel_unstarted_delegation(
+                    durable_store,
+                    session_id,
+                    run_id,
+                    target_workspace,
+                    owns_workspace=owns_workspace,
+                )
                 return f"⚠️ Durable job control refused the run: {exc}"
 
-        if progress_cb:
-            try:
-                await progress_cb(
-                    (
-                        f"🧠 {agent} started. I'll post summarized progress about every "
-                        f"{progress_interval}s.\n"
-                        f"📁 Task workspace: `{workspace_label}`\n"
-                        f"🔐 Capability: `{profile}`"
-                    )
-                )
-            except Exception:
-                pass
-
-        before = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
         try:
+            if progress_cb:
+                try:
+                    await progress_cb(
+                        (
+                            f"🧠 {agent} started. I'll post summarized progress about every "
+                            f"{progress_interval}s.\n"
+                            f"📁 Task workspace: `{workspace_label}`\n"
+                            f"🔐 Capability: `{profile}`"
+                        )
+                    )
+                except Exception:
+                    pass
+            before = await await_thread_completion(
+                self._snapshot_workspace_state, target_workspace
+            )
             result = await self._invoke_local_agent_streaming(
                 agent=agent,
                 task=task,

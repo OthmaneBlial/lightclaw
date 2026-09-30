@@ -7,9 +7,13 @@ import re
 import time
 from pathlib import Path
 
+from ...artifacts import ArtifactError, initialize_artifact_repository
 from ...fs import sha256_file
+from ...jobs import JobStateError
 from ...logging_setup import log
 from ...workspaces import (
+    capture_git_checkpoint,
+    ensure_private_workspace_dir,
     register_task_workspace,
     undo_owned_task,
     validate_workspace_root,
@@ -29,6 +33,107 @@ async def await_thread_completion(function, *args, **kwargs):
 
 
 class DelegationWorkspaceMixin:
+    async def _resolve_task_workspace(
+        self, goal_text: str, workspace_dir: Path | str | None
+    ) -> tuple[Path, bool]:
+        if workspace_dir is None:
+            return await self._create_task_workspace_safely(goal_text), True
+        target = Path(workspace_dir).expanduser().resolve()
+        target.mkdir(parents=True, exist_ok=True)
+        return target, False
+
+    async def _cleanup_unclaimed_task_workspace(
+        self, workspace: Path, *, run_id: str | None = None, job_store=None
+    ) -> None:
+        if job_store is not None and run_id:
+            try:
+                await await_thread_completion(job_store.get_job, run_id)
+            except JobStateError:
+                pass
+            except Exception:
+                log.exception("Could not establish durable ownership of task workspace %s", workspace)
+                return
+            else:
+                return
+        try:
+            await await_thread_completion(
+                undo_owned_task,
+                self.config.workspace_path,
+                workspace.name,
+                apply=True,
+            )
+        except Exception:
+            log.exception("Could not remove unclaimed task workspace %s", workspace)
+
+    async def _await_task_workspace_preflight(
+        self,
+        workspace: Path,
+        function,
+        *args,
+        run_id: str | None = None,
+        job_store=None,
+        **kwargs,
+    ):
+        try:
+            return await await_thread_completion(function, *args, **kwargs)
+        except asyncio.CancelledError:
+            await self._cleanup_unclaimed_task_workspace(
+                workspace, run_id=run_id, job_store=job_store
+            )
+            raise
+        except Exception as exc:
+            if not isinstance(exc, ArtifactError):
+                await self._cleanup_unclaimed_task_workspace(
+                    workspace, run_id=run_id, job_store=job_store
+                )
+            raise
+
+    async def _prepare_task_workspace_checkpoint(
+        self,
+        workspace: Path,
+        run_id: str,
+        *,
+        initialize_artifact: bool,
+        owns_workspace: bool,
+    ):
+        function = initialize_artifact_repository if initialize_artifact else capture_git_checkpoint
+        args = (workspace, run_id) if initialize_artifact else (workspace,)
+        if owns_workspace:
+            return await self._await_task_workspace_preflight(workspace, function, *args)
+        return await await_thread_completion(function, *args)
+
+    async def _cancel_unstarted_delegation(
+        self, store, session_id: str, run_id: str, workspace: Path, *, owns_workspace: bool
+    ) -> None:
+        try:
+            job = await await_thread_completion(store.get_job, run_id)
+        except JobStateError:
+            if owns_workspace:
+                await self._cleanup_unclaimed_task_workspace(workspace)
+            return
+        except Exception:
+            log.exception("Could not inspect canceled delegation setup %s", run_id)
+            return
+
+        status = str(job["status"])
+        try:
+            if status == "running":
+                await await_thread_completion(store.request_cancel, run_id)
+            for lane in job["lanes"]:
+                if lane["status"] in {"queued", "running"}:
+                    await await_thread_completion(
+                        store.update_lane, run_id, str(lane["label"]), "canceled"
+                    )
+            if status in {"queued", "awaiting_approval", "paused", "stalled"}:
+                await await_thread_completion(store.request_cancel, run_id)
+            elif status in {"running", "cancel_requested"}:
+                await await_thread_completion(store.mark_canceled, run_id)
+        except JobStateError:
+            log.exception("Could not cancel unstarted delegation job %s", run_id)
+        finally:
+            if self._active_run_ids_by_session.get(session_id) == run_id:
+                self._active_run_ids_by_session.pop(session_id, None)
+
     @staticmethod
     def _slugify_goal_name(text: str, max_len: int = 56) -> str:
         slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
@@ -72,15 +177,7 @@ class DelegationWorkspaceMixin:
             except Exception:
                 log.exception("Task workspace creation failed during cancellation")
             else:
-                try:
-                    await await_thread_completion(
-                        undo_owned_task,
-                        self.config.workspace_path,
-                        workspace.name,
-                        apply=True,
-                    )
-                except Exception:
-                    log.exception("Could not remove canceled task workspace %s", workspace)
+                await self._cleanup_unclaimed_task_workspace(workspace)
             raise
 
     def _workspace_rel_label(self, workspace: Path) -> str:
@@ -89,6 +186,11 @@ class DelegationWorkspaceMixin:
             return workspace.resolve().relative_to(root).as_posix()
         except Exception:
             return workspace.resolve().as_posix()
+
+    def _receipt_output_dir(self, run_id: str) -> Path:
+        return ensure_private_workspace_dir(
+            self.config.workspace_path, ".lightclaw-meta", "receipts", run_id
+        )
 
     def _build_delegation_prompt(self, task: str, workspace: Path | None = None) -> str:
         target_workspace = (workspace or Path(self.config.workspace_path).resolve()).resolve()

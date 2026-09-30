@@ -3,8 +3,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
 
 from core.bot import LightClawBot
 from core.jobs import JobStore
@@ -71,3 +75,109 @@ def test_real_delegation_path_emits_private_structured_receipt(
     assert "[REDACTED]" in receipt["original_goal"]
     assert "sk-receipt-fixture" not in receipt_path.read_text(encoding="utf-8")
     assert "Receipt:" in result
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_single_run_job_creation_cancels_durable_row(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    started = threading.Event()
+    release = threading.Event()
+    create_job = bot.jobs.create_job
+
+    def delayed_create_job(*args, **kwargs):
+        job = create_job(*args, **kwargs)
+        started.set()
+        assert release.wait(timeout=5)
+        return job
+
+    monkeypatch.setattr(bot.jobs, "create_job", delayed_create_job)
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    bot._invoke_local_agent_streaming = AsyncMock()
+    execution = asyncio.create_task(
+        bot._run_local_agent_task("456", "codex", "cancel during durable setup")
+    )
+    try:
+        assert await asyncio.to_thread(started.wait, 5)
+        execution.cancel()
+        await asyncio.sleep(0)
+        release.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+
+        jobs = bot.jobs.list_jobs()
+        assert len(jobs) == 1
+        assert jobs[0]["status"] == "canceled"
+        assert jobs[0]["lanes"][0]["status"] == "canceled"
+        assert Path(str(jobs[0]["workspace"])).is_dir()
+        bot._invoke_local_agent_streaming.assert_not_awaited()
+        assert bot._active_run_ids_by_session == {}
+        assert bot._active_run_tasks_by_session == {}
+    finally:
+        release.set()
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_single_run_start_notice_cancels_job_and_heartbeat(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot._invoke_local_agent_streaming = AsyncMock()
+    notice_started = asyncio.Event()
+    never = asyncio.Event()
+
+    async def hold_start_notice(_text):
+        notice_started.set()
+        await never.wait()
+
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    execution = asyncio.create_task(
+        bot._run_local_agent_task(
+            "456", "codex", "cancel before local process start", progress_cb=hold_start_notice
+        )
+    )
+    try:
+        await asyncio.wait_for(notice_started.wait(), timeout=5)
+        execution.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+
+        job = bot.jobs.list_jobs()[0]
+        assert job["status"] == "canceled"
+        assert job["lanes"][0]["status"] == "canceled"
+        bot._invoke_local_agent_streaming.assert_not_awaited()
+        assert bot._active_run_ids_by_session == {}
+        assert bot._active_run_tasks_by_session == {}
+    finally:
+        bot.jobs.close()

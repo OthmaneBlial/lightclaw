@@ -8,7 +8,7 @@
   "highest_branch_functions": [
     {
       "branch_points": 98,
-      "line": 255,
+      "line": 234,
       "lines": 700,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -28,9 +28,9 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "branch_points": 74,
-      "line": 915,
-      "lines": 380,
+      "branch_points": 72,
+      "line": 910,
+      "lines": 391,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -92,7 +92,7 @@
     },
     {
       "branch_points": 47,
-      "line": 381,
+      "line": 376,
       "lines": 94,
       "name": "_ingest_claude_progress_obj",
       "path": "core/bot/delegation/execution.py"
@@ -106,7 +106,7 @@
     },
     {
       "branch_points": 42,
-      "line": 562,
+      "line": 557,
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
@@ -115,7 +115,7 @@
   "largest_functions": [
     {
       "branch_points": 98,
-      "line": 255,
+      "line": 234,
       "lines": 700,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -135,9 +135,9 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 74,
-      "line": 915,
-      "lines": 380,
+      "branch_points": 72,
+      "line": 910,
+      "lines": 391,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -171,7 +171,7 @@
     },
     {
       "branch_points": 42,
-      "line": 562,
+      "line": 557,
       "lines": 283,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1294,
+      "lines": 1300,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 954,
+      "lines": 933,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20601,
+  "runtime_lines": 20688,
   "schema_version": 1
 }

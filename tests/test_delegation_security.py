@@ -14,11 +14,12 @@ import pytest
 from core.bot.delegation.agents import DelegationAgentsMixin
 from core.bot.delegation.execution import DelegationExecutionMixin
 from core.bot.delegation.streams import BoundedStreamCapture
+from core.bot.delegation.workspace import DelegationWorkspaceMixin
 from core.jobs import JobStore
 from core.workspaces import WorkspaceSafetyError
 
 
-class ExecutionHarness(DelegationExecutionMixin):
+class ExecutionHarness(DelegationExecutionMixin, DelegationWorkspaceMixin):
     def __init__(self):
         self.config = SimpleNamespace(
             local_agent_capability_profile="workspace-write",
