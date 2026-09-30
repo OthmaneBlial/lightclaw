@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -366,7 +367,7 @@ async def test_timeout_and_non_retryable_errors_are_normalized():
             timeout_seconds=0.01,
         )
     assert timeout_error.value.kind == ProviderErrorKind.TIMEOUT
-    assert timeout_error.value.retryable is True
+    assert timeout_error.value.retryable is False
 
     auth_adapter = _PolicyAdapter(failures=[_StatusError(401, "bad credential")])
     auth_client = LLMClient(
@@ -382,6 +383,89 @@ async def test_timeout_and_non_retryable_errors_are_normalized():
     assert auth_error.value.kind == ProviderErrorKind.AUTHENTICATION
     assert auth_error.value.retryable is False
     assert auth_adapter.calls == 1
+
+
+async def test_provider_raised_timeout_retries_after_attempt_completes(monkeypatch):
+    adapter = _PolicyAdapter(failures=[TimeoutError("read timeout")])
+    client = LLMClient(
+        Config(
+            llm_provider="openai",
+            llm_model="fixture-model",
+            provider_max_retries=1,
+        ),
+        adapter=adapter,
+    )
+
+    async def no_delay(_seconds):
+        return None
+
+    monkeypatch.setattr("core.llm.client.asyncio.sleep", no_delay)
+
+    result = await client.complete([{"role": "user", "content": "hello"}])
+
+    assert result.text == "recovered"
+    assert result.attempts == 2
+    assert adapter.calls == 2
+
+
+async def test_client_deadline_does_not_overlap_blocking_provider_calls():
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    lock = threading.Lock()
+    calls = 0
+    active = 0
+    maximum_active = 0
+
+    class BlockingAdapter:
+        name = "openai"
+        model = "fixture-model"
+
+        async def complete(self, _request):
+            nonlocal calls
+            calls += 1
+
+            def blocking_call():
+                nonlocal active, maximum_active
+                with lock:
+                    active += 1
+                    maximum_active = max(maximum_active, active)
+                started.set()
+                release.wait(2)
+                with lock:
+                    active -= 1
+                    if not active:
+                        finished.set()
+                return ProviderResponse(self.name, self.model, "late", ProviderUsage())
+
+            return await asyncio.to_thread(blocking_call)
+
+        def close(self):
+            return None
+
+    client = LLMClient(
+        Config(
+            llm_provider="openai",
+            llm_model="fixture-model",
+            provider_max_retries=2,
+        ),
+        adapter=BlockingAdapter(),
+    )
+    try:
+        with pytest.raises(ProviderError) as error:
+            await client.complete(
+                [{"role": "user", "content": "hello"}],
+                timeout_seconds=0.05,
+            )
+
+        assert error.value.kind == ProviderErrorKind.TIMEOUT
+        assert error.value.retryable is False
+        assert calls == 1
+        assert maximum_active == 1
+        assert await asyncio.to_thread(started.wait, 1)
+    finally:
+        release.set()
+        assert await asyncio.to_thread(finished.wait, 1)
 
 
 async def test_provider_error_redacts_configured_secret(caplog):

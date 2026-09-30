@@ -220,7 +220,7 @@ def _format_legacy_error(error: ProviderError) -> str:
     if error.kind == ProviderErrorKind.RATE_LIMIT:
         return prefix + "rate limit hit. Please retry in a moment."
     if error.kind == ProviderErrorKind.TIMEOUT:
-        return prefix + "request timed out after bounded retries."
+        return prefix + "request timed out. Check provider status before retrying."
     if error.kind == ProviderErrorKind.QUOTA:
         return prefix + "account quota or balance is exhausted."
     if error.kind == ProviderErrorKind.AUTHENTICATION:
@@ -375,21 +375,20 @@ class LLMClient:
 
         last_error: ProviderError | None = None
         for attempt in range(1, self.retry_policy.max_attempts + 1):
+            adapter_task = asyncio.create_task(self._adapter.complete(request))
             try:
                 response = await asyncio.wait_for(
-                    self._adapter.complete(request),
+                    adapter_task,
                     timeout=timeout,
                 )
                 response = replace(response, attempts=attempt)
                 self.last_response = response
                 return response
-            except asyncio.TimeoutError:
-                last_error = ProviderError(
-                    provider=self.provider_name,
-                    kind=ProviderErrorKind.TIMEOUT,
-                    detail=f"request exceeded {timeout:g} seconds",
-                    retryable=True,
-                )
+            except asyncio.TimeoutError as error:
+                last_error = _normalize_error(self.provider_name, error, self.config)
+                if adapter_task.cancelled():
+                    # Canceling an SDK thread wrapper does not stop provider I/O.
+                    last_error.retryable = False
             except ProviderError as error:
                 last_error = error
             except Exception as error:
