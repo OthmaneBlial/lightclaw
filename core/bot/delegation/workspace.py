@@ -2,12 +2,30 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from pathlib import Path
 
 from ...fs import sha256_file
-from ...workspaces import register_task_workspace, validate_workspace_root
+from ...logging_setup import log
+from ...workspaces import (
+    register_task_workspace,
+    undo_owned_task,
+    validate_workspace_root,
+)
+
+
+async def await_thread_completion(function, *args, **kwargs):
+    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await asyncio.shield(task)
+        except Exception:
+            log.exception("Off-thread operation failed during cancellation")
+        raise
 
 
 class DelegationWorkspaceMixin:
@@ -43,6 +61,27 @@ class DelegationWorkspaceMixin:
                 pass
             raise
         return candidate
+
+    async def _create_task_workspace_safely(self, goal_text: str) -> Path:
+        creation = asyncio.create_task(asyncio.to_thread(self._create_task_workspace, goal_text))
+        try:
+            return await asyncio.shield(creation)
+        except asyncio.CancelledError:
+            try:
+                workspace = await asyncio.shield(creation)
+            except Exception:
+                log.exception("Task workspace creation failed during cancellation")
+            else:
+                try:
+                    await await_thread_completion(
+                        undo_owned_task,
+                        self.config.workspace_path,
+                        workspace.name,
+                        apply=True,
+                    )
+                except Exception:
+                    log.exception("Could not remove canceled task workspace %s", workspace)
+            raise
 
     def _workspace_rel_label(self, workspace: Path) -> str:
         root = validate_workspace_root(self.config.workspace_path)

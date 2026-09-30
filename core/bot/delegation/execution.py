@@ -954,7 +954,7 @@ class DelegationExecutionMixin:
 
         target_workspace: Path
         if workspace_dir is None:
-            target_workspace = await asyncio.to_thread(self._create_task_workspace, task)
+            target_workspace = await self._create_task_workspace_safely(task)
         else:
             target_workspace = Path(workspace_dir).expanduser().resolve()
             target_workspace.mkdir(parents=True, exist_ok=True)
