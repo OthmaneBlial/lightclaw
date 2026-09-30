@@ -98,7 +98,8 @@ See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorizat
 
 ## 🧩 What is in the toolbox?
 
-- 📱 Telegram-first text and voice requests, plus terminal chat.
+- 📱 Telegram-first text and voice requests, plus terminal chat. Limits: 20 text messages and six
+  voice transcriptions per Telegram user per minute.
 - 🧭 Reviewed multi-agent plans with owned paths, dependencies, acceptance checks, and bounded repair.
 - 🧪 Codex and Claude profiles: `observe`, `workspace-write`, and `trusted-command`.
 - 🧾 Private JSON/Markdown receipts with commands, results, hashes, artifacts, and recovery context.

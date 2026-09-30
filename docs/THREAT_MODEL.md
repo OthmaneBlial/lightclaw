@@ -20,6 +20,7 @@ LightClaw memory and task workspaces are local by default. Model inference is no
 | Threat | Current control | Residual risk |
 |---|---|---|
 | Unauthorized Telegram user | Numeric allowlist fails closed; allowlisted accounts work only in private chats; public chat access requires an explicit acknowledgement; privileged commands are rate-limited | A compromised allowed Telegram account remains authorized |
+| Provider cost bursts | Text messages are limited to 20 per Telegram user per minute before model processing; voice transcription is limited to six requests per user per minute | Limits are process-local and reset on restart; use provider spending controls for account-wide limits |
 | Group chat data disclosure | Group chats are rejected in allowlisted mode because members share the conversation and approval state | The explicit public override permits group chats; every group member can see bot replies and interact with shared state |
 | Prompt injection | Human plan/privilege confirmation, restrictive capability profiles, bounded task workspaces | A model can still make harmful changes inside granted scope |
 | Secret theft by delegated worker | Minimal environment allowlist with relative `PATH` entries removed; credential redaction in logs/results; no parent environment copy | Secrets already stored in readable workspace files remain visible to a worker |

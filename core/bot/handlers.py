@@ -218,6 +218,9 @@ class BotHandlersMixin:
             return
         if not self.is_update_allowed(update):
             return
+        if self._privileged_rate_limited(update.effective_user.id, "message", limit=20):
+            await self._reply_logged(update, "⚠️ Too many text messages. Retry in about one minute.")
+            return
 
         await self._process_user_message(update, context, update.message.text)
 

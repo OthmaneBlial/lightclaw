@@ -133,6 +133,15 @@ def test_site_discloses_private_sqlite_file_permissions() -> None:
     assert "owner-only permissions before use" in llms
 
 
+def test_site_discloses_per_user_message_rate_limits() -> None:
+    html, _ = _document()
+    llms = (SITE / "llms.txt").read_text(encoding="utf-8")
+
+    assert "20 text messages" in html and "six voice transcriptions" in html
+    assert "20 per Telegram user per minute before model processing" in llms
+    assert "six requests per user per minute" in llms
+
+
 def test_readme_and_site_disclose_persistent_memory_retention_and_controls() -> None:
     html, _ = _document()
     llms = (SITE / "llms.txt").read_text(encoding="utf-8")

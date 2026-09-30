@@ -6,6 +6,8 @@ Allowlisted bots accept commands only in private Telegram chats because group me
 
 Plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps.
 
+Text requests are limited to 20 per Telegram user per minute before model processing. Voice transcription is limited to six requests per user per minute and 20 MB per file. Rate limits are process-local and reset on restart.
+
 Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.
 
 Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes one chat; global /wipe_memory erases saved chat memory across chats. A group confirmation lasts 90 seconds and must come from the initiating Telegram user.

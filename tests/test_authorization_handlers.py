@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -115,4 +115,22 @@ async def test_unsupported_attachments_are_not_sent_to_the_model(
 
     bot._reply_logged.assert_awaited_once()
     assert notice in bot._reply_logged.await_args.args[1]
+    bot._process_user_message.assert_not_awaited()
+
+
+async def test_text_rate_limit_rejects_before_model_processing():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = Mock(return_value=True)
+    bot._reply_logged = AsyncMock()
+    bot._process_user_message = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        message=SimpleNamespace(text="hello"),
+    )
+
+    await bot.handle_message(update, SimpleNamespace())
+
+    bot._privileged_rate_limited.assert_called_once_with(123, "message", limit=20)
+    assert "Too many text messages" in bot._reply_logged.await_args.args[1]
     bot._process_user_message.assert_not_awaited()
