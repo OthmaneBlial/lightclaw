@@ -127,7 +127,7 @@ class BotApprovalsMixin:
             ],
         ]
         if failed_lanes:
-            safe_label = re.sub(r"[^a-z0-9_-]", "", failed_lanes[0].lower())[:24]
+            safe_label = re.sub(r"[^a-z0-9_-]", "", failed_lanes[0].lower())[:32]
             if safe_label:
                 rows.insert(
                     1,

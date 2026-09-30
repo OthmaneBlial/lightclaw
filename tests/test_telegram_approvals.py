@@ -250,7 +250,9 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
     run_token = bot._run_action_token(run_id)
     result_data = [
         button.callback_data
-        for row in bot._inline_result_keyboard(run_id, ["builder"]).inline_keyboard
+        for row in bot._inline_result_keyboard(
+            run_id, ["a" + "b" * 31]
+        ).inline_keyboard
         for button in row
     ]
     assert {
@@ -261,8 +263,10 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
     assert {
         f"lc:run:diff:{run_token}",
         f"lc:run:accept:{run_token}",
-        f"lc:run:retry:{run_token}:builder",
     } <= set(result_data)
+    retry_action = f"lc:run:retry:{run_token}:a{'b' * 31}"
+    assert retry_action in result_data
+    assert len(retry_action.encode("utf-8")) <= 64
     cancel_data = [
         button.callback_data
         for row in bot._inline_cancel_keyboard(run_id).inline_keyboard
