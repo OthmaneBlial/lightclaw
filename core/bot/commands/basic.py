@@ -90,7 +90,7 @@ class CommandsBasicMixin:
         self._clear_pending_actions(session_id)
         self._invalidate_session_summary(session_id)
         self.memory.clear_session(session_id)
-        self._session_summaries.pop(session_id, None)
+        self._session_summaries.pop(self._summary_key(session_id), None)
         await self._reply_logged(
             update,
             "🗑️ Conversation cleared. Pending approvals and confirmations were discarded.\n"

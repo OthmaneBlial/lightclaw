@@ -50,11 +50,11 @@ class BotBaseMixin:
         self.start_time = time.time()
 
         # Per-session summaries (in-memory, persisted via memory.py)
-        self._session_summaries: dict[str, str] = {}
-        self._summary_generation_by_session: dict[str, int] = {}
+        self._session_summaries: dict[tuple[str, str, str], str] = {}
+        self._summary_generation_by_session: dict[tuple[str, str, str], int] = {}
         self._background_tasks: set[asyncio.Task] = set()
         # Lock to prevent concurrent summarization per session
-        self._summarizing: set[str] = set()
+        self._summarizing: set[tuple[str, str, str]] = set()
         # Global memory wipe confirmation uses the shared dual-clock approval contract.
         self._pending_wipe_confirm: dict[str, dict[str, object]] = {}
         # Track last successful file operation target per session.

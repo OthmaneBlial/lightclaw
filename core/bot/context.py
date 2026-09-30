@@ -8,6 +8,9 @@ from ..logging_setup import log
 
 
 class BotContextMixin:
+    def _summary_key(self, session_id: str) -> tuple[str, str, str]:
+        return (session_id, *self.memory.scope_for(session_id))
+
     @staticmethod
     def estimate_tokens(messages: list[dict]) -> int:
         """Estimate token count using a 2.5 chars/token heuristic."""
@@ -18,6 +21,7 @@ class BotContextMixin:
 
     async def maybe_summarize(self, session_id: str):
         """Trigger summarization if history is too long or token count too high."""
+        key = self._summary_key(session_id)
         if self._llm_backoff_active():
             return
 
@@ -29,15 +33,15 @@ class BotContextMixin:
         if len(recent) <= 20 and token_estimate <= threshold:
             return
 
-        if session_id in self._summarizing:
+        if key in self._summarizing:
             return
-        self._summarizing.add(session_id)
-        generation = self._summary_generation_by_session.get(session_id, 0)
+        self._summarizing.add(key)
+        generation = self._summary_generation_by_session.get(key, 0)
 
         try:
             await self._summarize_session(session_id, recent, generation)
         finally:
-            self._summarizing.discard(session_id)
+            self._summarizing.discard(key)
 
     async def _summarize_session(
         self, session_id: str, history: list[dict], generation: int
@@ -59,6 +63,7 @@ class BotContextMixin:
         if not valid:
             return
 
+        key = self._summary_key(session_id)
         existing_summary = self._get_session_summary(session_id)
 
         # Build summarization prompt
@@ -76,10 +81,10 @@ class BotContextMixin:
             )
             summary = self._sanitize_summary_for_prompt(summary)
             if summary and not self._is_provider_error_text(summary):
-                if generation != self._summary_generation_by_session.get(session_id, 0):
+                if generation != self._summary_generation_by_session.get(key, 0):
                     return
                 self.memory.set_summary(session_id, summary)
-                self._session_summaries[session_id] = summary
+                self._session_summaries[key] = summary
                 self._clear_llm_backoff()
                 if os.getenv("LIGHTCLAW_CHAT_MODE", "").strip() == "1":
                     log.debug(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")
@@ -92,20 +97,24 @@ class BotContextMixin:
             log.error(f"Summarization failed: {e}")
 
     def _invalidate_session_summary(self, session_id: str) -> None:
+        key = self._summary_key(session_id)
         generations = self._summary_generation_by_session
-        generations[session_id] = generations.get(session_id, 0) + 1
+        generations[key] = generations.get(key, 0) + 1
 
     def _invalidate_active_summaries(self) -> None:
-        for session_id in tuple(self._summarizing):
-            self._invalidate_session_summary(session_id)
+        for key in tuple(self._summarizing):
+            self._summary_generation_by_session[key] = (
+                self._summary_generation_by_session.get(key, 0) + 1
+            )
 
     def _get_session_summary(self, session_id: str) -> str:
         """Get the stored summary for a session."""
+        key = self._summary_key(session_id)
         # First check in-memory cache
-        if session_id in self._session_summaries:
-            summary = self._sanitize_summary_for_prompt(self._session_summaries[session_id])
+        if key in self._session_summaries:
+            summary = self._sanitize_summary_for_prompt(self._session_summaries[key])
             if self._is_provider_error_text(summary):
-                self._session_summaries.pop(session_id, None)
+                self._session_summaries.pop(key, None)
                 return ""
             return summary
         # Fall back to memory store

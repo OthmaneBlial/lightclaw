@@ -279,12 +279,13 @@ class MemoryStore:
             )
         return user, workspace
 
-    def _scope_for(
+    def scope_for(
         self,
         session_id: str | None,
         user_namespace: str | None = None,
         workspace_namespace: str | None = None,
     ) -> tuple[str, str]:
+        """Resolve the active user and workspace scope for a session."""
         if user_namespace is not None or workspace_namespace is not None:
             if user_namespace is None or workspace_namespace is None:
                 raise ValueError("both user and workspace namespaces are required")
@@ -357,7 +358,7 @@ class MemoryStore:
         stored = raw[:MAX_RECORD_CHARS]
         if len(raw) > MAX_RECORD_CHARS:
             stored += "\n[truncated by LightClaw memory limit]"
-        user, workspace = self._scope_for(
+        user, workspace = self.scope_for(
             session_id,
             user_namespace,
             workspace_namespace,
@@ -399,7 +400,7 @@ class MemoryStore:
         terms = list(dict.fromkeys(_tokenize(query)))[:MAX_QUERY_TERMS]
         if not terms:
             return []
-        user, workspace = self._scope_for(
+        user, workspace = self.scope_for(
             session_id,
             user_namespace,
             workspace_namespace,
@@ -487,7 +488,7 @@ class MemoryStore:
 
     def get_recent(self, session_id: str, limit: int = 20) -> list[dict[str, str]]:
         """Get chronological recent messages without crossing the bound scope."""
-        user, workspace = self._scope_for(session_id)
+        user, workspace = self.scope_for(session_id)
         with self._lock:
             rows = self.db.execute(
                 "SELECT role, content FROM interactions WHERE session_id = ? "
@@ -501,7 +502,7 @@ class MemoryStore:
         ]
 
     def get_summary(self, session_id: str) -> str:
-        user, workspace = self._scope_for(session_id)
+        user, workspace = self.scope_for(session_id)
         with self._lock:
             row = self.db.execute(
                 "SELECT summary FROM memory_summaries WHERE session_id = ? "
@@ -511,7 +512,7 @@ class MemoryStore:
         return str(row["summary"]) if row else ""
 
     def set_summary(self, session_id: str, summary: str) -> None:
-        user, workspace = self._scope_for(session_id)
+        user, workspace = self.scope_for(session_id)
         with self._lock, self.db:
             self.db.execute(
                 "INSERT INTO memory_summaries("
@@ -654,7 +655,7 @@ class MemoryStore:
         params: tuple[object, ...] = ()
         scoped = session_id is not None or user_namespace is not None or workspace_namespace is not None
         if scoped:
-            user, workspace = self._scope_for(
+            user, workspace = self.scope_for(
                 session_id,
                 user_namespace,
                 workspace_namespace,
@@ -701,7 +702,7 @@ class MemoryStore:
         apply: bool = False,
     ) -> dict[str, object]:
         """Preview or write an owner-only JSON export of one exact scope."""
-        user, workspace = self._scope_for(
+        user, workspace = self.scope_for(
             session_id,
             user_namespace,
             workspace_namespace,
@@ -744,7 +745,7 @@ class MemoryStore:
         identifiers = sorted({int(value) for value in record_ids if int(value) > 0})[:500]
         if not identifiers:
             raise ValueError("at least one positive memory record id is required")
-        user, workspace = self._scope_for(
+        user, workspace = self.scope_for(
             session_id,
             user_namespace,
             workspace_namespace,
@@ -786,7 +787,7 @@ class MemoryStore:
         apply: bool = False,
     ) -> dict[str, object]:
         """Preview or delete all interactions and summaries for one exact scope."""
-        user, workspace = self._scope_for(
+        user, workspace = self.scope_for(
             session_id,
             user_namespace,
             workspace_namespace,
@@ -821,7 +822,7 @@ class MemoryStore:
         return result
 
     def clear_session(self, session_id: str) -> None:
-        user, workspace = self._scope_for(session_id)
+        user, workspace = self.scope_for(session_id)
         with self._lock, self.db:
             self.db.execute(
                 "DELETE FROM interactions WHERE session_id = ? AND user_namespace = ? "
@@ -835,7 +836,7 @@ class MemoryStore:
             )
 
     def delete_delegation_transcripts(self, session_id: str) -> int:
-        user, workspace = self._scope_for(session_id)
+        user, workspace = self.scope_for(session_id)
         with self._lock, self.db:
             cursor = self.db.execute(
                 "DELETE FROM interactions WHERE session_id = ? AND user_namespace = ? "

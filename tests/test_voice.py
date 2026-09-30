@@ -183,7 +183,7 @@ async def test_clear_revokes_pending_actions_and_discards_inflight_voice(monkeyp
     bot._log_user_message = Mock()
     bot._privileged_rate_limited = Mock(return_value=False)
     bot._invalidate_session_summary = Mock()
-    bot._session_summaries = {"456": "old", "other": "keep"}
+    bot._session_summaries = {("456", "telegram-user:456", "/workspace"): "old", "other": "keep"}
     bot._summary_generation_by_session = {}
     bot._pending_wipe_confirm = {
         "456": {"user_id": 456, "expires_at": 10.0, "expires_monotonic": 10.0},
@@ -193,7 +193,10 @@ async def test_clear_revokes_pending_actions_and_discards_inflight_voice(monkeyp
     bot._pending_trusted_agent_run_by_session = {"other": {"task": "keep"}}
     bot._pending_voice_goal_by_session = {"other": {"text": "keep"}}
     bot._voice_request_ids_by_session = {"other": "keep"}
-    bot.memory = SimpleNamespace(clear_session=Mock())
+    bot.memory = SimpleNamespace(
+        clear_session=Mock(),
+        scope_for=Mock(return_value=("telegram-user:456", "/workspace")),
+    )
     bot._reply_logged = AsyncMock()
     transcription_started = asyncio.Event()
     finish_transcription = asyncio.Event()
