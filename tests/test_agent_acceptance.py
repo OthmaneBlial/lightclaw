@@ -5,12 +5,14 @@ import json
 import os
 import shlex
 import sys
+import threading
 import time
 from types import SimpleNamespace
 
 import pytest
 
 from core.bot import LightClawBot
+from core.jobs import JobStore
 
 
 def _acceptance(bot: LightClawBot, workspace):
@@ -179,6 +181,80 @@ async def test_acceptance_command_cancellation_kills_descendant_processes(tmp_pa
     await asyncio.sleep(1.6)
 
     assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process-group recovery requires POSIX")
+def test_stalled_recovery_kills_acceptance_command_group(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    plan = [
+        {
+            "label": "builder",
+            "depends_on": [],
+            "owned_paths": ["src"],
+            "idempotent": True,
+            "resumable": True,
+            "max_attempts": 1,
+        }
+    ]
+    job = store.create_job(
+        workspace=tmp_path,
+        session_id="fixture",
+        goal="acceptance recovery",
+        approved_scope="src only",
+        risk_level="low",
+        capability_profile="workspace-write",
+        plan=plan,
+        status="queued",
+    )
+    store.claim_next(workspace=tmp_path, worker_pid=999999)
+    marker = tmp_path / "acceptance-command-survived"
+    command = shlex.join(
+        [
+            sys.executable,
+            "-c",
+            "import pathlib,time;time.sleep(1.5);"
+            f"pathlib.Path({str(marker)!r}).write_text('survived')",
+        ]
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = store
+    result = {}
+
+    def run_command():
+        result["failure"] = bot._run_multi_acceptance_command(
+            tmp_path,
+            {"command": command, "timeout_sec": 10},
+            job_run_id=str(job["run_id"]),
+        )
+
+    worker = threading.Thread(target=run_command, daemon=True)
+    worker.start()
+    try:
+        deadline = time.monotonic() + 3
+        registered = None
+        while time.monotonic() < deadline:
+            with store._lock:
+                registered = store.db.execute(
+                    "SELECT 1 FROM job_process_groups WHERE run_id = ?",
+                    (job["run_id"],),
+                ).fetchone()
+            if registered:
+                break
+            time.sleep(0.02)
+        assert registered
+        assert store.recover_stalled() == [job["run_id"]]
+        worker.join(timeout=3)
+        assert not worker.is_alive()
+        time.sleep(1.6)
+        assert not marker.exists()
+        assert "failure" in result
+        assert store.db.execute(
+            "SELECT 1 FROM job_process_groups WHERE run_id = ?", (job["run_id"],)
+        ).fetchone() is None
+    finally:
+        store._stop_process_groups(str(job["run_id"]))
+        worker.join(timeout=3)
+        store.close()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="acceptance process groups require POSIX")

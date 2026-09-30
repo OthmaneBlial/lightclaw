@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ...fs import FileTooLargeError, read_json_object
+from ...logging_setup import log
 from ...security import delegated_process_env
 from ..delegation.streams import BoundedStreamCapture
 
@@ -320,6 +321,7 @@ class CommandsAgentAcceptanceMixin:
         check: dict[str, Any],
         *,
         cancel_event: threading.Event | None = None,
+        job_run_id: str | None = None,
     ) -> str:
         command = str(check.get("command") or "").strip()
         if not command:
@@ -400,6 +402,34 @@ class CommandsAgentAcceptanceMixin:
                     process.kill()
                 await wait_task
 
+            process_store = getattr(self, "jobs", None)
+            group_registered = False
+            if job_run_id and process_store is not None and os.name == "posix":
+                try:
+                    await asyncio.to_thread(
+                        process_store.register_process_group,
+                        job_run_id,
+                        process.pid,
+                    )
+                except Exception as e:
+                    await stop_process_group()
+                    try:
+                        await asyncio.to_thread(
+                            process_store.unregister_process_group,
+                            job_run_id,
+                            process.pid,
+                        )
+                    except Exception:
+                        log.exception(
+                            "Failed acceptance process registration left stale state"
+                        )
+                    for task in stream_tasks:
+                        if not task.done():
+                            task.cancel()
+                    await asyncio.gather(*stream_tasks, return_exceptions=True)
+                    return f"could not register acceptance process group: {e}"
+                group_registered = True
+
             try:
                 tasks = [stream_completion]
                 if cancel_task:
@@ -456,6 +486,17 @@ class CommandsAgentAcceptanceMixin:
                 if cancel_task:
                     cancel_task.cancel()
                     await asyncio.gather(cancel_task, return_exceptions=True)
+                if group_registered:
+                    try:
+                        await asyncio.to_thread(
+                            process_store.unregister_process_group,
+                            job_run_id,
+                            process.pid,
+                        )
+                    except Exception:
+                        log.exception(
+                            "Acceptance process group could not be unregistered"
+                        )
 
         try:
             return asyncio.run(run_command())
@@ -534,6 +575,7 @@ class CommandsAgentAcceptanceMixin:
         worker_contract: dict[str, object],
         *,
         cancel_event: threading.Event | None = None,
+        job_run_id: str | None = None,
     ) -> tuple[bool, list[str], dict[str, Any]]:
         checks_obj = worker_contract.get("acceptance_checks")
         checks = (
@@ -635,7 +677,10 @@ class CommandsAgentAcceptanceMixin:
 
             if kind == "command_succeeds":
                 command_failure = self._run_multi_acceptance_command(
-                    workspace, check, cancel_event=cancel_event
+                    workspace,
+                    check,
+                    cancel_event=cancel_event,
+                    job_run_id=job_run_id,
                 )
                 if command_failure:
                     failures.append(command_failure)

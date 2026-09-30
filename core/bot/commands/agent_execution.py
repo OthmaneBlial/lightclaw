@@ -23,6 +23,7 @@ class CommandsAgentExecutionMixin:
         workspace: Path,
         label: str,
         worker_contract: dict[str, object],
+        job_run_id: str | None = None,
     ) -> tuple[bool, list[str], dict[str, Any]]:
         cancel_event = threading.Event()
         try:
@@ -32,6 +33,7 @@ class CommandsAgentExecutionMixin:
                 label,
                 worker_contract,
                 cancel_event=cancel_event,
+                job_run_id=job_run_id,
             )
         except asyncio.CancelledError:
             cancel_event.set()
@@ -418,6 +420,7 @@ class CommandsAgentExecutionMixin:
                         multi_workspace,
                         label,
                         worker_contract,
+                        job_run_id=run_id,
                     )
                 else:
                     acceptance_ok = False
