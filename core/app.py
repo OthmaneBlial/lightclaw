@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from contextlib import ExitStack
 from pathlib import Path
 
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
@@ -114,75 +115,85 @@ def main():
     if config.telegram_allowed_users:
         log.info("   Allowed user count: %d", len(config.telegram_allowed_users))
 
-    bot = LightClawBot(config)
+    with ExitStack() as cleanup:
+        bot = LightClawBot(config)
+        cleanup.callback(bot.close)
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
 
-    # Print memory stats
-    stats = bot.memory.stats()
-    skill_count = len(bot.skills.list_skills())
-    log.info(
-        f"   Memory: {stats['total_interactions']} interactions, "
-        f"{stats['unique_sessions']} sessions, "
-        f"retrieval: {stats['retrieval']}"
-    )
-    log.info(f"   Skills: {skill_count} installed")
+            # Print memory stats
+            stats = bot.memory.stats()
+            skill_count = len(bot.skills.list_skills())
+            log.info(
+                f"   Memory: {stats['total_interactions']} interactions, "
+                f"{stats['unique_sessions']} sessions, "
+                f"retrieval: {stats['retrieval']}"
+            )
+            log.info(f"   Skills: {skill_count} installed")
 
-    # Print personality source
-    search_paths = personality_search_paths(config.workspace_path)
-    loaded = []
-    for filename in ["IDENTITY.md", "SOUL.md", "USER.md"]:
-        if any((base / filename).exists() for base in search_paths):
-            loaded.append(filename)
-    if loaded:
-        primary = search_paths[0]
-        log.info(f"   Personality: {', '.join(loaded)} ({primary})")
-    else:
-        log.info("   Personality: built-in default")
+            # Print personality source
+            search_paths = personality_search_paths(config.workspace_path)
+            loaded = []
+            for filename in ["IDENTITY.md", "SOUL.md", "USER.md"]:
+                if any((base / filename).exists() for base in search_paths):
+                    loaded.append(filename)
+            if loaded:
+                primary = search_paths[0]
+                log.info(f"   Personality: {', '.join(loaded)} ({primary})")
+            else:
+                log.info("   Personality: built-in default")
 
-    async def _post_init(application: Application):
-        _install_shutdown_signal_handlers(application, bot)
-        await bot._ensure_cron_task(application.bot)
+            async def _post_init(application: Application):
+                _install_shutdown_signal_handlers(application, bot)
+                await bot._ensure_cron_task(application.bot)
 
-    async def _post_shutdown(application: Application):
-        await bot.shutdown()
+            # Build Telegram application
+            app = (
+                Application.builder()
+                .token(config.telegram_bot_token)
+                .concurrent_updates(8)
+                .post_init(_post_init)
+                .build()
+            )
 
-    # Build Telegram application
-    app = (
-        Application.builder()
-        .token(config.telegram_bot_token)
-        .concurrent_updates(8)
-        .post_init(_post_init)
-        .post_shutdown(_post_shutdown)
-        .build()
-    )
+            # Register handlers
+            app.add_handler(CommandHandler("start", bot.cmd_start))
+            app.add_handler(CommandHandler("help", bot.cmd_help))
+            app.add_handler(CommandHandler("clear", bot.cmd_clear))
+            app.add_handler(CommandHandler("wipe_memory", bot.cmd_wipe_memory))
+            app.add_handler(CommandHandler("wipe", bot.cmd_wipe_memory))
+            app.add_handler(CommandHandler("memory", bot.cmd_memory))
+            app.add_handler(CommandHandler("recall", bot.cmd_recall))
+            app.add_handler(CommandHandler("skills", bot.cmd_skills))
+            app.add_handler(CommandHandler("agent", bot.cmd_agent))
+            app.add_handler(CommandHandler("mode", bot.cmd_mode))
+            app.add_handler(CommandHandler("heartbeat", bot.cmd_heartbeat))
+            app.add_handler(CommandHandler("cron", bot.cmd_cron))
+            app.add_handler(CommandHandler("show", bot.cmd_show))
+            app.add_handler(CallbackQueryHandler(bot.handle_run_action, pattern=r"^lc:"))
+            app.add_handler(MessageHandler(filters.VOICE, bot.handle_voice))
+            app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))
+            app.add_handler(MessageHandler(filters.Document.ALL, bot.handle_document))
+            app.add_handler(
+                MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message)
+            )
+            app.add_error_handler(bot.on_error)
 
-    # Register handlers
-    app.add_handler(CommandHandler("start", bot.cmd_start))
-    app.add_handler(CommandHandler("help", bot.cmd_help))
-    app.add_handler(CommandHandler("clear", bot.cmd_clear))
-    app.add_handler(CommandHandler("wipe_memory", bot.cmd_wipe_memory))
-    app.add_handler(CommandHandler("wipe", bot.cmd_wipe_memory))
-    app.add_handler(CommandHandler("memory", bot.cmd_memory))
-    app.add_handler(CommandHandler("recall", bot.cmd_recall))
-    app.add_handler(CommandHandler("skills", bot.cmd_skills))
-    app.add_handler(CommandHandler("agent", bot.cmd_agent))
-    app.add_handler(CommandHandler("mode", bot.cmd_mode))
-    app.add_handler(CommandHandler("heartbeat", bot.cmd_heartbeat))
-    app.add_handler(CommandHandler("cron", bot.cmd_cron))
-    app.add_handler(CommandHandler("show", bot.cmd_show))
-    app.add_handler(CallbackQueryHandler(bot.handle_run_action, pattern=r"^lc:"))
-    app.add_handler(MessageHandler(filters.VOICE, bot.handle_voice))
-    app.add_handler(MessageHandler(filters.PHOTO, bot.handle_photo))
-    app.add_handler(MessageHandler(filters.Document.ALL, bot.handle_document))
-    app.add_handler(
-        MessageHandler(filters.TEXT & ~filters.COMMAND, bot.handle_message)
-    )
-    app.add_error_handler(bot.on_error)
+            log.info("🦞 LightClaw is running! Press Ctrl+C to stop.")
 
-    log.info("🦞 LightClaw is running! Press Ctrl+C to stop.")
-
-    # Start polling
-    # Longer Telegram long-poll timeout reduces idle request churn.
-    app.run_polling(drop_pending_updates=True, timeout=30)
+            # Start polling
+            # Longer Telegram long-poll timeout reduces idle request churn.
+            app.run_polling(drop_pending_updates=True, timeout=30, close_loop=False)
+        finally:
+            try:
+                loop.run_until_complete(bot.shutdown())
+                cleanup.pop_all()
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.run_until_complete(loop.shutdown_default_executor())
+            finally:
+                loop.close()
+                asyncio.set_event_loop(None)
 
 if __name__ == "__main__":
     main()

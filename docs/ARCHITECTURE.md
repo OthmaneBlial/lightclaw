@@ -21,7 +21,7 @@ Compatibility compositions in `core/bot/commands/agent.py` and `core/bot/delegat
 
 Core input processing is serialized per session to preserve message order; separate sessions remain concurrent. Run-control callbacks keep an independent path so active work can still be canceled.
 
-The bot owns its memory database, job database, and provider client. Initialization registers each opened resource for cleanup until the entire bot is ready. A startup failure or interruption closes all resources opened so far; successful initialization transfers ownership to normal bot shutdown.
+The bot owns its memory database, job database, and provider client. Initialization registers each opened resource for cleanup until the entire bot is ready. A startup failure or interruption closes all resources opened so far; successful initialization transfers ownership to normal bot shutdown. The Telegram entrypoint keeps its event loop open until supervised workers and background tasks finish shutting down, even if Telegram startup, polling, or teardown fails.
 
 ## Contribution map
 
