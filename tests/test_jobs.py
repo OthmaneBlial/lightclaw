@@ -540,6 +540,18 @@ def test_job_diagnostics_refuse_database_symlink(tmp_path):
     assert report["counts"] == {}
 
 
+def test_job_diagnostics_handles_uri_reserved_path_characters(tmp_path):
+    database = tmp_path / "jobs?#.db"
+    store = JobStore(database)
+    _create(store, tmp_path / "repo")
+    store.close()
+
+    report = inspect_job_database(database)
+
+    assert "error" not in report
+    assert report["counts"]["queued"] == 1
+
+
 @pytest.mark.skipif(os.name != "posix", reason="delegated process groups require POSIX")
 def test_stalled_recovery_kills_registered_orphan_process_group(tmp_path):
     store = JobStore(tmp_path / "jobs.db")

@@ -784,7 +784,7 @@ def inspect_job_database(db_path: str | Path, *, stall_after_seconds: int = 120)
                 "active": [],
                 "stalled_run_ids": [],
             }
-        db = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=3)
+        db = sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=3)
         db.row_factory = sqlite3.Row
         counts = {
             str(row["status"]): int(row["count"])
