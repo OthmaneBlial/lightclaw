@@ -25,6 +25,25 @@ class FixtureEmbeddingAdapter:
         return [0.5, 0.5]
 
 
+def test_memory_store_rejects_preexisting_db_symlink_without_changing_target(tmp_path):
+    database = tmp_path / "lightclaw.db"
+    victim = tmp_path / "victim.db"
+    legacy = sqlite3.connect(victim)
+    legacy.execute("CREATE TABLE private_data (value TEXT)")
+    legacy.execute("INSERT INTO private_data VALUES ('preserve this data')")
+    legacy.commit()
+    legacy.close()
+    victim.chmod(0o644)
+    original = victim.read_bytes()
+    database.symlink_to(victim)
+
+    with pytest.raises(OSError):
+        MemoryStore(str(database))
+
+    assert victim.read_bytes() == original
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+
+
 def test_fts5_lexical_recall_isolated_by_user_workspace_and_summary(tmp_path):
     store = MemoryStore(str(tmp_path / "memory.db"))
     store.bind_session(

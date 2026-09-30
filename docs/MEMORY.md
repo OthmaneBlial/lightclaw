@@ -13,7 +13,7 @@ Recall, recent history, summaries, export, and deletion require one exact pair. 
 
 ## Data map
 
-The default database is `~/.lightclaw/lightclaw.db` with mode `0600`. SQLite may create `lightclaw.db-wal` and `lightclaw.db-shm` beside it while the process is active. Anyone who can access the host account may read this data; LightClaw does not claim encryption at rest.
+The default database is `~/.lightclaw/lightclaw.db` with mode `0600`; LightClaw rejects a symlink at the database path and refuses startup if it cannot secure the file. SQLite may create `lightclaw.db-wal` and `lightclaw.db-shm` beside it while the process is active. Anyone who can access the host account may read this data; LightClaw does not claim encryption at rest.
 
 | Table | Local contents |
 |---|---|

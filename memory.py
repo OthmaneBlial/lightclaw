@@ -97,8 +97,9 @@ class MemoryStore:
         candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
         embedding_adapter: EmbeddingAdapter | None = None,
     ):
-        self.path = Path(db_path).expanduser().resolve()
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        requested_path = Path(db_path).expanduser()
+        requested_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.path = requested_path.parent.resolve() / requested_path.name
         self.retention_days = max(1, int(retention_days))
         self.max_interactions = max(100, int(max_interactions))
         self.max_db_bytes = max(1_048_576, int(max_db_bytes))

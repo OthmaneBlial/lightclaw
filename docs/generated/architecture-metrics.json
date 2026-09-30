@@ -249,7 +249,7 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 816,
+      "lines": 817,
       "path": "memory.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19990,
+  "runtime_lines": 19991,
   "schema_version": 1
 }
