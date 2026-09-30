@@ -8,6 +8,7 @@ import pytest
 
 from config import Config
 from core.bot import LightClawBot
+from memory import MemoryStore
 
 
 @pytest.mark.asyncio
@@ -29,6 +30,8 @@ async def test_clear_during_summary_does_not_restore_old_context():
                 for index in range(21)
             ]
         ),
+        get_summary=Mock(return_value=""),
+        set_summary=Mock(),
         clear_session=Mock(),
     )
     bot.llm = SimpleNamespace(chat=AsyncMock(side_effect=summarize))
@@ -61,6 +64,82 @@ async def test_clear_during_summary_does_not_restore_old_context():
 
     assert "chat-42" not in bot._session_summaries
     bot.memory.clear_session.assert_called_once_with("chat-42")
+
+
+@pytest.mark.asyncio
+async def test_summary_reads_and_persists_sqlite_summary_across_restart(tmp_path):
+    session_id = "chat-42"
+    memory = MemoryStore(tmp_path / "memory.db")
+    memory.bind_session(
+        session_id,
+        user_namespace="telegram-user:42",
+        workspace_namespace=str(tmp_path),
+    )
+    memory.set_summary(session_id, "Earlier choice: use the local SQLite store.")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(context_window=256)
+    bot.memory = memory
+    bot.llm = SimpleNamespace(chat=AsyncMock(return_value="Updated durable summary."))
+    bot._session_summaries = {}
+    bot._summary_generation_by_session = {}
+    bot._clear_llm_backoff = Mock()
+
+    history = [
+        {"role": "user", "content": f"recent detail {index}"}
+        for index in range(6)
+    ]
+    try:
+        await bot._summarize_session(session_id, history, 0)
+
+        prompt = bot.llm.chat.await_args.args[0][0]["content"]
+        assert "Earlier choice: use the local SQLite store." in prompt
+        assert memory.get_summary(session_id) == "Updated durable summary."
+
+        memory.db.close()
+        memory = MemoryStore(tmp_path / "memory.db")
+        memory.bind_session(
+            session_id,
+            user_namespace="telegram-user:42",
+            workspace_namespace=str(tmp_path),
+        )
+        restarted_bot = LightClawBot.__new__(LightClawBot)
+        restarted_bot.memory = memory
+        restarted_bot._session_summaries = {}
+        assert restarted_bot._get_session_summary(session_id) == "Updated durable summary."
+    finally:
+        memory.db.close()
+
+
+@pytest.mark.asyncio
+async def test_show_reports_persisted_summary_after_restart():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"])
+    bot.memory = SimpleNamespace(
+        stats=Mock(return_value={"total_interactions": 0}),
+        get_summary=Mock(return_value="Persisted context."),
+    )
+    bot.skills = SimpleNamespace(
+        list_skills=Mock(return_value=[]),
+        active_records=Mock(return_value=[]),
+    )
+    bot.jobs = SimpleNamespace(diagnostics=Mock(return_value={"counts": {}}))
+    bot.start_time = 1.0
+    bot._session_summaries = {}
+    bot._session_id_from_update = lambda _update: "42"
+    bot._log_user_message = Mock()
+    bot._agent_mode_by_session = {}
+    bot._file_mode_by_session = {}
+    bot._pending_multi_plan_by_session = {}
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_show(update, SimpleNamespace())
+
+    assert "<b>Session summary:</b> ✅" in bot._reply_logged.await_args.args[1]
 
 
 @pytest.mark.asyncio

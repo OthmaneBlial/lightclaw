@@ -39,7 +39,7 @@ class BotHandlersMixin:
         minutes, seconds = divmod(remainder, 60)
 
         stats = self.memory.stats(session_id=session_id)
-        summary_status = "✅" if session_id in self._session_summaries else "—"
+        summary_status = "✅" if self._get_session_summary(session_id) else "—"
         installed_skills = self.skills.list_skills()
         try:
             active_skills = self.skills.active_records(session_id)

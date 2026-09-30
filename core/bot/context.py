@@ -59,12 +59,7 @@ class BotContextMixin:
         if not valid:
             return
 
-        existing_summary = self._sanitize_summary_for_prompt(
-            self._session_summaries.get(session_id, "")
-        )
-        if self._is_provider_error_text(existing_summary):
-            existing_summary = ""
-            self._session_summaries.pop(session_id, None)
+        existing_summary = self._get_session_summary(session_id)
 
         # Build summarization prompt
         prompt = "Provide a concise summary of this conversation, preserving key context and important points.\n"
@@ -83,6 +78,7 @@ class BotContextMixin:
             if summary and not self._is_provider_error_text(summary):
                 if generation != self._summary_generation_by_session.get(session_id, 0):
                     return
+                self.memory.set_summary(session_id, summary)
                 self._session_summaries[session_id] = summary
                 self._clear_llm_backoff()
                 if os.getenv("LIGHTCLAW_CHAT_MODE", "").strip() == "1":
