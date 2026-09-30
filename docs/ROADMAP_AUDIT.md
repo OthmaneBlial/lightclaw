@@ -55,7 +55,7 @@ roadmap's “proof over claims” rule.
   and `google-genai`.
 - Latest canonical quality suite at `417fcda` on 2026-09-30: all 419 tests passed on macOS
   arm64 with Python 3.14.7; lint, docs, architecture, dependency audit, and package build/install
-  also passed. This run does not extend the earlier five-version test result to all 418 tests.
+  also passed. This run does not extend the earlier five-version test result to all 419 tests.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
