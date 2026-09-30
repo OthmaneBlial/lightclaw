@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import httpx
 import pytest
 
+from core.bot import LightClawBot
 from core.voice import transcribe_voice
 
 FAKE_KEY = "groq-test-key-123456789"
@@ -77,3 +78,46 @@ async def test_transport_failures_return_none_and_redact_key(monkeypatch, caplog
 
     assert await transcribe_voice(b"audio", FAKE_KEY) is None
     assert FAKE_KEY not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("message_size", "download_size", "downloaded_bytes", "fetch_file"),
+    [
+        (5, None, b"data", False),
+        (None, 5, b"data", True),
+        (None, None, b"large", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_oversized_voice_is_rejected_before_transcription(
+    monkeypatch, message_size, download_size, downloaded_bytes, fetch_file
+):
+    monkeypatch.setattr("core.bot.handlers.MAX_VOICE_FILE_BYTES", 4)
+    transcribe = AsyncMock()
+    monkeypatch.setattr("core.bot.handlers.transcribe_voice", transcribe)
+    voice_file = SimpleNamespace(
+        file_size=download_size,
+        download_as_bytearray=AsyncMock(return_value=bytearray(downloaded_bytes)),
+    )
+    get_file = AsyncMock(return_value=voice_file)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._reply_logged = AsyncMock()
+    voice = SimpleNamespace(file_size=message_size, get_file=get_file)
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=voice),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+
+    await bot.handle_voice(update, context)
+
+    assert get_file.await_count == int(fetch_file)
+    if fetch_file and download_size is None:
+        voice_file.download_as_bytearray.assert_awaited_once()
+    else:
+        voice_file.download_as_bytearray.assert_not_awaited()
+    transcribe.assert_not_awaited()
+    assert "transcription limit" in bot._reply_logged.await_args.args[1]

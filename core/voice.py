@@ -5,6 +5,8 @@ from __future__ import annotations
 from .logging_setup import log
 from .security import redact_text
 
+MAX_VOICE_FILE_BYTES = 20_000_000
+
 
 async def transcribe_voice(audio_bytes: bytes, groq_api_key: str) -> str | None:
     """Transcribe audio using Groq's Whisper API. Returns text or None on failure."""

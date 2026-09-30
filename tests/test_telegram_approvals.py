@@ -257,8 +257,11 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
     bot._process_user_message = AsyncMock()
     monkeypatch.setattr("core.bot.handlers.transcribe_voice", AsyncMock(return_value="Build the fixture"))
 
-    voice_file = SimpleNamespace(download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")))
-    voice = SimpleNamespace(get_file=AsyncMock(return_value=voice_file))
+    voice_file = SimpleNamespace(
+        file_size=None,
+        download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")),
+    )
+    voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
     message = SimpleNamespace(voice=voice, caption="", reply_text=AsyncMock())
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=123),

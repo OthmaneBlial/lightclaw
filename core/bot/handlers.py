@@ -17,9 +17,10 @@ from skills import SkillError
 from ..logging_setup import log
 from ..markdown import _escape_html
 from ..personality import build_system_prompt
-from ..voice import transcribe_voice
+from ..voice import MAX_VOICE_FILE_BYTES, transcribe_voice
 
 VOICE_UNAVAILABLE = "Voice unavailable; nothing ran. Set GROQ_API_KEY or send text."
+VOICE_TOO_LARGE = "Voice message exceeds the 20 MB transcription limit; send a shorter recording."
 
 
 class BotHandlersMixin:
@@ -98,6 +99,10 @@ class BotHandlersMixin:
         if not self.config.groq_api_key:
             await self._reply_logged(update, VOICE_UNAVAILABLE)
             return
+        voice_size = getattr(voice, "file_size", None)
+        if voice_size is not None and voice_size > MAX_VOICE_FILE_BYTES:
+            await self._reply_logged(update, VOICE_TOO_LARGE)
+            return
         chat_id = update.effective_chat.id if update.effective_chat else 0
 
         if update.effective_chat:
@@ -108,10 +113,18 @@ class BotHandlersMixin:
 
         try:
             voice_file = await voice.get_file()
+            file_size = getattr(voice_file, "file_size", None)
+            if file_size is not None and file_size > MAX_VOICE_FILE_BYTES:
+                await self._reply_logged(update, VOICE_TOO_LARGE)
+                return
             voice_bytes = await voice_file.download_as_bytearray()
         except Exception as e:
             log.error(f"Failed to download voice: {e}")
             await self._reply_logged(update, "⚠️ Couldn't download voice message.")
+            return
+
+        if len(voice_bytes) > MAX_VOICE_FILE_BYTES:
+            await self._reply_logged(update, VOICE_TOO_LARGE)
             return
 
         text = await transcribe_voice(bytes(voice_bytes), self.config.groq_api_key)
