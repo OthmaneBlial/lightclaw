@@ -4,7 +4,10 @@ import asyncio
 import json
 import sqlite3
 import stat
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 
 import pytest
 
@@ -115,6 +118,64 @@ def test_concurrent_same_chat_bindings_do_not_cross_async_contexts(tmp_path):
 
     assert [record.content for record in first] == ["private code cobalt"]
     assert [record.content for record in second] == ["private code amber"]
+    store.db.close()
+
+
+def test_memory_reads_wait_for_scope_clear_transaction(tmp_path):
+    store = MemoryStore(str(tmp_path / "memory.db"))
+    scope = {"user_namespace": "fixture-user", "workspace_namespace": "fixture-workspace"}
+    store.bind_session("shared-chat", **scope)
+    store.ingest("user", "private fixture", "shared-chat")
+    store.set_summary("shared-chat", "summary before clear")
+    clear_paused = threading.Event()
+    resume_clear = threading.Event()
+    partial_read = threading.Event()
+    connection = store.db
+
+    class PausingConnection:
+        def __getattr__(self, name):
+            return getattr(connection, name)
+
+        def __enter__(self):
+            connection.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return connection.__exit__(*args)
+
+        def execute(self, sql, *args):
+            if sql.startswith("DELETE FROM memory_summaries"):
+                clear_paused.set()
+                if not resume_clear.wait(3):
+                    raise TimeoutError("scope-clear fixture timed out")
+            elif clear_paused.is_set() and not resume_clear.is_set() and sql.startswith("SELECT"):
+                partial_read.set()
+            return connection.execute(sql, *args)
+
+    store.db = PausingConnection()
+    read_started = threading.Event()
+    read_context = copy_context()
+
+    def snapshot_scope():
+        return store.stats(**scope)["total_interactions"], store.get_summary("shared-chat")
+
+    def read_scope():
+        read_started.set()
+        return read_context.run(snapshot_scope)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        clearing = pool.submit(store.clear_scope, **scope, apply=True)
+        reading = None
+        try:
+            assert clear_paused.wait(2)
+            reading = pool.submit(read_scope)
+            assert read_started.wait(2)
+            assert not partial_read.wait(0.2)
+        finally:
+            resume_clear.set()
+        clearing.result(timeout=2)
+        assert reading is not None
+        assert reading.result(timeout=2) == (0, "")
     store.db.close()
 
 

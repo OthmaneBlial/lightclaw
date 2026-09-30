@@ -502,11 +502,12 @@ class MemoryStore:
 
     def get_summary(self, session_id: str) -> str:
         user, workspace = self._scope_for(session_id)
-        row = self.db.execute(
-            "SELECT summary FROM memory_summaries WHERE session_id = ? "
-            "AND user_namespace = ? AND workspace_namespace = ?",
-            (str(session_id), user, workspace),
-        ).fetchone()
+        with self._lock:
+            row = self.db.execute(
+                "SELECT summary FROM memory_summaries WHERE session_id = ? "
+                "AND user_namespace = ? AND workspace_namespace = ?",
+                (str(session_id), user, workspace),
+            ).fetchone()
         return str(row["summary"]) if row else ""
 
     def set_summary(self, session_id: str, summary: str) -> None:
@@ -626,28 +627,33 @@ class MemoryStore:
             )
             where = " WHERE user_namespace = ? AND workspace_namespace = ?"
             params = (user, workspace)
-        total = int(
-            self.db.execute(f"SELECT COUNT(*) FROM interactions{where}", params).fetchone()[0]
-        )
-        sessions = int(
-            self.db.execute(
-                f"SELECT COUNT(DISTINCT session_id) FROM interactions{where}", params
-            ).fetchone()[0]
-        )
+        embedding_adapter = "/".join(self._embedding_identity() or ()) or None
+        with self._lock:
+            total = int(
+                self.db.execute(f"SELECT COUNT(*) FROM interactions{where}", params).fetchone()[0]
+            )
+            sessions = int(
+                self.db.execute(
+                    f"SELECT COUNT(DISTINCT session_id) FROM interactions{where}", params
+                ).fetchone()[0]
+            )
+            database_bytes = self._database_bytes()
+            last_query_ms = self._last_query_ms
+            timed_out_queries = self._timed_out_queries
         return {
             "schema_version": MEMORY_SCHEMA_VERSION,
             "retrieval": "sqlite-fts5-lexical",
-            "embedding_adapter": "/".join(self._embedding_identity() or ()) or None,
+            "embedding_adapter": embedding_adapter,
             "total_interactions": total,
             "unique_sessions": sessions,
-            "database_bytes": self._database_bytes(),
+            "database_bytes": database_bytes,
             "max_database_bytes": self.max_db_bytes,
             "retention_days": self.retention_days,
             "max_interactions": self.max_interactions,
             "query_timeout_ms": self.query_timeout_ms,
             "candidate_limit": self.candidate_limit,
-            "last_query_ms": self._last_query_ms,
-            "timed_out_queries": self._timed_out_queries,
+            "last_query_ms": last_query_ms,
+            "timed_out_queries": timed_out_queries,
             "scoped": scoped,
         }
 
@@ -666,11 +672,12 @@ class MemoryStore:
             user_namespace,
             workspace_namespace,
         )
-        rows = self.db.execute(
-            "SELECT id, timestamp, role, content, session_id FROM interactions "
-            "WHERE user_namespace = ? AND workspace_namespace = ? ORDER BY timestamp, id",
-            (user, workspace),
-        ).fetchall()
+        with self._lock:
+            rows = self.db.execute(
+                "SELECT id, timestamp, role, content, session_id FROM interactions "
+                "WHERE user_namespace = ? AND workspace_namespace = ? ORDER BY timestamp, id",
+                (user, workspace),
+            ).fetchall()
         destination = Path(output_path).expanduser().resolve()
         payload = {
             "schema_version": MEMORY_SCHEMA_VERSION,
@@ -710,29 +717,29 @@ class MemoryStore:
         )
         placeholders = ",".join("?" for _ in identifiers)
         params: list[object] = [*identifiers, user, workspace]
-        found = [
-            int(row[0])
-            for row in self.db.execute(
-                f"SELECT id FROM interactions WHERE id IN ({placeholders}) "
-                "AND user_namespace = ? AND workspace_namespace = ? ORDER BY id",
-                params,
-            ).fetchall()
-        ]
+        with self._lock:
+            found = [
+                int(row[0])
+                for row in self.db.execute(
+                    f"SELECT id FROM interactions WHERE id IN ({placeholders}) "
+                    "AND user_namespace = ? AND workspace_namespace = ? ORDER BY id",
+                    params,
+                ).fetchall()
+            ]
+            if apply and found:
+                delete_placeholders = ",".join("?" for _ in found)
+                with self.db:
+                    self.db.execute(
+                        f"DELETE FROM interactions WHERE id IN ({delete_placeholders})",
+                        found,
+                    )
         result: dict[str, object] = {
             "applied": False,
             "requested_ids": identifiers,
             "matched_ids": found,
             "scope": {"user_namespace": user, "workspace_namespace": workspace},
         }
-        if apply and found:
-            delete_placeholders = ",".join("?" for _ in found)
-            with self._lock, self.db:
-                self.db.execute(
-                    f"DELETE FROM interactions WHERE id IN ({delete_placeholders})",
-                    found,
-                )
-            result["applied"] = True
-        elif apply:
+        if apply:
             result["applied"] = True
         return result
 
@@ -750,30 +757,32 @@ class MemoryStore:
             user_namespace,
             workspace_namespace,
         )
-        count = int(
-            self.db.execute(
-                "SELECT COUNT(*) FROM interactions WHERE user_namespace = ? "
-                "AND workspace_namespace = ?",
-                (user, workspace),
-            ).fetchone()[0]
-        )
+        with self._lock:
+            count = int(
+                self.db.execute(
+                    "SELECT COUNT(*) FROM interactions WHERE user_namespace = ? "
+                    "AND workspace_namespace = ?",
+                    (user, workspace),
+                ).fetchone()[0]
+            )
+            if apply:
+                with self.db:
+                    self.db.execute(
+                        "DELETE FROM interactions WHERE user_namespace = ? "
+                        "AND workspace_namespace = ?",
+                        (user, workspace),
+                    )
+                    self.db.execute(
+                        "DELETE FROM memory_summaries WHERE user_namespace = ? "
+                        "AND workspace_namespace = ?",
+                        (user, workspace),
+                    )
         result: dict[str, object] = {
             "applied": False,
             "record_count": count,
             "scope": {"user_namespace": user, "workspace_namespace": workspace},
         }
         if apply:
-            with self._lock, self.db:
-                self.db.execute(
-                    "DELETE FROM interactions WHERE user_namespace = ? "
-                    "AND workspace_namespace = ?",
-                    (user, workspace),
-                )
-                self.db.execute(
-                    "DELETE FROM memory_summaries WHERE user_namespace = ? "
-                    "AND workspace_namespace = ?",
-                    (user, workspace),
-                )
             result["applied"] = True
         return result
 
