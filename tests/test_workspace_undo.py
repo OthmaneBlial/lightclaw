@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock
@@ -9,6 +10,7 @@ import pytest
 from core.workspaces import (
     WorkspaceSafetyError,
     capture_git_checkpoint,
+    ensure_private_workspace_dir,
     register_task_workspace,
     resolve_owned_task,
     undo_owned_task,
@@ -89,6 +91,31 @@ def test_task_metadata_directory_symlink_cannot_read_or_write_outside_root(tmp_p
     with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
         register_task_workspace(root, another, "another task")
     assert not (outside / f"{another.name}.json").exists()
+
+
+def test_private_workspace_dir_does_not_chmod_swapped_symlink_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    private = root / "private"
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    victim.chmod(0o755)
+    chmod = os.chmod
+
+    def swap_then_chmod(path, mode, *, dir_fd=None, follow_symlinks=True):
+        target = Path(path)
+        if target == private:
+            target.rmdir()
+            target.symlink_to(victim, target_is_directory=True)
+        return chmod(path, mode, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr("core.workspaces.os.chmod", swap_then_chmod)
+    with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
+        ensure_private_workspace_dir(root, "private")
+
+    assert victim.stat().st_mode & 0o777 == 0o755
 
 
 def test_undo_rejects_oversized_task_ownership_record(tmp_path: Path):

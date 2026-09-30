@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -19,11 +20,24 @@ class WorkspaceSafetyError(ValueError):
     """Raised when a workspace cannot be proven to be LightClaw-owned."""
 
 
+def _chmod_private_directory(path: Path) -> None:
+    try:
+        os.chmod(path, 0o700, follow_symlinks=False)
+    except OSError as exc:
+        if path.is_symlink():
+            raise WorkspaceSafetyError("private workspace directory must not be a symlink") from exc
+        raise
+    if path.is_symlink():
+        raise WorkspaceSafetyError("private workspace directory must not be a symlink")
+    if not path.is_dir():
+        raise WorkspaceSafetyError("private workspace path must contain real directories")
+
+
 def _atomic_private_json(path: Path, payload: dict[str, object]) -> None:
     if path.parent.is_symlink():
         raise WorkspaceSafetyError("task metadata directory must not be a symlink")
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    path.parent.chmod(0o700)
+    _chmod_private_directory(path.parent)
     atomic_write_json(path, payload, mode=0o600, trailing_newline=True)
 
 
@@ -56,7 +70,7 @@ def ensure_private_workspace_dir(root: str | Path, *parts: str) -> Path:
             pass
         if current.is_symlink() or not current.is_dir():
             raise WorkspaceSafetyError("private workspace path must contain real directories")
-        current.chmod(0o700)
+        _chmod_private_directory(current)
     return current
 
 
