@@ -11,6 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.bot.delegation.agents import DelegationAgentsMixin
 from core.bot.delegation.execution import DelegationExecutionMixin
 from core.bot.delegation.streams import BoundedStreamCapture
 from core.jobs import JobStore
@@ -23,6 +24,10 @@ class ExecutionHarness(DelegationExecutionMixin):
             local_agent_capability_profile="workspace-write",
             local_agent_progress_interval_sec=30,
         )
+
+
+class AgentLookupHarness(DelegationAgentsMixin):
+    pass
 
 
 class TimeoutHarness(ExecutionHarness):
@@ -59,6 +64,25 @@ class TimeoutHarness(ExecutionHarness):
             "time.sleep(30)"
         )
         return [sys.executable, "-c", parent_code], None
+
+
+def test_agent_lookup_ignores_relative_path_components(monkeypatch):
+    seen_paths = []
+    monkeypatch.setenv(
+        "PATH",
+        os.pathsep.join((".", "/usr/bin", "bin", "")),
+    )
+
+    def which(_binary: str, *, path: str):
+        seen_paths.append(path)
+        return "/opt/tools/codex" if _binary == "codex" else None
+
+    monkeypatch.setattr("core.bot.delegation.agents.shutil.which", which)
+
+    assert AgentLookupHarness()._available_local_agents() == {
+        "codex": "/opt/tools/codex"
+    }
+    assert seen_paths == ["/usr/bin", "/usr/bin"]
 
 
 def test_codex_capability_profiles_map_to_sandbox_flags(tmp_path: Path):

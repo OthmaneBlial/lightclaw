@@ -73,7 +73,7 @@ def delegated_process_env(
         for key in SAFE_DELEGATED_ENV_KEYS
         if key in values and str(values[key]).strip()
     }
-    result.setdefault("PATH", os.defpath)
+    result["PATH"] = os.pathsep.join(filter(os.path.isabs, result.get("PATH", os.defpath).split(os.pathsep))) or os.defpath
     result.setdefault("LANG", "C.UTF-8")
     result["LIGHTCLAW_DELEGATED"] = "1"
     if extra:

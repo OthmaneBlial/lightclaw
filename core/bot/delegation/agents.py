@@ -7,6 +7,7 @@ import re
 import shutil
 
 from ...markdown import _escape_html
+from ...security import delegated_process_env
 
 
 class DelegationAgentsMixin:
@@ -27,7 +28,7 @@ class DelegationAgentsMixin:
         }
         available: dict[str, str] = {}
         for name, binary in binaries.items():
-            path = shutil.which(binary)
+            path = shutil.which(binary, path=delegated_process_env()["PATH"])
             if path:
                 available[name] = path
         return available

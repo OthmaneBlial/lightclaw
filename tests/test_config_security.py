@@ -219,6 +219,14 @@ def test_delegated_environment_is_allowlisted_and_secret_free():
     assert "ANOTHER_SECRET" not in result
 
 
+def test_delegated_environment_drops_relative_path_entries():
+    source = {"PATH": os.pathsep.join((".", "/opt/tools", "bin", "", "/usr/bin"))}
+
+    result = delegated_process_env(source)
+
+    assert result["PATH"] == os.pathsep.join(("/opt/tools", "/usr/bin"))
+
+
 def test_redaction_covers_assignments_bearer_tokens_and_known_values():
     raw = (
         "OPENAI_API_KEY=sk-live-secret "
