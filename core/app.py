@@ -122,7 +122,7 @@ def main():
     log.info(
         f"   Memory: {stats['total_interactions']} interactions, "
         f"{stats['unique_sessions']} sessions, "
-        f"{stats['vocabulary_size']} vocabulary terms"
+        f"retrieval: {stats['retrieval']}"
     )
     log.info(f"   Skills: {skill_count} installed")
 
