@@ -237,7 +237,7 @@ python scripts/quality.py
 
 This is the canonical local quality command. GitHub CI, CodeQL, OpenSSF Scorecard, and showcase
 validation workflows are disabled; run this suite before pushing. The suite resolves
-both hashed dependency locks without installing them, installs the wheel in a clean environment,
+all three hashed dependency locks without installing them, installs the wheel in a clean environment,
 audits dependencies, and replays all three deterministic stories. To use automation's exact hashed
 dependencies, install `requirements-pip.txt` and
 `requirements-dev.txt` with `--require-hashes`, then install the checkout with

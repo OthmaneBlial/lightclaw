@@ -53,7 +53,11 @@ def main() -> int:
             [PYTHON, "scripts/generate_provider_matrix.py", "--check"],
         )
         _run("architecture budget", [PYTHON, "scripts/check_architecture.py", "--check"])
-        for requirements in ("requirements-runtime.txt", "requirements-dev.txt"):
+        for requirements in (
+            "requirements-pip.txt",
+            "requirements-runtime.txt",
+            "requirements-dev.txt",
+        ):
             _run(
                 f"locked dependency resolution ({requirements})",
                 [
@@ -63,6 +67,7 @@ def main() -> int:
                     "install",
                     "--dry-run",
                     "--quiet",
+                    "--ignore-installed",
                     "--require-hashes",
                     "-r",
                     requirements,
