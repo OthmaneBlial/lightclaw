@@ -25,12 +25,15 @@ class DelegationWorkspaceMixin:
         stamp = time.strftime("%Y%m%d_%H%M%S")
         slug = self._slugify_goal_name(goal_text)
         base_name = f"{stamp}_{slug}"
-        candidate = root / base_name
-        idx = 2
-        while candidate.exists():
-            candidate = root / f"{base_name}_{idx}"
-            idx += 1
-        candidate.mkdir(parents=True, exist_ok=False)
+        idx = 1
+        while True:
+            name = base_name if idx == 1 else f"{base_name}_{idx}"
+            candidate = root / name
+            try:
+                candidate.mkdir(parents=True, exist_ok=False)
+                break
+            except FileExistsError:
+                idx += 1
         register_task_workspace(root, candidate, goal_text)
         return candidate
 
