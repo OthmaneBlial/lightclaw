@@ -8,7 +8,7 @@ import re
 import secrets
 import time
 import weakref
-from contextlib import asynccontextmanager
+from contextlib import ExitStack, asynccontextmanager
 from pathlib import Path
 
 from telegram import Update
@@ -34,83 +34,88 @@ class BotBaseMixin:
     def __init__(self, config: Config):
         self.config = config
         self._heartbeat_interval_sec = heartbeat_interval_seconds(config.heartbeat_interval_min)
-        self.memory = MemoryStore(
-            config.memory_db_path,
-            retention_days=config.memory_retention_days,
-            max_interactions=config.memory_max_interactions,
-            max_db_bytes=config.memory_max_db_mb * 1024 * 1024,
-            query_timeout_ms=config.memory_query_timeout_ms,
-            candidate_limit=config.memory_candidate_limit,
-        )
-        self.jobs = JobStore(Path(config.memory_db_path).expanduser().resolve().with_name("jobs.db"))
-        self.jobs.recover_stalled()
-        self.llm = LLMClient(config)
-        self.skills = SkillManager(
-            workspace_path=config.workspace_path,
-            skills_state_path=config.skills_state_path,
-            hub_base_url=config.skills_hub_base_url,
-        )
-        self.personality = load_personality(config.workspace_path)
-        self.start_time = time.time()
+        with ExitStack() as cleanup:
+            self.memory = MemoryStore(
+                config.memory_db_path,
+                retention_days=config.memory_retention_days,
+                max_interactions=config.memory_max_interactions,
+                max_db_bytes=config.memory_max_db_mb * 1024 * 1024,
+                query_timeout_ms=config.memory_query_timeout_ms,
+                candidate_limit=config.memory_candidate_limit,
+            )
+            cleanup.callback(self.memory.db.close)
+            self.jobs = JobStore(Path(config.memory_db_path).expanduser().resolve().with_name("jobs.db"))
+            cleanup.callback(self.jobs.close)
+            self.jobs.recover_stalled()
+            self.llm = LLMClient(config)
+            cleanup.callback(self.llm.close)
+            self.skills = SkillManager(
+                workspace_path=config.workspace_path,
+                skills_state_path=config.skills_state_path,
+                hub_base_url=config.skills_hub_base_url,
+            )
+            self.personality = load_personality(config.workspace_path)
+            self.start_time = time.time()
 
-        # Per-session summaries (in-memory, persisted via memory.py)
-        self._session_summaries: dict[tuple[str, str, str], str] = {}
-        self._summary_generation_by_session: dict[tuple[str, str, str], int] = {}
-        self._background_tasks: set[asyncio.Task] = set()
-        # Lock to prevent concurrent summarization per session
-        self._summarizing: set[tuple[str, str, str]] = set()
-        # Global memory wipe confirmation uses the shared dual-clock approval contract.
-        self._pending_wipe_confirm: dict[str, dict[str, object]] = {}
-        # Track last successful file operation target per session.
-        self._last_file_by_session: dict[str, str] = {}
-        # Per-chat local delegation mode (codex/claude).
-        self._agent_mode_by_session: dict[str, str] = {}
-        # Per-chat file write mode (`chat`=read-only answers, `edit`=allow workspace writes).
-        self._file_mode_by_session: dict[str, str] = {}
-        # Backoff window to avoid repeated background LLM calls during provider failures.
-        self._llm_backoff_until: float = 0.0
-        # Throttle repeated Telegram polling conflict warnings.
-        self._last_telegram_conflict_log_at: float = 0.0
-        # Optional HEARTBEAT scheduler; /heartbeat on pins its chat (disabled by default).
-        self._heartbeat_enabled: bool = False
-        self._heartbeat_last_chat_id: str = ""
-        self._heartbeat_last_run_at: float = 0.0
-        self._heartbeat_task = None
-        # Optional minimal cron scheduler state.
-        self._cron_poll_sec: int = 30
-        self._cron_last_run_at: float = 0.0
-        self._cron_task = None
-        self._cron_lock = asyncio.Lock()
-        self._cron_iteration_lock = asyncio.Lock()
-        # Track live/queued requests so /clear can invalidate their later memory writes.
-        self._active_message_clear_events_by_session: dict[
-            str, dict[asyncio.Task, asyncio.Event]
-        ] = {}
-        self._memory_wipe_lock = asyncio.Lock()
-        # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
-        self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
-        self._pending_multi_plan_ttl_sec: int = 15 * 60
-        # Explicit confirmation gate for trusted-command one-shot runs.
-        self._pending_trusted_agent_run_by_session: dict[str, dict[str, object]] = {}
-        # Explicit voice-transcription approval gate and live run controls.
-        self._pending_voice_goal_by_session: dict[str, dict[str, object]] = {}
-        self._voice_request_ids_by_session: dict[str, str] = {}
-        self._active_run_tasks_by_session: dict[str, asyncio.Task[object]] = {}
-        self._shutting_down = False
-        self._active_run_ids_by_session: dict[str, str] = {}
-        self._session_run_locks: dict[str, asyncio.Lock] = {}
-        self._active_worker_tasks_by_run: dict[
-            str, dict[asyncio.Task[object], str]
-        ] = {}
-        self._active_run_heartbeats_by_run: dict[str, asyncio.Task[None]] = {}
-        self._last_run_ids_by_session: dict[str, str] = {}
-        self._last_run_receipts_by_session: dict[str, str] = {}
-        self._last_run_workspaces_by_session: dict[str, str] = {}
-        self._result_actions_in_flight: set[str] = set()
-        # Sliding-window limiter for high-authority Telegram commands.
-        self._privileged_request_times: dict[tuple[str, str], list[float]] = {}
-        # Compiled strict-mode deny patterns for delegated local-agent tasks.
-        self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
+            # Per-session summaries (in-memory, persisted via memory.py)
+            self._session_summaries: dict[tuple[str, str, str], str] = {}
+            self._summary_generation_by_session: dict[tuple[str, str, str], int] = {}
+            self._background_tasks: set[asyncio.Task] = set()
+            # Lock to prevent concurrent summarization per session
+            self._summarizing: set[tuple[str, str, str]] = set()
+            # Global memory wipe confirmation uses the shared dual-clock approval contract.
+            self._pending_wipe_confirm: dict[str, dict[str, object]] = {}
+            # Track last successful file operation target per session.
+            self._last_file_by_session: dict[str, str] = {}
+            # Per-chat local delegation mode (codex/claude).
+            self._agent_mode_by_session: dict[str, str] = {}
+            # Per-chat file write mode (`chat`=read-only answers, `edit`=allow workspace writes).
+            self._file_mode_by_session: dict[str, str] = {}
+            # Backoff window to avoid repeated background LLM calls during provider failures.
+            self._llm_backoff_until: float = 0.0
+            # Throttle repeated Telegram polling conflict warnings.
+            self._last_telegram_conflict_log_at: float = 0.0
+            # Optional HEARTBEAT scheduler; /heartbeat on pins its chat (disabled by default).
+            self._heartbeat_enabled: bool = False
+            self._heartbeat_last_chat_id: str = ""
+            self._heartbeat_last_run_at: float = 0.0
+            self._heartbeat_task = None
+            # Optional minimal cron scheduler state.
+            self._cron_poll_sec: int = 30
+            self._cron_last_run_at: float = 0.0
+            self._cron_task = None
+            self._cron_lock = asyncio.Lock()
+            self._cron_iteration_lock = asyncio.Lock()
+            # Track live/queued requests so /clear can invalidate their later memory writes.
+            self._active_message_clear_events_by_session: dict[
+                str, dict[asyncio.Task, asyncio.Event]
+            ] = {}
+            self._memory_wipe_lock = asyncio.Lock()
+            # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
+            self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
+            self._pending_multi_plan_ttl_sec: int = 15 * 60
+            # Explicit confirmation gate for trusted-command one-shot runs.
+            self._pending_trusted_agent_run_by_session: dict[str, dict[str, object]] = {}
+            # Explicit voice-transcription approval gate and live run controls.
+            self._pending_voice_goal_by_session: dict[str, dict[str, object]] = {}
+            self._voice_request_ids_by_session: dict[str, str] = {}
+            self._active_run_tasks_by_session: dict[str, asyncio.Task[object]] = {}
+            self._shutting_down = False
+            self._active_run_ids_by_session: dict[str, str] = {}
+            self._session_run_locks: dict[str, asyncio.Lock] = {}
+            self._active_worker_tasks_by_run: dict[
+                str, dict[asyncio.Task[object], str]
+            ] = {}
+            self._active_run_heartbeats_by_run: dict[str, asyncio.Task[None]] = {}
+            self._last_run_ids_by_session: dict[str, str] = {}
+            self._last_run_receipts_by_session: dict[str, str] = {}
+            self._last_run_workspaces_by_session: dict[str, str] = {}
+            self._result_actions_in_flight: set[str] = set()
+            # Sliding-window limiter for high-authority Telegram commands.
+            self._privileged_request_times: dict[tuple[str, str], list[float]] = {}
+            # Compiled strict-mode deny patterns for delegated local-agent tasks.
+            self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
+            cleanup.pop_all()
 
     def close(self) -> None:
         """Close every resource, then surface the first shutdown error."""

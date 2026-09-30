@@ -2,13 +2,52 @@ from __future__ import annotations
 
 import asyncio
 import signal
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
+from config import Config
 from core.app import _install_shutdown_signal_handlers
 from core.bot import LightClawBot
+
+
+@pytest.mark.parametrize("stage", ["jobs", "recovery", "provider", "skills", "personality", "policy"])
+@pytest.mark.parametrize("error_type", [RuntimeError, KeyboardInterrupt])
+def test_failed_bot_initialization_closes_opened_resources(tmp_path, monkeypatch, stage, error_type):
+    bot = LightClawBot.__new__(LightClawBot)
+    config = Config(
+        workspace_path=str(tmp_path / "workspace"),
+        memory_db_path=str(tmp_path / "memory.db"),
+        skills_state_path=str(tmp_path / "skills.json"),
+    )
+    llm = SimpleNamespace(close=Mock())
+    monkeypatch.setattr("core.bot.base.LLMClient", lambda _config: llm)
+    error = error_type(f"{stage} initialization failed")
+    target = {
+        "jobs": "core.bot.base.JobStore",
+        "recovery": "core.bot.base.JobStore.recover_stalled",
+        "provider": "core.bot.base.LLMClient",
+        "skills": "core.bot.base.SkillManager",
+        "personality": "core.bot.base.load_personality",
+        "policy": "core.bot.base.BotBaseMixin._compile_delegation_deny_patterns",
+    }[stage]
+    monkeypatch.setattr(target, Mock(side_effect=error))
+
+    with pytest.raises(error_type, match=f"{stage} initialization failed"):
+        bot.__init__(config)
+
+    databases = [getattr(bot, name).db for name in ("memory", "jobs") if hasattr(bot, name)]
+    try:
+        for database in databases:
+            with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
+                database.execute("SELECT 1")
+        if hasattr(bot, "llm"):
+            llm.close.assert_called_once_with()
+    finally:
+        for database in databases:
+            database.close()
 
 
 def test_cancel_task_once_supports_python_310_task_api():
