@@ -1,13 +1,72 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from core.bot import LightClawBot
-from core.jobs import JobStateError
+from core.jobs import JobStateError, JobStore
+
+
+@pytest.mark.asyncio
+async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(tmp_path),
+        local_agent_capability_profile="workspace-write",
+        local_agent_multi_repair_attempts=1,
+    )
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot.memory = Mock()
+    for name in (
+        "_active_run_ids_by_session", "_active_worker_tasks_by_run",
+        "_active_run_heartbeats_by_run", "_last_run_ids_by_session",
+        "_last_run_receipts_by_session", "_last_run_workspaces_by_session",
+    ):
+        setattr(bot, name, {})
+    bot._reply_logged = AsyncMock(return_value=SimpleNamespace(edit_text=AsyncMock()))
+    bot._send_response = AsyncMock()
+    bot._llm_backoff_active = lambda: True
+    bot._evaluate_multi_worker_acceptance_off_thread = AsyncMock(return_value=(True, [], {}))
+    invocations: list[int] = []
+
+    async def worker(**kwargs):
+        job = bot.jobs.get_job("multi-repair-fixture")
+        label = "builder" if kwargs["agent"] == "codex" else "checker"
+        lane = next(lane for lane in job["lanes"] if lane["label"] == label)
+        if label == "builder":
+            invocations.append(lane["attempt"])
+            if len(invocations) == 1:
+                return "⚠️ Worker failed: fixture failure"
+        return "✅ Finished in 0.1s."
+
+    bot._run_local_agent_task = worker
+    try:
+        await bot._execute_multi_agent_plan(
+            update=SimpleNamespace(), session_id="fixture-session", goal="bounded repair",
+            workers=[("builder", "codex"), ("checker", "claude")],
+            plan_payload={"workers": [
+                {"label": "builder", "depends_on": []},
+                {"label": "checker", "depends_on": ["builder"]},
+            ]},
+            run_id="multi-repair-fixture",
+        )
+        assert invocations == [1, 2]
+        job = bot.jobs.get_job("multi-repair-fixture")
+        assert job["status"] == "succeeded"
+        assert [lane["attempt"] for lane in job["lanes"]] == [2, 1]
+        receipt = json.loads(Path(bot._last_run_receipts_by_session["fixture-session"]).read_text())
+        assert receipt["retries"] == 1
+    finally:
+        tasks = list(bot._active_run_heartbeats_by_run.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        bot.jobs.close()
 
 
 @pytest.mark.asyncio

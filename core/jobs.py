@@ -632,7 +632,8 @@ class JobStore:
                 "UPDATE lanes SET status = ?, last_error = ?, attempt = attempt + ? "
                 "WHERE run_id = ? AND label = ? "
                 "AND (status NOT IN ('succeeded', 'failed', 'skipped', 'canceled') OR status = ?) "
-                "AND (? = 0 OR status = 'queued')",
+                "AND (? = 0 OR (status = 'queued' AND attempt < max_attempts "
+                "AND EXISTS (SELECT 1 FROM jobs WHERE jobs.run_id = lanes.run_id AND jobs.status = 'running')))",
                 (
                     status,
                     str(error),
@@ -650,6 +651,8 @@ class JobStore:
                 ).fetchone()
                 if latest is None:
                     raise JobStateError(f"unknown lane: {label}")
+                if increment_attempt:
+                    raise JobStateError("lane start requires a running job, a queued lane, and an available attempt")
                 latest_status = str(latest["status"])
                 if latest_status == status or (
                     status == "canceled" and latest_status in TERMINAL_LANE_STATUSES

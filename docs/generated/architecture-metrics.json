@@ -14,9 +14,9 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "branch_points": 97,
+      "branch_points": 98,
       "line": 223,
-      "lines": 695,
+      "lines": 696,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -114,9 +114,9 @@
   ],
   "largest_functions": [
     {
-      "branch_points": 97,
+      "branch_points": 98,
       "line": 223,
-      "lines": 695,
+      "lines": 696,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 917,
+      "lines": 918,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -249,7 +249,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 843,
+      "lines": 846,
       "path": "core/jobs.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21218,
+  "runtime_lines": 21222,
   "schema_version": 1
 }

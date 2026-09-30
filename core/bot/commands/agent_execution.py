@@ -431,15 +431,16 @@ class CommandsAgentExecutionMixin:
             last_result = ""
             last_failures: list[str] = []
             attempt_evidence: list[dict[str, object]] = []
-            await asyncio.to_thread(
-                self.jobs.update_lane,
-                run_id,
-                label,
-                "running",
-                increment_attempt=True,
-            )
-
             for attempt in range(repair_attempts + 1):
+                if attempt > 0:
+                    await asyncio.to_thread(self.jobs.update_lane, run_id, label, "queued")
+                await asyncio.to_thread(
+                    self.jobs.update_lane,
+                    run_id,
+                    label,
+                    "running",
+                    increment_attempt=True,
+                )
                 task_prompt = worker_task
                 if attempt > 0:
                     task_prompt = self._build_multi_agent_repair_task(

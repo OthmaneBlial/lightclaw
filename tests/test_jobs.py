@@ -305,6 +305,45 @@ def test_late_lane_start_cannot_resurrect_canceled_lane(tmp_path):
         store.close()
 
 
+@pytest.mark.parametrize("stop", ["cancel_requested", "canceled"])
+def test_lane_start_refuses_a_job_that_has_been_stopped(tmp_path, stop):
+    store = JobStore(tmp_path / "jobs.db")
+    workspace = tmp_path / "repo"
+    job = _create(store, workspace)
+    store.claim_next(workspace=workspace)
+    store.request_cancel(job["run_id"])
+    if stop == "canceled":
+        store.mark_canceled(job["run_id"])
+    before = store.get_job(job["run_id"])
+    try:
+        with pytest.raises(JobStateError):
+            store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+        assert store.get_job(job["run_id"]) == before
+    finally:
+        store.close()
+
+
+def test_lane_start_enforces_attempt_bound_and_refuses_duplicate_start(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    workspace = tmp_path / "repo"
+    plan = _plan()
+    plan[0]["max_attempts"] = 1
+    job = _create(store, workspace, plan=plan)
+    store.claim_next(workspace=workspace)
+    store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+    try:
+        with pytest.raises(JobStateError):
+            store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+        store.update_lane(job["run_id"], "backend", "queued")
+        with pytest.raises(JobStateError):
+            store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+        lane = store.get_job(job["run_id"])["lanes"][0]
+        assert lane["status"] == "queued"
+        assert lane["attempt"] == 1
+    finally:
+        store.close()
+
+
 def test_concurrent_stall_recovery_writes_one_event_across_connections(tmp_path):
     database = tmp_path / "jobs.db"
     stores = [JobStore(database) for _ in range(2)]
