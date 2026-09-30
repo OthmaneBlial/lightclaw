@@ -178,6 +178,27 @@ def test_risky_commands_and_system_paths_require_second_confirmation(command: st
     assert pending["review"]["second_confirmation_required"] is True
 
 
+def test_switching_git_branch_does_not_require_destructive_confirmation():
+    bot = LightClawBot.__new__(LightClawBot)
+    pending = bot._decorate_pending_plan(
+        {
+            "goal": "Run the local checks",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "label": "builder",
+                        "acceptance_checks": [
+                            {"type": "command_succeeds", "command": "git checkout main"}
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+
+    assert pending["review"]["second_confirmation_required"] is False
+
+
 def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     bot = LightClawBot.__new__(LightClawBot)
     responsibilities = ["Update the API", "Add regression coverage"]
