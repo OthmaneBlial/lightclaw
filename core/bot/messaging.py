@@ -16,7 +16,7 @@ from telegram.error import BadRequest, Conflict, NetworkError, RetryAfter, Timed
 from telegram.ext import ContextTypes
 
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
-from ..fs import atomic_write_text
+from ..fs import atomic_write_text_at
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
@@ -85,11 +85,16 @@ class _TelegramHTMLChunker(HTMLParser):
 
 class BotMessagingMixin:
     def _write_long_response_artifact(self, text: str) -> Path:
-        output = ensure_private_workspace_dir(
-            self.config.workspace_path, ".lightclaw-meta", "messages"
-        )
+        workspace = Path(self.config.workspace_path).expanduser().resolve()
+        output = ensure_private_workspace_dir(workspace, ".lightclaw-meta", "messages")
         path = output / f"response-{int(time.time())}-{secrets.token_hex(4)}.md"
-        atomic_write_text(path, f"{redact_text(text)}\n", mode=0o600)
+        atomic_write_text_at(
+            workspace,
+            path.relative_to(workspace).as_posix(),
+            f"{redact_text(text)}\n",
+            expected_content=None,
+            private_parents=True,
+        )
         return path
 
     async def _send_response(self, placeholder, update: Update, markdown_response: str):

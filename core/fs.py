@@ -174,11 +174,14 @@ def atomic_write_text_at(
     content: str,
     *,
     expected_content: str | None,
+    private_parents: bool = False,
     encoding: str = "utf-8",
 ) -> None:
     """Atomically write beneath a workspace using symlink-safe directory handles."""
     parts = _relative_parts(relative)
-    directory_fd = open_directory_at(root, parts[:-1], create=True)
+    directory_fd = open_directory_at(
+        root, parts[:-1], create=True, private=private_parents
+    )
     name = parts[-1]
     temp_name: str | None = None
     file_fd: int | None = None

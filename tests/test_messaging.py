@@ -9,6 +9,7 @@ import pytest
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError
 
+import core.bot.messaging as messaging
 from core.bot.messaging import BotMessagingMixin
 
 
@@ -139,3 +140,26 @@ async def test_oversized_long_response_is_kept_local(tmp_path, monkeypatch):
     message.reply_text.assert_awaited_once()
     assert "too large" in message.reply_text.await_args.args[0]
     assert "saved locally" in message.reply_text.await_args.args[0]
+
+
+def test_long_response_artifact_rejects_symlinked_parent_swap(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    messages = workspace / ".lightclaw-meta" / "messages"
+    outside = tmp_path / "outside"
+    messages.mkdir(parents=True)
+    outside.mkdir()
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    write = messaging.atomic_write_text_at
+
+    def swap_then_write(root, relative, content, **kwargs):
+        messages.rename(messages.with_name("messages-saved"))
+        messages.symlink_to(outside, target_is_directory=True)
+        return write(root, relative, content, **kwargs)
+
+    monkeypatch.setattr(messaging, "atomic_write_text_at", swap_then_write)
+
+    with pytest.raises(OSError):
+        bot._write_long_response_artifact("long result")
+
+    assert not list(outside.iterdir())
