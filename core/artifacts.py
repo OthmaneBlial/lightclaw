@@ -321,7 +321,14 @@ def apply_selected_files(
                 backup = backup_parent / backup_parts[-1]
                 if backup.is_symlink() or backup.exists():
                     raise ArtifactError("backup path was created during apply")
-                shutil.copy2(destination, backup)
+                fd, raw_temp = tempfile.mkstemp(prefix=f".{backup.name}.", dir=backup.parent)
+                os.close(fd)
+                temp = Path(raw_temp)
+                try:
+                    shutil.copy2(destination, temp)
+                    os.link(temp, backup)
+                finally:
+                    temp.unlink(missing_ok=True)
 
         for source_file, destination, _backup in planned:
             destination.parent.mkdir(parents=True, exist_ok=True)

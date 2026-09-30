@@ -245,6 +245,34 @@ def test_selective_apply_never_overwrites_an_existing_backup(tmp_path):
     assert backup.read_text(encoding="utf-8") == "original backup\n"
 
 
+def test_selective_apply_cleans_up_a_failed_partial_backup(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "file.txt").write_text("new\n", encoding="utf-8")
+    (target / "file.txt").write_text("original target\n", encoding="utf-8")
+    backup_parent = target / ".lightclaw-backups" / "run-failure"
+
+    def fail_during_copy(_source, destination):
+        Path(destination).write_text("partial backup\n", encoding="utf-8")
+        raise OSError("simulated backup write failure")
+
+    monkeypatch.setattr("core.artifacts.shutil.copy2", fail_during_copy)
+    with pytest.raises(OSError, match="simulated backup write failure"):
+        apply_selected_files(
+            source,
+            target,
+            ["file.txt"],
+            run_id="run-failure",
+            apply=True,
+        )
+
+    assert (target / "file.txt").read_text(encoding="utf-8") == "original target\n"
+    assert not (backup_parent / "file.txt").exists()
+    assert list(backup_parent.glob(".file.txt.*")) == []
+
+
 def test_selective_apply_rejects_symlinked_workspace_roots(tmp_path):
     source = tmp_path / "source"
     target = tmp_path / "target"

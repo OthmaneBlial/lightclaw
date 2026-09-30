@@ -273,7 +273,7 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 484,
+      "lines": 491,
       "path": "core/artifacts.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19017,
+  "runtime_lines": 19024,
   "schema_version": 1
 }
