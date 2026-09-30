@@ -87,6 +87,15 @@ def test_job_store_does_not_chmod_database_symlink_target(tmp_path, monkeypatch)
     assert stat.S_IMODE(victim.stat().st_mode) == 0o644
 
 
+def test_job_store_fails_closed_when_database_cannot_be_private(tmp_path, monkeypatch):
+    def fail_chmod(*_args, **_kwargs):
+        raise PermissionError("fixture permission failure")
+
+    monkeypatch.setattr("core.jobs.os.chmod", fail_chmod)
+    with pytest.raises(PermissionError, match="fixture permission failure"):
+        JobStore(tmp_path / "jobs.db")
+
+
 def test_concurrent_approval_transition_writes_one_event_across_connections(tmp_path):
     database = tmp_path / "jobs.db"
     stores = [JobStore(database) for _ in range(8)]

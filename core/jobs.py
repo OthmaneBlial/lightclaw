@@ -194,7 +194,8 @@ class JobStore:
         try:
             os.chmod(self.path, 0o600, follow_symlinks=False)
         except OSError:
-            pass
+            self.db.close()
+            raise
 
     def close(self) -> None:
         with self._lock:
