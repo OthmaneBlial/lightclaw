@@ -522,6 +522,24 @@ def test_legacy_job_database_migrates_worker_identity_column(tmp_path):
     store.close()
 
 
+def test_job_diagnostics_refuse_database_symlink(tmp_path):
+    database = tmp_path / "jobs.db"
+    victim = tmp_path / "victim.db"
+    connection = sqlite3.connect(victim)
+    connection.execute("CREATE TABLE jobs (status TEXT)")
+    connection.execute("INSERT INTO jobs VALUES ('running')")
+    connection.commit()
+    connection.close()
+    database.symlink_to(victim)
+
+    report = inspect_job_database(database)
+
+    assert report["exists"] is True
+    assert report["database"] == database.as_posix()
+    assert "symlink" in report["error"]
+    assert report["counts"] == {}
+
+
 @pytest.mark.skipif(os.name != "posix", reason="delegated process groups require POSIX")
 def test_stalled_recovery_kills_registered_orphan_process_group(tmp_path):
     store = JobStore(tmp_path / "jobs.db")

@@ -770,17 +770,20 @@ class JobStore:
 
 def inspect_job_database(db_path: str | Path, *, stall_after_seconds: int = 120) -> dict[str, object]:
     """Inspect durable state without creating or mutating a database."""
-    path = Path(db_path).expanduser().resolve()
-    if not path.is_file():
-        return {
-            "schema_version": JOB_SCHEMA_VERSION,
-            "database": path.as_posix(),
-            "exists": False,
-            "counts": {},
-            "active": [],
-            "stalled_run_ids": [],
-        }
+    requested_path = Path(db_path).expanduser()
+    path = requested_path.parent.resolve() / requested_path.name
     try:
+        if path.is_symlink():
+            raise OSError("job database path must not be a symlink")
+        if not path.is_file():
+            return {
+                "schema_version": JOB_SCHEMA_VERSION,
+                "database": path.as_posix(),
+                "exists": False,
+                "counts": {},
+                "active": [],
+                "stalled_run_ids": [],
+            }
         db = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=3)
         db.row_factory = sqlite3.Row
         counts = {
