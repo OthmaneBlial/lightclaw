@@ -54,12 +54,18 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
   treating an unresolved compatible range as potentially affected by a pre-0.23 advisory.
 - Python 3.10 development checks use the `tomli` compatibility parser for architecture and
   runtime-footprint contracts.
+- Container build and runtime stages use the official Python 3.14 slim image pinned by digest.
 - The canonical local quality command retries one transient cold-start measurement without
   changing the published runtime budget.
 - Runtime-footprint unit tests use a deterministic timing sample; live timing remains an
   explicit quality, CI, and release measurement rather than a load-sensitive unit test.
 - Migrated Gemini from deprecated `google-generativeai` to `google-genai`; updated supported OpenAI and Anthropic SDK major ranges behind the provider protocol.
 - Release evidence now includes cold-start samples, direct dependency count, and wheel size as a separate machine-readable artifact.
+
+### Fixed
+
+- Acceptance commands now bound streamed output, stop on cancellation, and register process
+  groups for restart recovery.
 
 ## [0.1.0] - Unreleased
 

@@ -59,6 +59,9 @@ roadmap's “proof over claims” rule.
 - A local Linux container build from the preceding alpha-evidence commit succeeded under
   an unprivileged user; `--read-only` plus temporary filesystems completed the deterministic
   memory demo. This is pre-release smoke evidence, not a substitute for a public GHCR digest.
+- The current `python:3.14-slim` digest matches the official registry tag, and local quality
+  passes on Python 3.14.7. A container build with this Dockerfile remains unverified because
+  the existing Podman VM cannot start without its configured SSH identity file.
 - GitHub controls: private vulnerability reporting and Discussions enabled; community profile
   100%; Release, Dependabot Updates, and Dependency Graph workflows active; CI, CodeQL,
   OpenSSF Scorecard, and showcase validation disabled. Repository description, topics, and live
