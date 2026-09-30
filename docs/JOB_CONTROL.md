@@ -33,6 +33,8 @@ lightclaw jobs retry <run-id> --lane <failed-idempotent-lane>
 
 A running cancellation becomes `cancel_requested`; the in-process heartbeat cancels the process tree and records `canceled`. Resume and retry fail closed for non-resumable or non-idempotent lanes. These commands never publish, push, or delete a workspace.
 
+Delegated POSIX processes wait for TERM/KILL cleanup and stream draining before cancellation returns. Repeated cancellation requests do not interrupt that cleanup or a pending process-group registration/unregistration. Detached descendants can still escape the process group.
+
 ## Schedule Telegram reminders
 
 `/cron` manages reminders for the current Telegram chat. The bot must remain running to deliver them.

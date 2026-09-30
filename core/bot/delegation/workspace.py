@@ -22,7 +22,12 @@ from ...workspaces import (
 
 
 async def await_thread_completion(function, *args, **kwargs):
-    task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    return await await_task_completion(
+        asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    )
+
+
+async def await_task_completion(task):
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
@@ -33,7 +38,7 @@ async def await_thread_completion(function, *args, **kwargs):
                 if not task.cancelled():
                     continue
             except Exception:
-                log.exception("Off-thread operation failed during cancellation")
+                log.exception("Background operation failed during cancellation")
             break
         raise
 

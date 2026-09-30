@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 71,
-      "line": 849,
+      "line": 847,
       "lines": 405,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -105,9 +105,9 @@
       "path": "skills.py"
     },
     {
-      "branch_points": 42,
+      "branch_points": 41,
       "line": 496,
-      "lines": 283,
+      "lines": 281,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     }
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 71,
-      "line": 849,
+      "line": 847,
       "lines": 405,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -170,9 +170,9 @@
       "path": "core/artifacts.py"
     },
     {
-      "branch_points": 42,
+      "branch_points": 41,
       "line": 496,
-      "lines": 283,
+      "lines": 281,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -229,7 +229,7 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1253,
+      "lines": 1251,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 20915,
+  "runtime_lines": 20918,
   "schema_version": 1
 }

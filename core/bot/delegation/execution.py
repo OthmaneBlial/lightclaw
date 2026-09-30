@@ -19,7 +19,7 @@ from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
 from .agents import DelegationAgentsMixin
 from .streams import BoundedStreamCapture
-from .workspace import await_thread_completion
+from .workspace import await_task_completion, await_thread_completion
 
 
 class DelegationExecutionMixin:
@@ -584,7 +584,7 @@ class DelegationExecutionMixin:
                     except Exception:
                         return
                     try:
-                        await asyncio.to_thread(
+                        await await_thread_completion(
                             process_store.unregister_process_group,
                             job_run_id,
                             proc.pid,
@@ -595,10 +595,7 @@ class DelegationExecutionMixin:
                         )
 
                 cleanup_task = asyncio.create_task(abort_registration())
-                try:
-                    await asyncio.shield(cleanup_task)
-                except asyncio.CancelledError:
-                    await cleanup_task
+                await await_task_completion(cleanup_task)
                 raise
             except Exception as e:
                 try:
@@ -712,10 +709,11 @@ class DelegationExecutionMixin:
         except asyncio.CancelledError:
             cleanup_task = asyncio.create_task(terminate_process_tree())
             try:
-                await asyncio.shield(cleanup_task)
-            except asyncio.CancelledError:
-                await cleanup_task
-            await asyncio.gather(streams_task, return_exceptions=True)
+                await await_task_completion(cleanup_task)
+            finally:
+                await await_task_completion(
+                    asyncio.gather(streams_task, return_exceptions=True)
+                )
             raise
         except Exception as exc:
             io_failed = True
@@ -734,7 +732,7 @@ class DelegationExecutionMixin:
                     pass
             if process_group_registered:
                 try:
-                    await asyncio.to_thread(
+                    await await_thread_completion(
                         process_store.unregister_process_group,
                         job_run_id,
                         proc.pid,

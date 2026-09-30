@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import signal
 import sys
 import threading
 import time
@@ -245,26 +246,56 @@ async def test_stream_read_failure_terminates_worker_process(tmp_path: Path, mon
     assert not survived.exists()
 
 
-async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_path: Path):
+@pytest.mark.parametrize("cancel_count", [1, 3])
+async def test_task_cancellation_kills_term_resistant_worker_process_group(
+    tmp_path: Path, monkeypatch, cancel_count
+):
     harness = TimeoutHarness(resistant_child=True)
     harness.config.local_agent_timeout_sec = 30
+    term_sent = asyncio.Event()
+    process_group = None
+    killpg = os.killpg
+
+    def record_signal(pid, sig):
+        nonlocal process_group
+        killpg(pid, sig)
+        process_group = pid
+        if sig == signal.SIGTERM:
+            term_sent.set()
+
+    monkeypatch.setattr("core.bot.delegation.execution.os.killpg", record_signal)
     task = asyncio.create_task(
         harness._invoke_local_agent_streaming("codex", "task", workspace=tmp_path)
     )
-    for _ in range(100):
-        if (tmp_path / "child-ready.txt").exists():
-            break
-        await asyncio.sleep(0.02)
-    assert (tmp_path / "child-ready.txt").exists()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    await asyncio.sleep(2.3)
-    assert not (tmp_path / "child-survived.txt").exists()
+    try:
+        for _ in range(100):
+            if (tmp_path / "child-ready.txt").exists():
+                break
+            await asyncio.sleep(0.02)
+        assert (tmp_path / "child-ready.txt").exists()
+        task.cancel()
+        await asyncio.wait_for(term_sent.wait(), timeout=2)
+        for _ in range(cancel_count - 1):
+            task.cancel()
+            await asyncio.sleep(.02)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await asyncio.sleep(2.3)
+        assert not (tmp_path / "child-survived.txt").exists()
+    finally:
+        if process_group is not None:
+            try:
+                killpg(process_group, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
+@pytest.mark.parametrize("cancel_count", [1, 3])
 async def test_cancellation_during_process_registration_kills_and_unregisters_worker(
-    tmp_path: Path,
+    tmp_path: Path, cancel_count,
 ):
     class BlockingProcessStore:
         def __init__(self):
@@ -310,8 +341,9 @@ async def test_cancellation_during_process_registration_kills_and_unregisters_wo
         assert harness.jobs.registration_started.is_set()
         assert (tmp_path / "registration-ready.txt").exists()
 
-        task.cancel()
-        await asyncio.sleep(.05)
+        for _ in range(cancel_count):
+            task.cancel()
+            await asyncio.sleep(.02)
         harness.jobs.allow_registration.set()
         with pytest.raises(asyncio.CancelledError):
             await task
