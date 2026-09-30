@@ -7,6 +7,16 @@ Every delegated code run starts from a local Git checkpoint on a `lightclaw/<run
 
 A task directory inside another Git repository gets its own repository before checkpoint staging. Every artifact Git command explicitly uses the opened directory's own `.git` and work tree, including linked worktrees. If the task repository is missing, review, acceptance, rejection, and publication fail rather than operating on a parent repository. These operations retain the requested directory path for the no-follow opener, so a root symlink cannot redirect them to another checkout.
 
+Before each command, task Git metadata is checked through the opened workspace. A `.git` symlink
+or special file, a gitfile pointing at a main repository or another worktree, and a `commondir`
+redirect inside a task's own `.git` directory are refused. Linked worktrees retain Git's
+[back-reference to their own `.git` file](https://git-scm.com/docs/gitrepository-layout);
+the referenced workspace directory must match the opened task directory. Absolute and relative
+worktree pointers are supported. The explicitly selected source repository for
+`create_isolated_worktree` remains trusted, including repositories with separate Git metadata.
+This check precedes native Git execution; it cannot prevent another host process from rewriting
+metadata after the final check, and it does not sandbox repository hooks or filters.
+
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.

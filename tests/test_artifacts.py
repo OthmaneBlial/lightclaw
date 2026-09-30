@@ -130,6 +130,57 @@ def test_artifact_operations_cannot_use_another_repository(tmp_path, operation, 
     assert not (tmp_path / "bundle").exists()
 
 
+@pytest.mark.parametrize("action", ["accept", "reject"])
+@pytest.mark.parametrize("redirect", ["symlink", "gitfile", "other-worktree", "commondir"])
+def test_artifact_decisions_refuse_redirected_git_metadata(tmp_path, action, redirect):
+    source, task, linked = (tmp_path / name for name in ("source", "task", "linked"))
+    source.mkdir()
+    task.mkdir()
+    (source / "human.txt").write_text("original human file\n")
+    initialize_artifact_repository(source, "source")
+    create_isolated_worktree(source, linked, "linked")
+    (source / "human.txt").write_text("staged human edit\n")
+    _git(source, "add", "-A")
+    (linked / "human.txt").write_text("staged linked edit\n")
+    _git(linked, "add", "-A")
+    (task / "result.txt").write_text("agent result\n")
+    if redirect == "symlink":
+        (task / ".git").symlink_to(source / ".git", target_is_directory=True)
+    elif redirect == "gitfile":
+        (task / ".git").write_text(f"gitdir: {source / '.git'}\n")
+    elif redirect == "other-worktree":
+        (task / ".git").write_text((linked / ".git").read_text())
+    else:
+        initialize_artifact_repository(task, "source")
+        (task / ".git" / "commondir").write_text(str(source / ".git") + "\n")
+        (task / "result.txt").write_text("changed agent result\n")
+    heads = {root: _git(root, "rev-parse", "HEAD") for root in (source, linked)}
+    source_index = (source / ".git" / "index").read_bytes()
+    linked_git_dir = Path(_git(linked, "rev-parse", "--absolute-git-dir"))
+    linked_index = (linked_git_dir / "index").read_bytes()
+    refs = _git(source, "for-each-ref", "--format=%(refname) %(objectname)")
+
+    with pytest.raises(ArtifactError):
+        (accept_artifact if action == "accept" else reject_artifact)(task, "redirected")
+
+    assert {root: _git(root, "rev-parse", "HEAD") for root in heads} == heads
+    assert (source / ".git" / "index").read_bytes() == source_index
+    assert (linked_git_dir / "index").read_bytes() == linked_index
+    assert _git(source, "for-each-ref", "--format=%(refname) %(objectname)") == refs
+    assert (source / "human.txt").read_text() == "staged human edit\n"
+    assert (linked / "human.txt").read_text() == "staged linked edit\n"
+
+
+@pytest.mark.parametrize("content", [b"gitdir: \xff\n", b"gitdir: /unused\0\n", b"x" * 8193])
+def test_artifact_decision_handles_malformed_git_pointer(tmp_path, content):
+    (tmp_path / ".git").write_bytes(content)
+    (tmp_path / "result.txt").write_text("preserve result\n")
+    with pytest.raises(ArtifactError, match="metadata"):
+        accept_artifact(tmp_path, "malformed")
+    assert (tmp_path / ".git").read_bytes() == content
+    assert (tmp_path / "result.txt").read_text() == "preserve result\n"
+
+
 @pytest.mark.parametrize("phase", ["before_open", "launch"])
 def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeypatch, phase):
     workspace = tmp_path / "workspace"
@@ -943,10 +994,14 @@ def test_selective_apply_hashes_large_source_without_read_bytes(tmp_path, monkey
     assert (source_file.stat().st_size > 1024 * 1024)
 
 
-def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path):
+@pytest.mark.parametrize("layout", ["normal", "separate", "relative"])
+def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path, layout):
     source = tmp_path / "source"
     source.mkdir()
-    _git(source, "init", "-b", "main")
+    init_args = ["init", "-b", "main"]
+    if layout == "separate":
+        init_args.extend(["--separate-git-dir", str(tmp_path / "source-metadata")])
+    _git(source, *init_args)
     (source / "README.md").write_text("fixture\n", encoding="utf-8")
     _git(source, "add", "README.md")
     _git(
@@ -962,6 +1017,8 @@ def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path):
 
     target = tmp_path / "worktree"
     source_head = _git(source, "rev-parse", "HEAD")
+    if layout == "relative":
+        _git(source, "config", "worktree.useRelativePaths", "true")
     created = create_isolated_worktree(source, target, "real-task")
 
     assert created["branch"] == "lightclaw/real-task"

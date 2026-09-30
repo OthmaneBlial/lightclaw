@@ -13,7 +13,13 @@ import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
 
-from .fs import directory_command_at, open_directory_at, open_regular_file_at, sha256_file
+from .fs import (
+    directory_command_at,
+    open_directory_at,
+    open_regular_file_at,
+    read_text_bounded_at,
+    sha256_file,
+)
 from .receipts import _write_private, read_receipt
 from .security import delegated_process_env, redact_text
 
@@ -22,9 +28,54 @@ class ArtifactError(ValueError):
     """Raised when an artifact operation cannot be proven safe."""
 
 
-def _git(workspace: Path, *args: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
+def _check_artifact_git_metadata(root_fd: int) -> None:
+    try:
+        metadata = os.stat(".git", dir_fd=root_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        return
+    if stat.S_ISDIR(metadata.st_mode):
+        git_fd = open_directory_at(root_fd, (".git",))
+    elif stat.S_ISREG(metadata.st_mode):
+        pointer = read_text_bounded_at(root_fd, ".git", 8192).rstrip("\r\n")
+        if not pointer.startswith("gitdir: ") or "\0" in pointer:
+            raise ArtifactError("artifact Git metadata is not a valid worktree pointer")
+        git_fd = os.open(
+            pointer[len("gitdir: "):], os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=root_fd,
+        )
+    else:
+        raise ArtifactError("artifact Git metadata must not be a symlink or special file")
+    try:
+        if stat.S_ISDIR(metadata.st_mode):
+            try:
+                os.stat("commondir", dir_fd=git_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                return
+            raise ArtifactError("artifact Git directory must not redirect its common metadata")
+        backlink = read_text_bounded_at(git_fd, "gitdir", 8192).rstrip("\r\n")
+        if Path(backlink).name != ".git" or "\0" in backlink:
+            raise ArtifactError("artifact Git metadata does not belong to this worktree")
+        back_fd = os.open(
+            os.path.dirname(backlink) or ".", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+            dir_fd=git_fd,
+        )
+        try:
+            if not os.path.samestat(os.fstat(root_fd), os.fstat(back_fd)):
+                raise ArtifactError("artifact Git metadata belongs to a different worktree")
+        finally:
+            os.close(back_fd)
+    finally:
+        os.close(git_fd)
+
+
+def _git(workspace: Path, *args: str, timeout: int = 30, trusted_repository: bool = False) -> subprocess.CompletedProcess[str]:
     try:
         with directory_command_at(workspace, (), "git", "--git-dir=.git", "--work-tree=.", "-C", ".", *args) as (command, pass_fds):
+            if not trusted_repository:
+                try:
+                    _check_artifact_git_metadata(pass_fds[0])
+                except (OSError, UnicodeError) as exc:
+                    raise ArtifactError("artifact Git metadata is invalid or no longer matches this workspace") from exc
             return subprocess.run(
                 command,
                 pass_fds=pass_fds,
@@ -115,13 +166,13 @@ def create_isolated_worktree(
     """Create an optional real Git worktree without changing the source checkout."""
     source = Path(source_repository).expanduser().resolve()
     target = Path(workspace).expanduser().resolve()
-    if _git(source, "rev-parse", "--is-inside-work-tree").returncode != 0:
+    if _git(source, "rev-parse", "--is-inside-work-tree", trusted_repository=True).returncode != 0:
         raise ArtifactError("source repository is not a Git worktree")
     if target.exists() and (not target.is_dir() or any(target.iterdir())):
         raise ArtifactError("isolated worktree target must be absent or empty")
     target.parent.mkdir(parents=True, exist_ok=True)
     branch = _safe_branch(run_id)
-    result = _git(source, "worktree", "add", "-b", branch, target.as_posix(), "HEAD", timeout=120)
+    result = _git(source, "worktree", "add", "-b", branch, target.as_posix(), "HEAD", timeout=120, trusted_repository=True)
     if result.returncode != 0:
         raise ArtifactError(redact_text(result.stderr or result.stdout).strip()[-800:])
     return {
