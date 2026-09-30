@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 import stat
 import threading
 from types import SimpleNamespace
@@ -922,7 +923,9 @@ async def test_duplicate_cancel_does_not_interrupt_run_cleanup():
 
 
 @pytest.mark.asyncio
-async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_path):
+async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(
+    tmp_path, monkeypatch
+):
     bot = LightClawBot.__new__(LightClawBot)
     bot._pending_multi_plan_by_session = {}
     bot._pending_multi_plan_ttl_sec = 900
@@ -939,11 +942,22 @@ async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_p
     bot._active_run_tasks_by_session = {}
     bot._active_worker_tasks_by_run = {}
     bot._active_run_heartbeats_by_run = {}
+    update_lane = bot.jobs.update_lane
+    fail_once = True
     worker_started = asyncio.Event()
     worker_cleaned = asyncio.Event()
     never = asyncio.Event()
     run_id_holder: list[str] = []
     heartbeat_holder: list[asyncio.Task] = []
+
+    def fail_cancel_once(*args, **kwargs):
+        nonlocal fail_once
+        if fail_once and args[2] == "canceled":
+            fail_once = False
+            raise sqlite3.OperationalError("database is locked")
+        return update_lane(*args, **kwargs)
+
+    monkeypatch.setattr(bot.jobs, "update_lane", fail_cancel_once)
 
     async def fake_execute_multi_agent_plan(**kwargs):
         run_id = kwargs["run_id"]

@@ -196,22 +196,9 @@ class CommandsAgentExecutionMixin:
                     await heartbeat
                 except asyncio.CancelledError:
                     pass
-            try:
-                job = await asyncio.to_thread(self.jobs.get_job, run_id)
-                for lane in job["lanes"]:
-                    if lane["status"] in {"queued", "running"}:
-                        await asyncio.to_thread(
-                            self.jobs.update_lane,
-                            run_id,
-                            str(lane["label"]),
-                            "canceled",
-                        )
-                if job["status"] in {"running", "cancel_requested"}:
-                    await asyncio.to_thread(self.jobs.mark_canceled, run_id)
-                elif job["status"] in {"queued", "awaiting_approval", "paused", "stalled"}:
-                    await asyncio.to_thread(self.jobs.request_cancel, run_id)
-            except JobStateError:
-                pass
+            await self._cancel_durable_delegation(
+                self.jobs, session_id, run_id, owns_workspace=False
+            )
             if self._active_run_ids_by_session.get(session_id) == run_id:
                 self._active_run_ids_by_session.pop(session_id, None)
             raise

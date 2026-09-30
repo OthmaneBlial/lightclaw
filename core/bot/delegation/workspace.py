@@ -115,13 +115,19 @@ class DelegationWorkspaceMixin:
             return None, False
 
     async def _cancel_durable_delegation(
-        self, store, session_id: str, run_id: str, workspace: Path, *, owns_workspace: bool
+        self,
+        store,
+        session_id: str,
+        run_id: str,
+        workspace: Path | None = None,
+        *,
+        owns_workspace: bool,
     ) -> None:
         async def cancel_once() -> None:
             try:
                 job = await await_thread_completion(store.get_job, run_id)
             except JobStateError:
-                if owns_workspace:
+                if owns_workspace and workspace is not None:
                     await self._cleanup_unclaimed_task_workspace(workspace)
                 return
             status = str(job["status"])
