@@ -13,7 +13,10 @@ from .contract import ProviderRequest, ProviderResponse, ProviderUsage
 def _token_count(value: object) -> int | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return max(0, int(value))
+    try:
+        return max(0, int(value))
+    except (ValueError, OverflowError):
+        return None
 
 
 def _usage_value(usage: object, name: str) -> int | None:

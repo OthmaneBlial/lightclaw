@@ -153,6 +153,25 @@ async def test_all_six_adapters_share_recorded_fixture_contract(provider):
     assert raw_client.closed == 1
 
 
+@pytest.mark.parametrize("provider", ["openai", "claude", "gemini"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+async def test_nonfinite_usage_does_not_discard_provider_text(provider, value):
+    fixture = json.loads((FIXTURE_ROOT / PROVIDER_SPECS[provider].fixture).read_text())
+    response = fixture["response"]
+    if provider == "gemini":
+        response["usage_metadata"]["prompt_token_count"] = value
+    else:
+        field = "input_tokens" if provider == "claude" else "prompt_tokens"
+        response["usage"][field] = value
+    adapter, _raw_client = _recorded_adapter(provider, _namespace(response))
+    try:
+        result = await adapter.complete(ProviderRequest(messages=({"role": "user", "content": "hello"},)))
+    finally:
+        adapter.close()
+    assert result.text == fixture["expected"]["text"]
+    assert result.usage.input_tokens is None
+
+
 class _FakeOpenAI:
     instances: list["_FakeOpenAI"] = []
 

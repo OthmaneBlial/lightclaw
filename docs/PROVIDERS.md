@@ -28,6 +28,8 @@ missing extra instead of an unscoped import traceback.
 
 `LLMClient.chat()` remains the compatibility text facade used by existing Telegram and terminal handlers. New internal integrations should use `complete()` when usage or structured errors matter.
 
+NaN or infinite usage values are treated as unavailable during normalization, so they cannot fail an otherwise valid text response.
+
 All adapters receive the same `ProviderRequest` with user/assistant messages, system prompt, output budget, and timeout. SDK retries are disabled. LightClaw applies one central exponential retry policy only to rate limits, timeouts, network failures, HTTP 408/409, and provider 5xx responses. Authentication, quota, invalid-request, and invalid-response failures do not retry.
 
 Provider-reported timeouts can retry after the attempt ends. A LightClaw deadline timeout is not retried because a synchronous SDK request may continue after its coroutine is canceled.
