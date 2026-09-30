@@ -61,8 +61,9 @@ def test_task_workspace_removes_empty_dir_when_registration_fails(tmp_path, monk
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_count", [1, 3])
 async def test_cancelled_single_agent_workspace_creation_removes_late_directory(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, cancel_count
 ):
     root = tmp_path / "workspace"
     root.mkdir()
@@ -89,13 +90,19 @@ async def test_cancelled_single_agent_workspace_creation_removes_late_directory(
     execution = asyncio.create_task(
         bot._run_local_agent_task_impl("456", "codex", "cancel during single setup")
     )
-    assert await asyncio.to_thread(started.wait, 5)
-    execution.cancel()
-    await asyncio.sleep(0)
-    release.set()
+    try:
+        assert await asyncio.to_thread(started.wait, 5)
+        for _ in range(cancel_count):
+            execution.cancel()
+            await asyncio.sleep(0)
+            assert not execution.done()
+        release.set()
 
-    with pytest.raises(asyncio.CancelledError):
-        await execution
+        with pytest.raises(asyncio.CancelledError):
+            await execution
+    finally:
+        release.set()
+        await asyncio.gather(execution, return_exceptions=True)
 
     assert [path.name for path in root.iterdir()] == [".lightclaw-meta"]
     metadata = list((root / ".lightclaw-meta").glob("*.json"))

@@ -26,10 +26,15 @@ async def await_thread_completion(function, *args, **kwargs):
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
-        try:
-            await asyncio.shield(task)
-        except Exception:
-            log.exception("Off-thread operation failed during cancellation")
+        while True:
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                if not task.cancelled():
+                    continue
+            except Exception:
+                log.exception("Off-thread operation failed during cancellation")
+            break
         raise
 
 
@@ -292,15 +297,17 @@ class DelegationWorkspaceMixin:
         return candidate
 
     async def _create_task_workspace_safely(self, goal_text: str) -> Path:
-        creation = asyncio.create_task(asyncio.to_thread(self._create_task_workspace, goal_text))
+        workspace: Path | None = None
+
+        def create_workspace():
+            nonlocal workspace
+            workspace = self._create_task_workspace(goal_text)
+            return workspace
+
         try:
-            return await asyncio.shield(creation)
+            return await await_thread_completion(create_workspace)
         except asyncio.CancelledError:
-            try:
-                workspace = await asyncio.shield(creation)
-            except Exception:
-                log.exception("Task workspace creation failed during cancellation")
-            else:
+            if workspace is not None:
                 await self._cleanup_unclaimed_task_workspace(workspace)
             raise
 

@@ -169,7 +169,8 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_k
 
 
 @pytest.mark.asyncio
-async def test_cancelled_global_wipe_finishes_before_new_chat_is_admitted():
+@pytest.mark.parametrize("cancel_count", [1, 2, 3])
+async def test_cancelled_global_wipe_finishes_before_new_chat_is_admitted(cancel_count):
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True
     bot._session_id_from_update = lambda _update: "chat-42"
@@ -210,10 +211,11 @@ async def test_cancelled_global_wipe_finishes_before_new_chat_is_admitted():
     new_chat = None
     try:
         await asyncio.wait_for(started.wait(), timeout=2)
-        wipe.cancel()
-        await asyncio.sleep(0)
-        assert bot._get_memory_wipe_lock().locked()
-        assert not wipe.done()
+        for _ in range(cancel_count):
+            wipe.cancel()
+            await asyncio.sleep(0)
+            assert bot._get_memory_wipe_lock().locked()
+            assert not wipe.done()
         new_chat = asyncio.create_task(
             bot._process_user_message(update, SimpleNamespace(), "new message")
         )
