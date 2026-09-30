@@ -269,3 +269,15 @@ def test_json_reader_keeps_missing_defaults_and_parent_aliases(tmp_path):
     alias = tmp_path / "alias"
     alias.symlink_to(real_parent, target_is_directory=True)
     assert read_json_object(alias / "state.json") == {"value": "approved"}
+
+
+def test_rooted_json_reader_rejects_absolute_and_traversal_paths(tmp_path):
+    root = tmp_path / "workspace"
+    (root / "nested").mkdir(parents=True)
+    (root / "nested" / "state.json").write_text('{"value":"approved"}', encoding="utf-8")
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"value":"outside"}', encoding="utf-8")
+    assert read_json_object("nested/state.json", root=root) == {"value": "approved"}
+    for path in ("../outside.json", outside):
+        with pytest.raises(ValueError, match="safe and relative"):
+            read_json_object(path, root=root)

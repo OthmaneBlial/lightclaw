@@ -343,11 +343,16 @@ def read_json_object(
     *,
     default: dict[str, Any] | None = None,
     max_bytes: int = 1024 * 1024,
+    root: str | Path | int | None = None,
 ) -> dict[str, Any]:
-    """Read one bounded, non-symlink JSON object or return a copied default."""
+    """Read bounded JSON; root pins a relative path and missing files use a copied default."""
     source = Path(path)
     try:
-        content = read_text_bounded_at(source.parent.resolve(), source.name, max_bytes)
+        content = read_text_bounded_at(
+            root if root is not None else source.parent.resolve(),
+            source if root is not None else source.name,
+            max_bytes,
+        )
     except FileNotFoundError:
         return dict(default or {})
     loaded = json.loads(content)

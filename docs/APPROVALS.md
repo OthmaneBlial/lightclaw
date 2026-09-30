@@ -36,6 +36,8 @@ fully printed review by passing its ID to the command handler.
 
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
 
+Handoff JSON is read relative to the task workspace. Symlinks in the file or its relative parent directories are rejected, including replacements made during path validation.
+
 Control and directional formatting characters throughout detailed plans and approval summaries are shown as replacement marks to reduce filename and command spoofing; attached patch bytes remain unchanged.
 
 ## High-risk confirmation

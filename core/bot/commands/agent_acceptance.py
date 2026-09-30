@@ -520,15 +520,7 @@ class CommandsAgentAcceptanceMixin:
         label: str,
     ) -> tuple[dict[str, Any], str]:
         relative_path = self._multi_handoff_json_path(label)
-        candidate = workspace / relative_path
-        if candidate.is_symlink():
-            return {}, f"handoff JSON `{relative_path}` must not be a symlink"
-        path = self._resolve_multi_workspace_path(workspace, relative_path)
-        if path is None:
-            return {}, f"handoff JSON `{relative_path}` is outside the workspace"
-        if not path.exists():
-            return {}, f"missing `{relative_path}`"
-        return self._read_multi_handoff_json(path, relative_path)
+        return self._read_multi_handoff_json(workspace, relative_path)
 
     @staticmethod
     def _resolve_multi_workspace_path(
@@ -545,11 +537,14 @@ class CommandsAgentAcceptanceMixin:
 
     @staticmethod
     def _read_multi_handoff_json(
-        path: Path,
+        workspace: Path,
         display_path: str,
     ) -> tuple[dict[str, Any], str]:
         try:
-            return read_json_object(path, max_bytes=MAX_MULTI_HANDOFF_JSON_BYTES), ""
+            payload = read_json_object(display_path, root=workspace, max_bytes=MAX_MULTI_HANDOFF_JSON_BYTES)
+            if not payload:
+                return {}, f"missing or empty handoff JSON `{display_path}`"
+            return payload, ""
         except FileTooLargeError:
             return {}, f"handoff JSON `{display_path}` exceeds 1 MiB limit"
         except (OSError, ValueError) as exc:
@@ -630,18 +625,7 @@ class CommandsAgentAcceptanceMixin:
                     self._normalize_multi_contract_path(str(check.get("path") or ""))
                     or self._multi_handoff_json_path(label)
                 )
-                candidate = workspace / rel_path
-                target = self._resolve_multi_workspace_path(workspace, rel_path)
-                if candidate.is_symlink():
-                    failures.append(f"handoff JSON `{rel_path}` must not be a symlink")
-                    continue
-                if target is None:
-                    failures.append(f"handoff JSON `{rel_path}` is outside the workspace")
-                    continue
-                if not target.is_file():
-                    failures.append(f"missing handoff JSON `{rel_path}`")
-                    continue
-                raw, error = self._read_multi_handoff_json(target, rel_path)
+                raw, error = self._read_multi_handoff_json(workspace, rel_path)
                 if error:
                     failures.append(error)
                     continue

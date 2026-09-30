@@ -298,6 +298,42 @@ def test_handoff_acceptance_rejects_symlinked_parent_outside_workspace(tmp_path)
     assert failures
 
 
+@pytest.mark.parametrize("operation", ["load", "acceptance"])
+def test_handoff_read_rejects_parent_swapped_after_path_validation(tmp_path, monkeypatch, operation):
+    import core.bot.commands.agent_acceptance as acceptance
+
+    workspace = tmp_path / "workspace"
+    parent = workspace / "handoff"
+    parent.mkdir(parents=True)
+    payload = {"lane": "builder", "summary": "approved", "changed_files": []}
+    (parent / "builder.json").write_text(json.dumps(payload), encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "builder.json").write_text(
+        json.dumps({**payload, "summary": "outside fixture"}), encoding="utf-8",
+    )
+    original_read = acceptance.read_json_object
+
+    def swap_before_read(*args, **kwargs):
+        parent.rename(tmp_path / "original-handoff")
+        parent.symlink_to(outside, target_is_directory=True)
+        return original_read(*args, **kwargs)
+
+    monkeypatch.setattr(acceptance, "read_json_object", swap_before_read)
+    bot = LightClawBot.__new__(LightClawBot)
+    if operation == "load":
+        data, error = bot._load_multi_worker_handoff(workspace, "builder")
+        assert data == {}
+        assert error
+    else:
+        passed, failures, _ = bot._evaluate_multi_worker_acceptance(
+            workspace, "builder",
+            {"acceptance_checks": [{"type": "handoff_json", "path": "handoff/builder.json"}]},
+        )
+        assert not passed
+        assert failures
+
+
 @pytest.mark.parametrize(
     "check",
     [
