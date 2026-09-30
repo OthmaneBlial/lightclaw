@@ -375,6 +375,7 @@ class JobStore:
         event: str,
         *,
         error: str = "",
+        reset_running_lanes: bool = False,
     ) -> dict[str, object]:
         now = time.time()
         with self._lock, self.db:
@@ -395,6 +396,11 @@ class JobStore:
                 ).fetchone()
                 status = str(current["status"]) if current else "missing"
                 raise JobStateError(f"cannot transition {status} to {target}")
+            if reset_running_lanes:
+                self.db.execute(
+                    "UPDATE lanes SET status = 'queued' WHERE run_id = ? AND status = 'running'",
+                    (run_id,),
+                )
             self._event(run_id, event, {"from": current_status, "to": target})
         return self.get_job(run_id)
 
@@ -582,7 +588,13 @@ class JobStore:
                 "non-resumable or non-idempotent lanes block resume: "
                 + ", ".join(unsafe)
             )
-        return self._transition(run_id, {str(job["status"])}, "queued", "resumed")
+        return self._transition(
+            run_id,
+            {str(job["status"])},
+            "queued",
+            "resumed",
+            reset_running_lanes=True,
+        )
 
     def update_lane(
         self,

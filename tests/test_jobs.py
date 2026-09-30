@@ -282,6 +282,23 @@ def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
     store.close()
 
 
+def test_resume_requeues_interrupted_lane_and_counts_new_attempt(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    job = _create(store, tmp_path / "repo")
+    store.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+
+    assert store.recover_stalled() == [job["run_id"]]
+    assert store.resume(job["run_id"])["lanes"][0]["status"] == "queued"
+    store.claim_next(workspace=tmp_path / "repo")
+    resumed = store.update_lane(
+        job["run_id"], "backend", "running", increment_attempt=True
+    )
+
+    assert resumed["lanes"][0]["attempt"] == 2
+    store.close()
+
+
 def test_resume_rejects_non_idempotent_lane_even_when_marked_resumable(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     plan = _plan()
