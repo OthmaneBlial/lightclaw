@@ -105,6 +105,30 @@ def test_plan_expected_outputs_are_visible_and_trigger_second_confirmation():
     assert "outputs: Publish the production release" in preview
 
 
+def test_plan_review_makes_directional_controls_visible_in_paths_and_commands():
+    bot = LightClawBot.__new__(LightClawBot)
+    rendered = bot._render_plan_review(
+        {
+            "review": {
+                "changed_paths": ["safe.py\u202eevil.txt"],
+                "proposed_commands": ["cat safe.py\u202eevil.txt"],
+            }
+        }
+    )
+
+    assert "\u202e" not in rendered
+    assert rendered.count("�") == 2
+
+
+def test_mobile_diff_preview_makes_directional_controls_visible():
+    rendered = LightClawBot._mobile_diff_preview(
+        "@@ -1 +1 @@\n-old\n+safe.py\u202eevil.txt"
+    )
+
+    assert "\u202e" not in rendered
+    assert "�" in rendered
+
+
 @pytest.mark.parametrize(
     "worker_action",
     [

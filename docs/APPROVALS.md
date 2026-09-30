@@ -20,6 +20,8 @@ If scope is missing, the review says so rather than inventing paths. Editing a s
 
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
 
+Control and directional formatting characters in Telegram review text are shown as replacement marks to reduce filename and command spoofing; attached patch bytes remain unchanged.
+
 ## High-risk confirmation
 
 Destructive language and commands, privileged or network commands, publishing/deployment, credential changes, or external-system scope require two ordered confirmations. The shared execution gate enforces the second confirmation for button, text, and slash-command entry points. A forged second-confirmation callback is rejected unless the first approval was recorded. This keyword check is heuristic; it does not sandbox commands. Trusted host execution retains its separate confirmation gate.

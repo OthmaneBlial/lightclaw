@@ -23,6 +23,9 @@ from ..receipts import read_receipt
 
 MAX_REVIEWED_COMMANDS = 6
 MAX_DIFF_PREVIEW_BYTES = 32 * 1024
+_UNSAFE_REVIEW_CONTROLS = re.compile(
+    r"[\x00-\x1f\x7f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u206f\ufeff]"
+)
 
 
 class BotApprovalsMixin:
@@ -95,11 +98,9 @@ class BotApprovalsMixin:
                 if in_hunk:
                     break
                 in_hunk = True
-                excerpt.append(line)
+                excerpt.append(BotApprovalsMixin._visible_review_text(line))
             elif in_hunk and line[:1] in {" ", "+", "-"}:
-                safe_line = "".join(
-                    char if char == "\t" or ord(char) >= 32 else "�" for char in line
-                )
+                safe_line = BotApprovalsMixin._visible_review_text(line)
                 if len(safe_line) > 140:
                     safe_line = safe_line[:137] + "..."
                 excerpt.append(safe_line)
@@ -108,6 +109,10 @@ class BotApprovalsMixin:
         if not excerpt:
             return "No text hunk; full patch attached."
         return "\n".join(excerpt)
+
+    @staticmethod
+    def _visible_review_text(value: object) -> str:
+        return _UNSAFE_REVIEW_CONTROLS.sub("�", str(value if value is not None else ""))
 
     @staticmethod
     def _inline_voice_keyboard(approval_id: str) -> InlineKeyboardMarkup:
@@ -227,31 +232,27 @@ class BotApprovalsMixin:
             if isinstance(review.get("proposed_commands"), list)
             else []
         )
-        estimate = (
-            review.get("estimated_minutes")
-            if isinstance(review.get("estimated_minutes"), dict)
-            else {}
-        )
+        estimate = review.get("estimated_minutes") if isinstance(review.get("estimated_minutes"), dict) else {}
         lines = [
             "<b>Approval review</b>",
-            f"Risk: <code>{_escape_html(str(review.get('risk_level', 'medium')))}</code>",
+            f"Risk: <code>{_escape_html(BotApprovalsMixin._visible_review_text(review.get('risk_level', 'medium')))}</code>",
             "Changed paths: "
             + (
-                ", ".join(f"<code>{_escape_html(str(path))}</code>" for path in paths[:8])
+                ", ".join(f"<code>{_escape_html(BotApprovalsMixin._visible_review_text(path))}</code>" for path in paths[:8])
                 if paths
                 else "not declared; approval should be denied or scope edited"
             ),
             "Proposed commands: "
             + (
                 ", ".join(
-                    f"<code>{_escape_html(str(command))}</code>"
+                    f"<code>{_escape_html(BotApprovalsMixin._visible_review_text(command))}</code>"
                     for command in commands[:MAX_REVIEWED_COMMANDS]
                 )
                 if commands
                 else "none declared by acceptance contracts"
             ),
             f"Estimated duration: <code>{estimate.get('min', '?')}–{estimate.get('max', '?')} min</code>",
-            f"Estimated cost: <code>{_escape_html(str(review.get('estimated_cost', 'unknown')))}</code>",
+            f"Estimated cost: <code>{_escape_html(BotApprovalsMixin._visible_review_text(review.get('estimated_cost', 'unknown')))}</code>",
         ]
         if commands:
             lines.append(
@@ -514,8 +515,8 @@ class BotApprovalsMixin:
         if changed_files:
             review_lines.append("Changed files:")
             for item in changed_files[:8]:
-                status = re.sub(r"\s+", " ", str(item.get("change") or "changed"))
-                path = re.sub(r"\s+", " ", str(item.get("path") or ""))
+                status = re.sub(r"\s+", " ", self._visible_review_text(item.get("change") or "changed"))
+                path = re.sub(r"\s+", " ", self._visible_review_text(item.get("path") or ""))
                 if len(path) > 120:
                     path = path[:117].rstrip() + "..."
                 review_lines.append(f"- {status[:24]}: {path}")
