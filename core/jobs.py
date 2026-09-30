@@ -123,6 +123,13 @@ class JobStore:
         self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
         self.db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
+        try:
+            self._initialize_schema()
+        except BaseException:
+            self.db.close()
+            raise
+
+    def _initialize_schema(self) -> None:
         with self._lock:
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.execute("PRAGMA foreign_keys=ON")

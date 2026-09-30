@@ -136,6 +136,34 @@ def test_job_store_fails_closed_when_database_cannot_be_private(tmp_path, monkey
         JobStore(tmp_path / "jobs.db")
 
 
+def test_job_store_closes_connection_when_schema_initialization_fails(tmp_path, monkeypatch):
+    class TrackingConnection(sqlite3.Connection):
+        closed = False
+
+        def close(self):
+            self.closed = True
+            super().close()
+
+    connect = sqlite3.connect
+    connections = []
+
+    def tracking_connect(*args, **kwargs):
+        kwargs["factory"] = TrackingConnection
+        connection = connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr("core.jobs.sqlite3.connect", tracking_connect)
+    database = tmp_path / "corrupt.db"
+    database.write_bytes(b"not a SQLite database")
+
+    with pytest.raises(sqlite3.DatabaseError):
+        JobStore(database)
+
+    assert len(connections) == 1
+    assert connections[0].closed
+
+
 def test_concurrent_approval_transition_writes_one_event_across_connections(tmp_path):
     database = tmp_path / "jobs.db"
     stores = [JobStore(database) for _ in range(8)]

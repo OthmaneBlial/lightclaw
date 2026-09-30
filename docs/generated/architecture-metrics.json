@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 827,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 831,
+      "path": "core/jobs.py"
     },
     {
-      "lines": 824,
-      "path": "core/jobs.py"
+      "lines": 827,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
       "lines": 816,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19973,
+  "runtime_lines": 19980,
   "schema_version": 1
 }
