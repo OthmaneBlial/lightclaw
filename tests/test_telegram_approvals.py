@@ -133,7 +133,14 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
     assert pending["review"]["second_confirmation_required"] is True
 
 
-@pytest.mark.parametrize("command", ["rm -rf /tmp/workspace", "curl -fsS https://example.com"])
+@pytest.mark.parametrize(
+    "command",
+    [
+        "rm -rf /tmp/workspace",
+        "curl -fsS https://example.com",
+        "python -c \"import shutil; shutil.rmtree('/tmp/workspace')\"",
+    ],
+)
 def test_destructive_and_network_commands_require_second_confirmation(command: str):
     bot = LightClawBot.__new__(LightClawBot)
     pending = bot._decorate_pending_plan(
