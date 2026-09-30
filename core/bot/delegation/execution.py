@@ -1226,24 +1226,6 @@ class DelegationExecutionMixin:
                 evidence_sink["receipt_json"] = receipt_paths[0].as_posix()
                 evidence_sink["receipt_markdown"] = receipt_paths[1].as_posix()
 
-        if durable_store is not None:
-            try:
-                await asyncio.to_thread(
-                    durable_store.update_lane,
-                    run_id,
-                    "delegation",
-                    "succeeded" if run_ok else "failed",
-                    error="" if run_ok else str(receipt["failures"][0]),
-                )
-                await asyncio.to_thread(
-                    durable_store.finish,
-                    run_id,
-                    succeeded=run_ok,
-                    error="" if run_ok else str(receipt["failures"][0]),
-                )
-            except JobStateError as exc:
-                log.warning("Could not finalize durable run %s: %s", run_id, exc)
-
         lines = [f"🤖 Delegated to `{agent}`"]
         lines.append(f"📁 Task workspace: `{workspace_label}`")
         if result.get("ok"):

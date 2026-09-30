@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,7 +10,9 @@ from core.bot import LightClawBot
 from core.jobs import JobStore
 
 
-def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeypatch):
+def test_real_delegation_path_emits_private_structured_receipt(
+    tmp_path, monkeypatch, caplog
+):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-receipt-fixture")
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(
@@ -38,14 +41,15 @@ def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeyp
     bot._invoke_local_agent_streaming = fake_invoke
     evidence: dict[str, object] = {}
     try:
-        result = asyncio.run(
-            bot._run_local_agent_task(
-                session_id="fixture-session",
-                agent="codex",
-                task="Create result.txt; credential=sk-receipt-fixture",
-                evidence_sink=evidence,
+        with caplog.at_level(logging.WARNING):
+            result = asyncio.run(
+                bot._run_local_agent_task(
+                    session_id="fixture-session",
+                    agent="codex",
+                    task="Create result.txt; credential=sk-receipt-fixture",
+                    evidence_sink=evidence,
+                )
             )
-        )
         durable_job = bot.jobs.get_job(str(evidence["run_id"]))
     finally:
         bot.jobs.close()
@@ -63,6 +67,7 @@ def test_real_delegation_path_emits_private_structured_receipt(tmp_path, monkeyp
     assert any(str(path).endswith("changes.patch") for path in receipt["artifacts"])
     assert durable_job["status"] == "succeeded"
     assert durable_job["lanes"][0]["status"] == "succeeded"
+    assert "Could not finalize durable run" not in caplog.text
     assert "[REDACTED]" in receipt["original_goal"]
     assert "sk-receipt-fixture" not in receipt_path.read_text(encoding="utf-8")
     assert "Receipt:" in result
