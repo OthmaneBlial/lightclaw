@@ -24,10 +24,11 @@ MAX_REVIEWED_COMMANDS = 6
 
 class BotApprovalsMixin:
     _SECOND_CONFIRM_PATTERNS = (
-        r"\b(delete|remove|destroy|drop|truncate|wipe|reset|clean|overwrite|purge|erase|revoke|rm|rmdir|rmtree|unlink|shred|wipefs|mkfs|dd)\b",
+        r"\b(delete|remove|destroy|drop|truncate|wipe|reset|clean|overwrite|purge|erase|revoke|rm|rmdir|rmtree|unlink|shred|wipefs|mkfs|dd|mv|cp)\b",
         r"\b(push|publish|release|deploy|production|merge|open\s+(?:a\s+)?pr)\b",
         r"\b(tokens?|credentials?|passwords?|secrets?|permissions?|(?:api|access|private)[_ -]?keys?)\b",
-        r"\b(outside|external|system|home directory|/etc/|sudo|doas)\b",
+        r"\b(outside|external|system|home directory|sudo|doas)\b|/etc/",
+        r"\b(?:os\.(?:replace|rename)|shutil\.(?:move|copy|copy2|copyfile|copytree)|(?:pathlib\.)?Path\.(?:replace|rename))\s*\(",
         r"\b(curl|wget|ssh|scp|sftp|nc|netcat|ftp|telnet)\b|https?://",
     )
 

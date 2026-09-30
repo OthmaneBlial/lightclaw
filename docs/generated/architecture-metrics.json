@@ -78,7 +78,7 @@
     },
     {
       "branch_points": 48,
-      "line": 272,
+      "line": 273,
       "lines": 179,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -213,7 +213,7 @@
     },
     {
       "branch_points": 48,
-      "line": 272,
+      "line": 273,
       "lines": 179,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -269,7 +269,7 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 561,
+      "lines": 562,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20312,
+  "runtime_lines": 20313,
   "schema_version": 1
 }

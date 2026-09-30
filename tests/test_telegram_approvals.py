@@ -139,9 +139,14 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
         "rm -rf /tmp/workspace",
         "curl -fsS https://example.com",
         "python -c \"import shutil; shutil.rmtree('/tmp/workspace')\"",
+        "mv /tmp/important /tmp/old",
+        "cp -f /tmp/generated /tmp/important",
+        "python -c \"import os; os.replace('/tmp/a', '/tmp/b')\"",
+        "python -c \"import shutil; shutil.move('/tmp/a', '/tmp/b')\"",
+        "cat /etc/config",
     ],
 )
-def test_destructive_and_network_commands_require_second_confirmation(command: str):
+def test_risky_commands_and_system_paths_require_second_confirmation(command: str):
     bot = LightClawBot.__new__(LightClawBot)
     pending = bot._decorate_pending_plan(
         {
