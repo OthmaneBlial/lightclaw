@@ -1038,7 +1038,7 @@ class DelegationExecutionMixin:
 
                 heartbeat_task = asyncio.create_task(durable_heartbeat())
             except asyncio.CancelledError:
-                await self._cancel_unstarted_delegation(
+                await self._cancel_durable_delegation(
                     durable_store,
                     session_id,
                     run_id,
@@ -1084,16 +1084,13 @@ class DelegationExecutionMixin:
             )
         except asyncio.CancelledError:
             if durable_store is not None:
-                try:
-                    await asyncio.to_thread(
-                        durable_store.update_lane,
-                        run_id,
-                        "delegation",
-                        "canceled",
-                    )
-                    await asyncio.to_thread(durable_store.mark_canceled, run_id)
-                except JobStateError:
-                    pass
+                await self._cancel_durable_delegation(
+                    durable_store,
+                    session_id,
+                    run_id,
+                    target_workspace,
+                    owns_workspace=False,
+                )
             if self._active_run_ids_by_session.get(session_id) == run_id:
                 self._active_run_ids_by_session.pop(session_id, None)
             raise

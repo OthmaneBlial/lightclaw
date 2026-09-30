@@ -103,20 +103,16 @@ class DelegationWorkspaceMixin:
             return await self._await_task_workspace_preflight(workspace, function, *args)
         return await await_thread_completion(function, *args)
 
-    async def _cancel_unstarted_delegation(
+    async def _cancel_durable_delegation(
         self, store, session_id: str, run_id: str, workspace: Path, *, owns_workspace: bool
     ) -> None:
-        try:
+        async def cancel_once() -> None:
             try:
                 job = await await_thread_completion(store.get_job, run_id)
             except JobStateError:
                 if owns_workspace:
                     await self._cleanup_unclaimed_task_workspace(workspace)
                 return
-            except Exception:
-                log.exception("Could not inspect canceled delegation setup %s", run_id)
-                return
-
             status = str(job["status"])
             if status == "running":
                 await await_thread_completion(store.request_cancel, run_id)
@@ -129,8 +125,20 @@ class DelegationWorkspaceMixin:
                 await await_thread_completion(store.request_cancel, run_id)
             elif status in {"running", "cancel_requested"}:
                 await await_thread_completion(store.mark_canceled, run_id)
-        except Exception:
-            log.exception("Could not cancel unstarted delegation job %s", run_id)
+
+        try:
+            for attempt in range(2):
+                try:
+                    await cancel_once()
+                    return
+                except sqlite3.OperationalError:
+                    if attempt == 0:
+                        log.warning("Retrying durable job cancellation after SQLite error: %s", run_id)
+                        continue
+                    log.exception("Could not cancel durable delegation job %s", run_id)
+                except Exception:
+                    log.exception("Could not cancel durable delegation job %s", run_id)
+                    return
         finally:
             if self._active_run_ids_by_session.get(session_id) == run_id:
                 self._active_run_ids_by_session.pop(session_id, None)
@@ -138,7 +146,7 @@ class DelegationWorkspaceMixin:
     async def _handle_durable_setup_failure(
         self, error: Exception, store, session_id: str, run_id: str, workspace: Path, owns: bool
     ) -> str:
-        await self._cancel_unstarted_delegation(
+        await self._cancel_durable_delegation(
             store, session_id, run_id, workspace, owns_workspace=owns
         )
         if isinstance(error, JobStateError):

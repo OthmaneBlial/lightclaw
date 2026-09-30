@@ -363,3 +363,59 @@ async def test_sqlite_heartbeat_error_does_not_discard_completed_run(
     assert evidence["disposition"] == "ready_for_review"
     assert "Receipt:" in result
     assert "Durable job heartbeat failed; retrying" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_canceled_run_retries_sqlite_error_when_releasing_job(
+    tmp_path, monkeypatch, caplog
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    update_lane = bot.jobs.update_lane
+    fail_once = True
+    invoke_started = asyncio.Event()
+    never = asyncio.Event()
+
+    def fail_cancellation_once(*args, **kwargs):
+        nonlocal fail_once
+        if fail_once and args[2] == "canceled":
+            fail_once = False
+            raise sqlite3.OperationalError("database is locked")
+        return update_lane(*args, **kwargs)
+
+    async def hold_agent(**_kwargs):
+        invoke_started.set()
+        await never.wait()
+
+    monkeypatch.setattr(bot.jobs, "update_lane", fail_cancellation_once)
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    bot._invoke_local_agent_streaming = hold_agent
+    task = asyncio.create_task(
+        bot._run_local_agent_task("fixture-session", "codex", "cancel active work")
+    )
+    try:
+        await asyncio.wait_for(invoke_started.wait(), timeout=5)
+        task.cancel()
+        with caplog.at_level(logging.WARNING), pytest.raises(asyncio.CancelledError):
+            await task
+
+        job = bot.jobs.list_jobs()[0]
+        assert job["status"] == "canceled"
+        assert job["lanes"][0]["status"] == "canceled"
+        assert Path(str(job["workspace"])).is_dir()
+        assert "Retrying durable job cancellation after SQLite error" in caplog.text
+    finally:
+        bot.jobs.close()

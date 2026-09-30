@@ -28,9 +28,9 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "branch_points": 70,
+      "branch_points": 69,
       "line": 910,
-      "lines": 390,
+      "lines": 387,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -135,9 +135,9 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 70,
+      "branch_points": 69,
       "line": 910,
-      "lines": 390,
+      "lines": 387,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1299,
+      "lines": 1296,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20738,
+  "runtime_lines": 20743,
   "schema_version": 1
 }
