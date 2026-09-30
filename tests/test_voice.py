@@ -185,7 +185,10 @@ async def test_clear_revokes_pending_actions_and_discards_inflight_voice(monkeyp
     bot._invalidate_session_summary = Mock()
     bot._session_summaries = {"456": "old", "other": "keep"}
     bot._summary_generation_by_session = {}
-    bot._pending_wipe_confirm = {"456": 10.0, "other": 20.0}
+    bot._pending_wipe_confirm = {
+        "456": {"user_id": 456, "expires_at": 10.0, "expires_monotonic": 10.0},
+        "other": {"user_id": 789, "expires_at": 20.0, "expires_monotonic": 20.0},
+    }
     bot._pending_multi_plan_by_session = {"other": {"goal": "keep"}}
     bot._pending_trusted_agent_run_by_session = {"other": {"task": "keep"}}
     bot._pending_voice_goal_by_session = {"other": {"text": "keep"}}
@@ -221,7 +224,9 @@ async def test_clear_revokes_pending_actions_and_discards_inflight_voice(monkeyp
     finish_transcription.set()
     await voice_task
 
-    assert bot._pending_wipe_confirm == {"other": 20.0}
+    assert bot._pending_wipe_confirm == {
+        "other": {"user_id": 789, "expires_at": 20.0, "expires_monotonic": 20.0}
+    }
     assert bot._pending_multi_plan_by_session == {"other": {"goal": "keep"}}
     assert bot._pending_trusted_agent_run_by_session == {"other": {"task": "keep"}}
     assert bot._pending_voice_goal_by_session == {"other": {"text": "keep"}}

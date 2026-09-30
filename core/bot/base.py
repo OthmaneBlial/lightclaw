@@ -55,8 +55,8 @@ class BotBaseMixin:
         self._background_tasks: set[asyncio.Task] = set()
         # Lock to prevent concurrent summarization per session
         self._summarizing: set[str] = set()
-        # Confirmation window for destructive memory wipe command (per chat).
-        self._pending_wipe_confirm: dict[str, float] = {}
+        # Global memory wipe confirmation uses the shared dual-clock approval contract.
+        self._pending_wipe_confirm: dict[str, dict[str, object]] = {}
         # Track last successful file operation target per session.
         self._last_file_by_session: dict[str, str] = {}
         # Per-chat local delegation mode (codex/claude).

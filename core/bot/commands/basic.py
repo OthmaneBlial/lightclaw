@@ -112,10 +112,15 @@ class CommandsBasicMixin:
 
         now = time.time()
         confirm_window_sec = 90
-        pending_until = self._pending_wipe_confirm.get(session_id, 0.0)
+        pending = self._pending_wipe_confirm.get(session_id)
+        confirmation_active = bool(
+            pending
+            and pending.get("user_id") == update.effective_user.id
+            and not self._pending_confirmation_expired(pending)
+        )
 
         if args and args[0] in {"confirm", "yes", "now"}:
-            if pending_until and now <= pending_until:
+            if confirmation_active:
                 self._clear_pending_actions()
                 self._invalidate_active_summaries()
                 await asyncio.to_thread(self.memory.clear_all)
@@ -131,19 +136,23 @@ class CommandsBasicMixin:
             else:
                 await self._reply_logged(
                     update,
-                    "No active wipe confirmation.\n"
+                    "No active wipe confirmation for your Telegram user.\n"
                     "Run <code>/wipe_memory</code> first, then confirm within 90s with "
                     "<code>/wipe_memory confirm</code>.",
                     parse_mode=ParseMode.HTML,
                 )
             return
 
-        self._pending_wipe_confirm[session_id] = now + confirm_window_sec
+        self._pending_wipe_confirm[session_id] = {
+            "user_id": update.effective_user.id,
+            "expires_at": now + confirm_window_sec,
+            "expires_monotonic": time.monotonic() + confirm_window_sec,
+        }
         await self._reply_logged(
             update,
             "⚠️ <b>Danger: wipe ALL memory</b>\n"
             "This deletes every saved interaction and session across all chats.\n\n"
-            f"To confirm within {confirm_window_sec}s, run:\n"
+            f"To confirm within {confirm_window_sec}s from this Telegram user, run:\n"
             "<code>/wipe_memory confirm</code>",
             parse_mode=ParseMode.HTML,
         )

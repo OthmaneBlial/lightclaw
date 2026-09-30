@@ -341,7 +341,7 @@
           <article class="boundary-card reveal">
             <span class="boundary-tag safe">🧠 LOCAL MEMORY</span>
             <h3>Local, bounded memory</h3>
-            <p>Chat history and session summaries live in namespaced local SQLite. They expire after 90 days by default; <code>MEMORY_RETENTION_DAYS</code> changes the limit. <code>/clear</code> removes one chat; confirmed <code>/wipe_memory</code> erases saved chat memory across chats.</p>
+            <p>Chat history and session summaries live in namespaced local SQLite. They expire after 90 days by default; <code>MEMORY_RETENTION_DAYS</code> changes the limit. <code>/clear</code> removes one chat; global <code>/wipe_memory</code> erases all saved chat memory. Group confirmations expire after 90 seconds and require the initiating Telegram user.</p>
           </article>
           <article class="boundary-card reveal">
             <span class="boundary-tag warn">⚠️ YOUR DECISION</span>

@@ -8,7 +8,7 @@ Plan, voice, and trusted-run approvals expire even if the clock changes or the m
 
 Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.
 
-Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes one chat; confirmed /wipe_memory deletes saved chat memory across chats.
+Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes one chat; global /wipe_memory erases saved chat memory across chats. A group confirmation lasts 90 seconds and must come from the initiating Telegram user.
 
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 
