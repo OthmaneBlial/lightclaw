@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import secrets
 import time
@@ -99,6 +100,11 @@ class BotMessagingMixin:
 
     async def _send_response(self, placeholder, update: Update, markdown_response: str):
         """Send bounded Telegram HTML chunks while preserving formatting."""
+        async def report_failure(text: str) -> None:
+            target = placeholder.edit_text if placeholder else getattr(update.message, "reply_text", None)
+            if target:
+                await self._try_send(target, text)
+
         if len(markdown_response) > 6000 or self._is_large_code_leak(markdown_response):
             try:
                 artifact = self._write_long_response_artifact(markdown_response)
@@ -108,10 +114,7 @@ class BotMessagingMixin:
                     "Could not save this long result safely. Check the workspace's "
                     "`.lightclaw-meta` directory."
                 )
-                if placeholder:
-                    await self._try_send(placeholder.edit_text, failure)
-                elif update.message:
-                    await self._try_send(update.message.reply_text, failure)
+                await report_failure(failure)
                 return
             summary = (
                 "Result is too large for safe inline review. "
@@ -130,10 +133,7 @@ class BotMessagingMixin:
                         "or its size could not be checked. It remains saved locally as "
                         f"`{artifact.name}` under `.lightclaw-meta/messages/`."
                     )
-                    if placeholder:
-                        await self._try_send(placeholder.edit_text, failure)
-                    else:
-                        await self._try_send(update.message.reply_text, failure)
+                    await report_failure(failure)
                     return
                 try:
                     with artifact.open("rb") as handle:
@@ -153,10 +153,7 @@ class BotMessagingMixin:
                         f"It remains saved locally as `{artifact.name}` under "
                         "`.lightclaw-meta/messages/`."
                     )
-                    if placeholder:
-                        await self._try_send(placeholder.edit_text, failure)
-                    elif update.message:
-                        await self._try_send(update.message.reply_text, failure)
+                    await report_failure(failure)
             return
 
         html_chunks = _TelegramHTMLChunker(max_len=3000)
@@ -230,17 +227,28 @@ class BotMessagingMixin:
 
     async def _try_send(self, send_fn, text: str) -> bool:
         """Use plain text only when Telegram rejects the HTML payload."""
-        try:
-            await send_fn(text, parse_mode=ParseMode.HTML)
+        async def send_with_rate_limit(payload: str, **kwargs) -> bool:
+            try:
+                await send_fn(payload, **kwargs)
+            except RetryAfter as exc:
+                delay = exc.retry_after
+                if hasattr(delay, "total_seconds"):
+                    delay = delay.total_seconds()
+                if delay > 30:
+                    raise
+                await asyncio.sleep(max(0, delay))
+                await send_fn(payload, **kwargs)
             return True
+
+        try:
+            return await send_with_rate_limit(text, parse_mode=ParseMode.HTML)
         except BadRequest:
             pass
 
         # Fallback: strip HTML tags and send as plain text
         try:
             plain = unescape(re.sub(r"<[^>]+>", "", text))
-            await send_fn(plain)
-            return True
+            return await send_with_rate_limit(plain)
         except BadRequest as e:
             log.error(f"Failed to send message chunk: {e}")
             return False

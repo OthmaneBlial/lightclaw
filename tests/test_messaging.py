@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from html.parser import HTMLParser
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -121,6 +122,33 @@ async def test_plain_fallback_decodes_escaped_html_entities():
         ("A &lt; B &amp; <b>bold</b>", ParseMode.HTML),
         ("A < B & bold", None),
     ]
+
+
+@pytest.mark.asyncio
+async def test_short_rate_limit_retries_message_once(monkeypatch):
+    bot = MessagingHarness()
+    send = AsyncMock(side_effect=[RetryAfter(timedelta(seconds=2)), None])
+    sleep = AsyncMock()
+    monkeypatch.setattr(messaging.asyncio, "sleep", sleep)
+
+    assert await bot._try_send(send, "hello")
+
+    assert send.await_count == 2
+    sleep.assert_awaited_once_with(2.0)
+
+
+@pytest.mark.asyncio
+async def test_long_rate_limit_propagates_without_holding_message_handler(monkeypatch):
+    bot = MessagingHarness()
+    send = AsyncMock(side_effect=RetryAfter(timedelta(seconds=31)))
+    sleep = AsyncMock()
+    monkeypatch.setattr(messaging.asyncio, "sleep", sleep)
+
+    with pytest.raises(RetryAfter):
+        await bot._try_send(send, "hello")
+
+    send.assert_awaited_once()
+    sleep.assert_not_awaited()
 
 
 @pytest.mark.asyncio
