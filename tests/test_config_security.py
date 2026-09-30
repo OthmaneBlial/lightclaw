@@ -204,14 +204,30 @@ def test_delegated_environment_is_allowlisted_and_secret_free():
 
     result = delegated_process_env(
         source,
-        extra={"CI": "1", "ANOTHER_SECRET": "blocked", "RUN_ID": "safe"},
+        extra={
+            "CI": "1",
+            "CODEX_HOME": "/tmp/codex",
+            "LIGHTCLAW_DELEGATED_AGENT": "codex",
+            "PYTHONIOENCODING": "utf-8",
+            "ANOTHER_SECRET": "blocked",
+            "LD_PRELOAD": "/tmp/attack.so",
+            "LIGHTCLAW_DELEGATED": "0",
+            "PATH": "/tmp/attacker-bin",
+            "PYTHONPATH": "/tmp/attacker-modules",
+            "RUN_ID": "safe",
+        },
     )
 
     assert result["PATH"] == "/usr/bin"
     assert result["HOME"] == "/tmp/user"
     assert result["CI"] == "1"
-    assert result["RUN_ID"] == "safe"
+    assert result["CODEX_HOME"] == "/tmp/codex"
+    assert result["LIGHTCLAW_DELEGATED_AGENT"] == "codex"
+    assert result["PYTHONIOENCODING"] == "utf-8"
     assert result["LIGHTCLAW_DELEGATED"] == "1"
+    assert "LD_PRELOAD" not in result
+    assert "PYTHONPATH" not in result
+    assert "RUN_ID" not in result
     assert "OPENAI_API_KEY" not in result
     assert "TELEGRAM_BOT_TOKEN" not in result
     assert "RAILWAY_TOKEN" not in result

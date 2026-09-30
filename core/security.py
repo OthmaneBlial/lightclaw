@@ -25,6 +25,7 @@ SAFE_DELEGATED_ENV_KEYS = frozenset(
         "XDG_STATE_HOME",
     }
 )
+SAFE_DELEGATED_EXTRA_KEYS = ("CI", "CODEX_HOME", "LIGHTCLAW_DELEGATED_AGENT", "PYTHONIOENCODING")
 
 SENSITIVE_NAME_RE = re.compile(
     r"(?i)(?:api[_-]?key|access[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|"
@@ -77,10 +78,9 @@ def delegated_process_env(
     result.setdefault("LANG", "C.UTF-8")
     result["LIGHTCLAW_DELEGATED"] = "1"
     if extra:
-        for key, value in extra.items():
-            if SENSITIVE_NAME_RE.search(key):
-                continue
-            result[str(key)] = str(value)
+        result.update(
+            {key: str(value) for key, value in extra.items() if key in SAFE_DELEGATED_EXTRA_KEYS}
+        )
     return result
 
 
