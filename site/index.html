@@ -339,6 +339,11 @@
             <p>Delegated workers get a minimal environment and owned task workspace. CLI output is bounded and truncation is surfaced. Automatic edit retries omit common credential paths and detected secret-bearing files; generated edits cannot write common credential paths, chat file operations reject symlinked workspace paths, private metadata directories are created without following symlinks, and undo stays anchored to its opened workspace. Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.</p>
           </article>
           <article class="boundary-card reveal">
+            <span class="boundary-tag safe">🧠 LOCAL MEMORY</span>
+            <h3>Local, bounded memory</h3>
+            <p>Chat history and session summaries live in namespaced local SQLite. They expire after 90 days by default; <code>MEMORY_RETENTION_DAYS</code> changes the limit. <code>/clear</code> removes one chat; confirmed <code>/wipe_memory</code> erases saved chat memory across chats.</p>
+          </article>
+          <article class="boundary-card reveal">
             <span class="boundary-tag warn">⚠️ YOUR DECISION</span>
             <h3>Trusted execution</h3>
             <p>Trusted host commands require a separate confirmation. Acceptance checks run as user-approved host subprocesses with a minimal environment, but LightClaw does not sandbox them; review commands and use OS/container isolation for untrusted repositories.</p>

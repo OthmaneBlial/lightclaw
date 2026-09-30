@@ -103,7 +103,7 @@ See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorizat
 - 🧪 Codex and Claude profiles: `observe`, `workspace-write`, and `trusted-command`.
 - 🧾 Private JSON/Markdown receipts with commands, results, hashes, artifacts, and recovery context.
 - 🪄 Reviewable patches, local accept/reject, selective file apply, and optional PR previews.
-- 🧠 Namespaced SQLite FTS5 memory with retention, export, and selective delete.
+- 🧠 Namespaced SQLite FTS5 memory and persisted summaries with 90-day default retention, export, and selective delete.
 - 🧰 Permission-manifest skills, inactive by default, with provenance and hash review.
 - 🔌 Provider routes for OpenAI, xAI, Anthropic, Gemini, DeepSeek, and Z-AI.
 

@@ -133,6 +133,19 @@ def test_site_discloses_private_sqlite_file_permissions() -> None:
     assert "owner-only permissions before use" in llms
 
 
+def test_readme_and_site_disclose_persistent_memory_retention_and_controls() -> None:
+    html, _ = _document()
+    llms = (SITE / "llms.txt").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "session summaries" in html and "90 days by default" in html
+    assert "MEMORY_RETENTION_DAYS" in html
+    assert "<code>/clear</code>" in html and "<code>/wipe_memory</code>" in html
+    assert "90 days by default" in llms and "MEMORY_RETENTION_DAYS" in llms
+    assert "/clear" in llms and "/wipe_memory" in llms
+    assert "persisted summaries" in readme and "90-day default retention" in readme
+
+
 def test_site_discovery_files_are_canonical_and_bounded() -> None:
     sitemap = ET.parse(SITE / "sitemap.xml").getroot()
     namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
