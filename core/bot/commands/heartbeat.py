@@ -8,7 +8,6 @@ from pathlib import Path
 
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from skills import SkillError
@@ -99,8 +98,8 @@ class CommandsHeartbeatMixin:
                     continue
                 try:
                     await self._run_heartbeat_once(bot, session_id)
-                except TelegramError as e:
-                    log.warning(f"[{session_id}] Heartbeat Telegram delivery failed: {e}")
+                except Exception:
+                    log.exception("[%s] Heartbeat run failed; scheduler will retry next interval", session_id)
         except asyncio.CancelledError:
             pass
         except Exception as e:
