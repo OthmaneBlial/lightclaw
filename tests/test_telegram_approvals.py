@@ -145,6 +145,8 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
         "cp -f /tmp/generated /tmp/important",
         "git restore --source=HEAD --worktree .",
         "git checkout -- .",
+        "git checkout main -- config.env",
+        "python -c \"import subprocess; subprocess.run(['git', 'restore', '.'])\"",
         "python -c \"import os; os.replace('/tmp/a', '/tmp/b')\"",
         "python -c \"import shutil; shutil.move('/tmp/a', '/tmp/b')\"",
         "python -c \"from pathlib import Path; Path('/tmp/a').replace('/tmp/b')\"",
