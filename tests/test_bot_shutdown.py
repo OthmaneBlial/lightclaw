@@ -3,14 +3,124 @@ from __future__ import annotations
 import asyncio
 import signal
 import sqlite3
+import threading
+import time
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from config import Config
 from core.app import _install_shutdown_signal_handlers
 from core.bot import LightClawBot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["chat", "heartbeat"])
+async def test_shutdown_waits_for_registered_requests_before_closing_storage(tmp_path, monkeypatch, kind):
+    events = []
+    llm = SimpleNamespace(close=Mock(side_effect=lambda: events.append("closed")))
+    monkeypatch.setattr("core.bot.base.LLMClient", lambda _config: llm)
+    bot = LightClawBot(Config(
+        workspace_path=str(tmp_path / "workspace"), memory_db_path=str(tmp_path / "memory.db"),
+        skills_state_path=str(tmp_path / "skills.json"),
+    ))
+    started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def request():
+        async with bot._memory_request_guard("123"):
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                cleanup_started.set()
+                await release.wait()
+                bot.memory.db.execute("SELECT 1")
+                events.append("request drained")
+
+    task = asyncio.create_task(request())
+    if kind == "heartbeat":
+        bot._background_tasks.add(task)
+        bot._heartbeat_task = task
+    await started.wait()
+    shutdown = asyncio.create_task(bot.shutdown())
+    try:
+        await asyncio.wait_for(cleanup_started.wait(), timeout=1)
+        assert not shutdown.done()
+        llm.close.assert_not_called()
+        release.set()
+        await asyncio.wait_for(shutdown, timeout=1)
+        assert task.cancelled()
+        assert not bot._active_message_clear_events_by_session
+        assert events == ["request drained", "closed"]
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, shutdown, return_exceptions=True)
+        bot.memory.db.close()
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_prevents_new_memory_request_admission():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._shutting_down = True
+    bot._active_message_clear_events_by_session = {}
+
+    with pytest.raises(asyncio.CancelledError):
+        async with bot._memory_request_guard("123"):
+            pytest.fail("Request was admitted during shutdown")
+
+    assert not bot._active_message_clear_events_by_session
+
+
+@pytest.mark.asyncio
+async def test_shutdown_waits_for_confirmed_memory_wipe(tmp_path, monkeypatch):
+    llm = SimpleNamespace(close=Mock())
+    monkeypatch.setattr("core.bot.base.LLMClient", lambda _config: llm)
+    bot = LightClawBot(Config(
+        telegram_allowed_users=["123"], workspace_path=str(tmp_path / "workspace"),
+        memory_db_path=str(tmp_path / "memory.db"), skills_state_path=str(tmp_path / "skills.json"),
+    ))
+    bot._pending_wipe_confirm["123"] = {
+        "user_id": 123, "expires_at": time.time() + 90,
+        "expires_monotonic": time.monotonic() + 90,
+    }
+    started = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+    clear_all = bot.memory.clear_all
+
+    def blocked_clear():
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(timeout=5)
+        clear_all()
+
+    monkeypatch.setattr(bot.memory, "clear_all", blocked_clear)
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123), effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(reply_text=AsyncMock()),
+    )
+    wipe = asyncio.create_task(bot.cmd_wipe_memory(update, SimpleNamespace(args=["confirm"])))
+    shutdown = None
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        shutdown = asyncio.create_task(bot.shutdown())
+        await asyncio.sleep(0)
+        assert not shutdown.done()
+        llm.close.assert_not_called()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(wipe, shutdown), timeout=1)
+        assert "All memory wiped" in update.message.reply_text.await_args.args[0]
+        llm.close.assert_called_once_with()
+    finally:
+        release.set()
+        await asyncio.gather(wipe, *([shutdown] if shutdown else []), return_exceptions=True)
+        bot.memory.db.close()
+        bot.jobs.close()
 
 
 @pytest.mark.parametrize("stage", ["jobs", "recovery", "provider", "skills", "personality", "policy"])

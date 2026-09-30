@@ -80,6 +80,8 @@ does not discard the heartbeat's memory update.
 
 Once a confirmed global wipe starts, canceling its handler waits for the database operation to finish, even after repeated cancellation requests. New chat requests and heartbeat runs remain queued until then, and cached summaries are discarded before those requests resume.
 
+During shutdown, the bot rejects new memory requests, waits for registered chat and heartbeat requests to finish cancellation, and lets an active global wipe complete before closing the database.
+
 ## Optional embeddings
 
 `memory.EmbeddingAdapter` is a small typed protocol with `name`, `version`, and `embed(text)`. Vectors are stored with adapter provenance and can only rerank FTS5 candidates. Adapter errors fall back to the lexical record or lexical query result. LightClaw ships no default embedding provider, sends no memory to an embedding service by default, and does not call lexical retrieval “semantic.”
