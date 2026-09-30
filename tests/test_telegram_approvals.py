@@ -1023,11 +1023,11 @@ async def test_duplicate_result_taps_only_run_one_acceptance():
 @pytest.mark.asyncio
 async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
     patch_path = tmp_path / "changes.patch"
-    patch_path.write_text(
+    patch_content = (
         "diff --git a/file b/file\n"
-        "--- a/file\n+++ b/file\n@@ -1 +1,2 @@\n-old\n+new\n+added\n",
-        encoding="utf-8",
+        "--- a/file\n+++ b/file\n@@ -1 +1,2 @@\n-old\n+new\n+added\n"
     )
+    patch_path.write_text(patch_content, encoding="utf-8")
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_text(
         json.dumps(
@@ -1049,8 +1049,12 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
         encoding="utf-8",
     )
     events = []
+    private_file = tmp_path / "private.txt"
+    private_file.write_text("must not be sent", encoding="utf-8")
 
     async def send_summary(_update, text):
+        patch_path.unlink()
+        patch_path.symlink_to(private_file)
         events.append(("summary", text))
 
     async def send_patch(**kwargs):
@@ -1058,6 +1062,8 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
         assert isinstance(document, InputFile)
         assert not document.input_file_content.closed
         assert not isinstance(document.input_file_content, bytes)
+        document.input_file_content.seek(0)
+        assert document.input_file_content.read() == patch_content.encode("utf-8")
         events.append(("patch", ""))
 
     bot = LightClawBot.__new__(LightClawBot)
@@ -1102,6 +1108,7 @@ async def test_view_diff_skips_patch_larger_than_telegram_upload_limit(tmp_path,
         encoding="utf-8",
     )
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
     bot._last_run_receipts_by_session = {"456": str(receipt_path)}
     bot._reply_logged = AsyncMock()
     message = SimpleNamespace(reply_document=AsyncMock())

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import os
 import re
 import secrets
 from pathlib import Path
@@ -15,7 +16,7 @@ from telegram.ext import ContextTypes
 
 from ..artifacts import ArtifactError, accept_artifact, reject_artifact
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
-from ..fs import FileTooLargeError, read_text_bounded_at
+from ..fs import open_regular_file_at
 from ..jobs import JobStateError
 from ..markdown import _escape_html
 from ..receipts import read_receipt
@@ -519,55 +520,73 @@ class BotApprovalsMixin:
                 review_lines.append(f"- {status[:24]}: {path}")
             if len(changed_files) > 8:
                 review_lines.append(f"- and {len(changed_files) - 8} more files")
+        patch_handle = None
         patch_size: int | None = None
         if patch_path and update.message:
+            patch_fd: int | None = None
             try:
-                if patch_path.is_file() and not patch_path.is_symlink():
-                    patch_size = patch_path.stat().st_size
-            except OSError:
-                pass
+                workspace = Path(self.config.workspace_path).expanduser().resolve()
+                relative_patch = patch_path.absolute().relative_to(workspace)
+                patch_fd, patch_stat = open_regular_file_at(workspace, relative_patch)
+                patch_handle = os.fdopen(patch_fd, "rb")
+                patch_fd = None
+                patch_size = patch_stat.st_size
+            except (OSError, RuntimeError, ValueError):
+                if patch_fd is not None:
+                    os.close(patch_fd)
 
         if patch_path and patch_size is not None and patch_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
+            if patch_handle:
+                patch_handle.close()
             review_lines.append(
                 f"Full patch is too large to attach through Telegram; review it locally: `{patch_path}`"
             )
             await self._reply_logged(update, "\n".join(review_lines))
             return
 
-        if patch_path and patch_size is not None and update.message:
-            workspace = Path(self.config.workspace_path).expanduser().resolve()
-            try:
-                relative_patch = patch_path.absolute().relative_to(workspace)
-                if patch_size <= MAX_DIFF_PREVIEW_BYTES:
-                    patch = read_text_bounded_at(
-                        workspace, relative_patch, MAX_DIFF_PREVIEW_BYTES
-                    )
+        if patch_path and update.message:
+            if patch_handle is None or patch_size is None:
+                review_lines.extend(["", "Patch is unavailable or could not be opened safely."])
+                await self._reply_logged(update, "\n".join(review_lines))
+                return
+            if patch_size <= MAX_DIFF_PREVIEW_BYTES:
+                try:
+                    patch_bytes = patch_handle.read(MAX_DIFF_PREVIEW_BYTES + 1)
+                    if len(patch_bytes) > MAX_DIFF_PREVIEW_BYTES:
+                        raise ValueError("patch grew beyond preview limit")
+                    patch = patch_bytes.decode("utf-8")
                     review_lines.extend(
                         ["", "Patch preview (first text hunk):", self._mobile_diff_preview(patch)]
                     )
-                else:
-                    review_lines.extend(
-                        ["", "Patch exceeds the inline preview limit; full patch attached."]
-                    )
-            except (FileTooLargeError, OSError, UnicodeError, ValueError):
-                review_lines.extend(["", "Inline preview unavailable; full patch attached."])
-            review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
-            await self._reply_logged(update, "\n".join(review_lines))
-            try:
-                with patch_path.open("rb") as handle:
-                    await update.message.reply_document(
-                        document=InputFile(
-                            handle,
-                            filename=f"{receipt.get('run_id', 'lightclaw')}.patch",
-                            read_file_handle=False,
-                        ),
-                        caption="Private review patch — nothing has been accepted or pushed.",
-                    )
-            except Exception:
-                await self._reply_logged(
-                    update,
-                    "Could not attach the full patch. The summary above is available; review the local receipt on the host.",
+                except (OSError, UnicodeError, ValueError):
+                    review_lines.extend(["", "Inline preview unavailable; full patch attached."])
+                finally:
+                    patch_handle.seek(0)
+            else:
+                review_lines.extend(
+                    ["", "Patch exceeds the inline preview limit; full patch attached."]
                 )
+            review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
+            try:
+                await self._reply_logged(update, "\n".join(review_lines))
+                try:
+                    with patch_handle:
+                        await update.message.reply_document(
+                            document=InputFile(
+                                patch_handle,
+                                filename=f"{receipt.get('run_id', 'lightclaw')}.patch",
+                                read_file_handle=False,
+                            ),
+                            caption="Private review patch — nothing has been accepted or pushed.",
+                        )
+                except Exception:
+                    await self._reply_logged(
+                        update,
+                        "Could not attach the full patch. The summary above is available; review the local receipt on the host.",
+                    )
+            finally:
+                if not patch_handle.closed:
+                    patch_handle.close()
             return
         review_lines.append(f"Private receipt on host: {receipt_value}")
         await self._reply_logged(update, "\n".join(review_lines))
