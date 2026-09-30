@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.bot.delegation.execution import DelegationExecutionMixin
+from core.bot.delegation.streams import BoundedStreamCapture
 from core.jobs import JobStore
 from core.workspaces import WorkspaceSafetyError
 
@@ -156,6 +157,39 @@ async def test_streaming_timeout_also_covers_prompt_stdin_write(tmp_path: Path):
 
     assert result["timed_out"] is True
     assert result["exit_code"] == 124
+
+
+async def test_stream_read_failure_terminates_worker_process(tmp_path: Path, monkeypatch):
+    harness = TimeoutHarness()
+    harness.config.local_agent_timeout_sec = 5
+    survived = tmp_path / "worker-survived.txt"
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [
+            sys.executable,
+            "-c",
+            "import pathlib,time; time.sleep(.3); "
+            f"pathlib.Path({str(survived)!r}).touch()",
+        ],
+        None,
+    )
+
+    async def fail_read(_self, _stream):
+        if False:
+            yield ""
+        raise OSError("fixture stream failure")
+
+    monkeypatch.setattr(BoundedStreamCapture, "read_lines", fail_read)
+    try:
+        result = await harness._invoke_local_agent_streaming(
+            "codex", "task", workspace=tmp_path
+        )
+    except OSError:
+        result = None
+    await asyncio.sleep(.4)
+
+    assert result is not None
+    assert result["ok"] is False
+    assert not survived.exists()
 
 
 async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_path: Path):
