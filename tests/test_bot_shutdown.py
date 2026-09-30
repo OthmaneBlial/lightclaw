@@ -71,14 +71,19 @@ async def test_shutdown_stops_background_tasks_before_closing_resources():
 @pytest.mark.asyncio
 async def test_shutdown_signal_cancels_agents_before_stopping_application():
     started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    finish_cleanup = asyncio.Event()
     events: list[str] = []
 
     async def active_run():
         started.set()
         try:
             await asyncio.Future()
-        finally:
+        except asyncio.CancelledError:
+            cleanup_started.set()
+            await finish_cleanup.wait()
             events.append("agent canceled")
+            raise
 
     class FakeLoop:
         def __init__(self):
@@ -98,18 +103,27 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
 
     bot = LightClawBot.__new__(LightClawBot)
     bot._shutting_down = False
+    bot._background_tasks = set()
+    bot._heartbeat_task = None
+    bot._cron_task = None
     task = asyncio.create_task(active_run())
     bot._active_run_tasks_by_session = {"chat": task}
+    bot.close = Mock()
     loop = FakeLoop()
     request_stop = _install_shutdown_signal_handlers(FakeApplication(), bot, loop=loop)
     await started.wait()
 
     request_stop()
     assert bot._shutting_down is True
-    with pytest.raises(asyncio.CancelledError):
-        await task
+    await cleanup_started.wait()
+    shutdown = asyncio.create_task(bot.shutdown())
+    await asyncio.sleep(0)
+    assert task.cancelling() == 1
+    finish_cleanup.set()
+    await shutdown
 
     assert task.cancelled()
     assert events == ["application stop requested", "agent canceled"]
+    bot.close.assert_called_once_with()
     assert set(loop.handlers) == {signal.SIGINT, signal.SIGTERM, signal.SIGABRT}
     assert request_stop() is None

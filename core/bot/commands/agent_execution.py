@@ -124,11 +124,11 @@ class CommandsAgentExecutionMixin:
         except asyncio.CancelledError:
             worker_tasks = list(self._active_worker_tasks_by_run.pop(run_id, {}))
             for task in worker_tasks:
-                task.cancel()
+                self._cancel_task_once(task)
             await asyncio.gather(*worker_tasks, return_exceptions=True)
             heartbeat = self._active_run_heartbeats_by_run.pop(run_id, None)
             if heartbeat:
-                heartbeat.cancel()
+                self._cancel_task_once(heartbeat)
                 try:
                     await heartbeat
                 except asyncio.CancelledError:
@@ -323,7 +323,7 @@ class CommandsAgentExecutionMixin:
                     current_job = await asyncio.to_thread(self.jobs.heartbeat, run_id)
                     if current_job["status"] == "cancel_requested":
                         for task in list(running):
-                            task.cancel()
+                            self._cancel_task_once(task)
                         for lane in current_job["lanes"]:
                             if lane["status"] in {"queued", "running"}:
                                 await asyncio.to_thread(
@@ -334,7 +334,7 @@ class CommandsAgentExecutionMixin:
                                 )
                         await asyncio.to_thread(self.jobs.mark_canceled, run_id)
                         if multi_execution_task:
-                            multi_execution_task.cancel()
+                            self._cancel_task_once(multi_execution_task)
                         return
                 except JobStateError:
                     return
@@ -821,7 +821,7 @@ class CommandsAgentExecutionMixin:
             succeeded=not failures,
             error="; ".join(failures[:6])[:500],
         )
-        durable_heartbeat.cancel()
+        self._cancel_task_once(durable_heartbeat)
         try:
             await durable_heartbeat
         except asyncio.CancelledError:

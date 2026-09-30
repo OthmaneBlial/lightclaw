@@ -128,6 +128,10 @@ class BotBaseMixin:
         task.add_done_callback(discard_finished_task)
         return task
 
+    def _cancel_task_once(self, task: asyncio.Task) -> None:
+        if not task.done() and not task.cancelling():
+            task.cancel()
+
     async def shutdown(self) -> None:
         """Stop bot-owned background tasks before closing their dependencies."""
         active_runs = self._request_active_run_cancellation()
@@ -143,8 +147,7 @@ class BotBaseMixin:
         self._heartbeat_task = None
         self._cron_task = None
         for task in tasks:
-            if not task.done():
-                task.cancel()
+            self._cancel_task_once(task)
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self.close()
@@ -157,7 +160,7 @@ class BotBaseMixin:
             if not task.done()
         }
         for task in tasks:
-            task.cancel()
+            self._cancel_task_once(task)
         return tasks
 
     def is_allowed(self, user_id: int) -> bool:

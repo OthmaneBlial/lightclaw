@@ -387,8 +387,7 @@ class BotApprovalsMixin:
                 pass
             task = self._active_run_tasks_by_session.get(session_id)
             if task and task is not asyncio.current_task():
-                if not task.cancelling():
-                    task.cancel()
+                self._cancel_task_once(task)
                 await self._reply_logged(proxy, "Cancellation requested; stopping the delegated process tree.")
             else:
                 await self._reply_logged(proxy, "No active run to cancel.")
