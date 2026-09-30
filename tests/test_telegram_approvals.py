@@ -25,7 +25,11 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
                         "label": "release",
                         "owned_paths": ["docs/release.md"],
                         "acceptance_checks": [
-                            {"type": "command_succeeds", "command": "python -m pytest"}
+                            {
+                                "type": "command_succeeds",
+                                "command": "python -m pytest",
+                                "cwd": "services/api",
+                            }
                         ],
                     }
                 ]
@@ -36,7 +40,9 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
     review = pending["review"]
     assert review["risk_level"] == "high"
     assert review["changed_paths"] == ["docs/release.md"]
-    assert review["proposed_commands"] == ["release: python -m pytest"]
+    assert review["proposed_commands"] == [
+        "release (cwd: services/api): python -m pytest"
+    ]
     assert review["estimated_minutes"] == {"min": 2, "max": 15}
     assert review["second_confirmation_required"] is True
     rendered = bot._render_plan_review(pending)

@@ -323,6 +323,12 @@ class CommandsAgentAcceptanceMixin:
             return f"command_succeeds cwd does not exist: `{cwd_rel}`"
         if not cwd.is_dir():
             return f"command_succeeds cwd is not a directory: `{cwd_rel}`"
+        try:
+            workspace_root = workspace.resolve(strict=True)
+            cwd = cwd.resolve(strict=True)
+            cwd.relative_to(workspace_root)
+        except (OSError, RuntimeError, ValueError):
+            return f"command_succeeds cwd is outside the workspace: `{cwd_rel}`"
 
         try:
             argv = shlex.split(command)

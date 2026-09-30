@@ -57,14 +57,14 @@
     },
     {
       "branch_points": 49,
-      "line": 416,
+      "line": 422,
       "lines": 164,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
       "branch_points": 48,
-      "line": 246,
+      "line": 248,
       "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -192,7 +192,7 @@
     },
     {
       "branch_points": 48,
-      "line": 246,
+      "line": 248,
       "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -253,7 +253,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 606,
+      "lines": 612,
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
@@ -261,7 +261,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 545,
+      "lines": 547,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 19181,
+  "runtime_lines": 19189,
   "schema_version": 1
 }
