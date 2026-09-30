@@ -299,6 +299,21 @@ def test_resume_requeues_interrupted_lane_and_counts_new_attempt(tmp_path):
     store.close()
 
 
+def test_resume_refuses_to_exceed_interrupted_lane_attempt_bound(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    plan = _plan()
+    plan[0]["max_attempts"] = 1
+    job = _create(store, tmp_path / "repo", plan=plan)
+    store.claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    store.update_lane(job["run_id"], "backend", "running", increment_attempt=True)
+    store.recover_stalled()
+
+    with pytest.raises(JobStateError, match="lane retry bound"):
+        store.resume(job["run_id"])
+    assert store.get_job(job["run_id"])["status"] == "stalled"
+    store.close()
+
+
 def test_resume_rejects_non_idempotent_lane_even_when_marked_resumable(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     plan = _plan()

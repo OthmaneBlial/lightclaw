@@ -588,6 +588,12 @@ class JobStore:
                 "non-resumable or non-idempotent lanes block resume: "
                 + ", ".join(unsafe)
             )
+        if any(
+            lane["status"] == "running"
+            and int(lane["attempt"]) >= int(lane["max_attempts"])
+            for lane in job["lanes"]
+        ):
+            raise JobStateError("lane retry bound has been reached")
         return self._transition(
             run_id,
             {str(job["status"])},
