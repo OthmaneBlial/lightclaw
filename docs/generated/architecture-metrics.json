@@ -241,16 +241,16 @@
       "path": "core/bot/file_ops.py"
     },
     {
+      "lines": 860,
+      "path": "memory.py"
+    },
+    {
       "lines": 855,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
       "lines": 835,
       "path": "core/jobs.py"
-    },
-    {
-      "lines": 826,
-      "path": "memory.py"
     },
     {
       "lines": 790,
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20307,
+  "runtime_lines": 20341,
   "schema_version": 1
 }

@@ -272,6 +272,46 @@ def test_retention_record_bounds_truncation_and_prune_preview(tmp_path):
     store.db.close()
 
 
+def test_prune_expires_old_session_summaries(tmp_path):
+    store = MemoryStore(tmp_path / "memory.db", retention_days=1)
+    store.bind_session(
+        "old", user_namespace="telegram-user:1", workspace_namespace="/repo"
+    )
+    store.set_summary("old", "expired context")
+    store.bind_session(
+        "recent", user_namespace="telegram-user:1", workspace_namespace="/repo"
+    )
+    store.set_summary("recent", "current context")
+    store.db.execute(
+        "UPDATE memory_summaries SET updated = ? WHERE session_id = ?",
+        (time.time() - 172_800, "old"),
+    )
+    store.db.commit()
+
+    preview = store.prune()
+    assert preview["reasons"]["expired_summaries"] == 1
+    assert preview["records_to_delete"] == 1
+    assert store.prune(apply=True)["applied"] is True
+    assert store.get_summary("old") == ""
+    assert store.get_summary("recent") == "current context"
+    store.db.close()
+
+
+def test_database_size_prune_discards_derived_summary_before_interactions(tmp_path):
+    store = MemoryStore(tmp_path / "memory.db", max_db_bytes=1_048_576)
+    store.bind_session(
+        "large", user_namespace="telegram-user:1", workspace_namespace="/repo"
+    )
+    store.ingest("user", "keep original conversation", "large")
+
+    store.set_summary("large", "x" * 1_200_000)
+
+    assert store.get_summary("large") == ""
+    assert store.get_recent("large")[0]["content"] == "keep original conversation"
+    assert store._database_bytes() <= store.max_db_bytes
+    store.db.close()
+
+
 def test_record_content_is_bounded_before_storage(tmp_path):
     store = MemoryStore(str(tmp_path / "memory.db"))
     identifier = store.ingest("user", "z" * (MAX_RECORD_CHARS + 100), "bounded")
@@ -307,7 +347,9 @@ def test_legacy_database_migrates_to_isolated_fts_scope(tmp_path):
         VALUES ('old-session', 'legacy summary', 1);
         """
     )
-    legacy.execute("UPDATE interactions SET timestamp = ?", (time.time(),))
+    recent = time.time()
+    legacy.execute("UPDATE interactions SET timestamp = ?", (recent,))
+    legacy.execute("UPDATE sessions SET updated = ?", (recent,))
     legacy.commit()
     legacy.close()
 

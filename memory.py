@@ -521,6 +521,7 @@ class MemoryStore:
                 ") DO UPDATE SET summary = excluded.summary, updated = excluded.updated",
                 (str(session_id), user, workspace, str(summary), time.time()),
             )
+        self._enforce_retention()
 
     def _database_bytes(self) -> int:
         return sum(
@@ -533,7 +534,7 @@ class MemoryStore:
             if path.is_file()
         )
 
-    def _retention_ids(self) -> tuple[list[int], dict[str, int]]:
+    def _retention_ids(self) -> tuple[list[int], dict[str, int], float]:
         cutoff = time.time() - (self.retention_days * 86_400)
         expired = [
             int(row[0])
@@ -543,6 +544,11 @@ class MemoryStore:
             ).fetchall()
         ]
         total = int(self.db.execute("SELECT COUNT(*) FROM interactions").fetchone()[0])
+        expired_summaries = int(
+            self.db.execute(
+                "SELECT COUNT(*) FROM memory_summaries WHERE updated < ?", (cutoff,)
+            ).fetchone()[0]
+        )
         overflow_count = max(0, total - self.max_interactions)
         overflow = [
             int(row[0])
@@ -552,52 +558,80 @@ class MemoryStore:
             ).fetchall()
         ]
         identifiers = list(dict.fromkeys([*expired, *overflow]))
-        return identifiers, {"expired": len(expired), "overflow": len(overflow)}
+        return (
+            identifiers,
+            {
+                "expired": len(expired),
+                "overflow": len(overflow),
+                "expired_summaries": expired_summaries,
+            },
+            cutoff,
+        )
 
     def prune(self, *, apply: bool = False) -> dict[str, object]:
         """Preview or enforce age/count retention and the physical size ceiling."""
         with self._lock:
-            identifiers, reasons = self._retention_ids()
+            identifiers, reasons, cutoff = self._retention_ids()
             before = self._database_bytes()
             result: dict[str, object] = {
                 "applied": False,
-                "records_to_delete": len(identifiers),
+                "records_to_delete": len(identifiers) + reasons["expired_summaries"],
                 "reasons": reasons,
                 "database_bytes_before": before,
                 "max_database_bytes": self.max_db_bytes,
+                "size_limit_exceeded": before > self.max_db_bytes,
             }
             if not apply:
                 return result
-            if not identifiers and before <= self.max_db_bytes:
+            if not identifiers and not reasons["expired_summaries"] and before <= self.max_db_bytes:
                 result["applied"] = True
                 result["database_bytes_after"] = before
                 result["remaining_interactions"] = int(
                     self.db.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
                 )
                 return result
-            if identifiers:
-                placeholders = ",".join("?" for _ in identifiers)
+            if identifiers or reasons["expired_summaries"]:
                 with self.db:
-                    self.db.execute(
-                        f"DELETE FROM interactions WHERE id IN ({placeholders})",
-                        identifiers,
-                    )
+                    if identifiers:
+                        placeholders = ",".join("?" for _ in identifiers)
+                        self.db.execute(
+                            f"DELETE FROM interactions WHERE id IN ({placeholders})",
+                            identifiers,
+                        )
+                    if reasons["expired_summaries"]:
+                        self.db.execute(
+                            "DELETE FROM memory_summaries WHERE updated < ?", (cutoff,)
+                        )
             self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            if before > self.max_db_bytes or identifiers:
+            if before > self.max_db_bytes or identifiers or reasons["expired_summaries"]:
                 self.db.execute("VACUUM")
+                self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             while self._database_bytes() > self.max_db_bytes:
-                oldest = self.db.execute(
-                    "SELECT id FROM interactions ORDER BY timestamp, id LIMIT 100"
+                oldest_summaries = self.db.execute(
+                    "SELECT session_id, user_namespace, workspace_namespace "
+                    "FROM memory_summaries ORDER BY updated LIMIT 100"
                 ).fetchall()
-                if not oldest:
-                    break
-                with self.db:
-                    self.db.executemany(
-                        "DELETE FROM interactions WHERE id = ?",
-                        [(int(row[0]),) for row in oldest],
-                    )
+                if oldest_summaries:
+                    with self.db:
+                        self.db.executemany(
+                            "DELETE FROM memory_summaries WHERE session_id = ? "
+                            "AND user_namespace = ? AND workspace_namespace = ?",
+                            [tuple(row) for row in oldest_summaries],
+                        )
+                else:
+                    oldest = self.db.execute(
+                        "SELECT id FROM interactions ORDER BY timestamp, id LIMIT 100"
+                    ).fetchall()
+                    if not oldest:
+                        break
+                    with self.db:
+                        self.db.executemany(
+                            "DELETE FROM interactions WHERE id = ?",
+                            [(int(row[0]),) for row in oldest],
+                        )
                 self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 self.db.execute("VACUUM")
+                self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
             result["applied"] = True
             result["database_bytes_after"] = self._database_bytes()
             result["remaining_interactions"] = int(
