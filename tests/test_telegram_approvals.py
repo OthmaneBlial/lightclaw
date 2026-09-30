@@ -735,6 +735,69 @@ async def test_high_risk_callback_requires_ordered_second_confirmation():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [None, NetworkError, asyncio.CancelledError])
+async def test_second_confirmation_requires_successful_prompt_delivery(failure):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    pending = {
+        "review_delivered": True,
+        "approval_id": "0123456789abcdef",
+        "review": {
+            "second_confirmation_required": True,
+            "second_confirmation_prompted": False,
+            "second_confirmed": False,
+        },
+    }
+    bot._get_pending_multi_plan = lambda _session: pending
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def send(_update, text, **_kwargs):
+        if "Second confirmation required" in text:
+            entered.set()
+            await release.wait()
+            if failure:
+                raise failure("delivery interrupted")
+
+    bot._reply_logged = AsyncMock(side_effect=send)
+    bot._execute_approved_plan_action = AsyncMock()
+    query = SimpleNamespace(
+        data="lc:plan:approve:0123456789abcdef", answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query, effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+    context = SimpleNamespace()
+    prompt = asyncio.create_task(bot.handle_run_action(update, context))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        query.data = "lc:plan:confirm-risk:0123456789abcdef"
+        await bot.handle_run_action(update, context)
+        bot._execute_approved_plan_action.assert_not_awaited()
+        assert pending["review"]["second_confirmed"] is False
+        release.set()
+        if failure:
+            with pytest.raises(failure):
+                await asyncio.wait_for(prompt, timeout=1)
+        else:
+            await asyncio.wait_for(prompt, timeout=1)
+        await bot.handle_run_action(update, context)
+        if failure:
+            bot._execute_approved_plan_action.assert_not_awaited()
+            assert pending["review"]["second_confirmation_prompted"] is False
+        else:
+            bot._execute_approved_plan_action.assert_awaited_once()
+    finally:
+        release.set()
+        if not prompt.done():
+            prompt.cancel()
+        await asyncio.gather(prompt, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     pending = {

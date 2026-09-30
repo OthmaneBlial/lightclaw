@@ -285,8 +285,6 @@ class BotApprovalsMixin:
         if not await self._require_complete_plan_review(update, pending):
             return
         review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
-        review["second_confirmation_prompted"] = True
-        pending["review"] = review
         await self._reply_logged(
             update,
             "⚠️ <b>Second confirmation required.</b> Review the high-risk scope once more.",
@@ -295,6 +293,8 @@ class BotApprovalsMixin:
                 str(pending.get("approval_id") or ""), second_confirmation=True
             ),
         )
+        review["second_confirmation_prompted"] = True
+        pending["review"] = review
 
     @staticmethod
     def _callback_proxy(update: Update):

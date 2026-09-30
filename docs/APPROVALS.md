@@ -42,6 +42,8 @@ Control and directional formatting characters in Telegram review text are shown 
 
 Destructive language and commands, privileged or network commands, publishing/deployment, credential changes, or external-system scope require two ordered confirmations. The shared execution gate enforces the second confirmation for button, text, and slash-command entry points. A forged second-confirmation callback is rejected unless the first approval was recorded. This keyword check is heuristic; it does not sandbox commands. Trusted host execution retains its separate confirmation gate, bound to the requesting Telegram user. A confirmation attempt from another group member leaves the unexpired request pending and executes nothing.
 
+The second confirmation becomes available only after its prompt is successfully sent. An initial prompt that is still sending, fails, or is canceled cannot authorize execution; use Approve again to retry delivery.
+
 The plan preview shows worker responsibilities, expected outputs, owned paths, and acceptance commands. The risk scan checks the goal, worker roles, responsibilities, expected inputs and outputs, owned paths, and commands. These text checks are heuristic; review the full plan before approving.
 
 ### Trusted host runs
