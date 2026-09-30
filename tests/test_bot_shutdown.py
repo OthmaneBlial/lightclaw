@@ -239,7 +239,8 @@ async def test_shutdown_stops_background_tasks_before_closing_resources():
 
 
 @pytest.mark.asyncio
-async def test_shutdown_signal_cancels_agents_before_stopping_application():
+@pytest.mark.parametrize("kind", ["agent", "chat", "voice", "heartbeat"])
+async def test_shutdown_signal_cancels_requests_before_stopping_application(kind):
     started = asyncio.Event()
     cleanup_started = asyncio.Event()
     finish_cleanup = asyncio.Event()
@@ -277,8 +278,17 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
     bot._background_tasks = set()
     bot._heartbeat_task = None
     bot._cron_task = None
-    task = asyncio.create_task(active_run())
-    bot._active_run_tasks_by_session = {"chat": task}
+    async def active_request():
+        if kind == "agent":
+            await active_run()
+        else:
+            async with bot._memory_request_guard("chat"):
+                await active_run()
+
+    task = asyncio.create_task(active_request())
+    bot._active_run_tasks_by_session = {"chat": task} if kind == "agent" else {}
+    if kind == "heartbeat":
+        bot._heartbeat_task = task
     bot.close = Mock()
     cancel_task_once = bot._cancel_task_once
 
@@ -290,15 +300,23 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
     loop = FakeLoop()
     request_stop = _install_shutdown_signal_handlers(FakeApplication(), bot, loop=loop)
     await started.wait()
-
-    request_stop()
-    assert bot._shutting_down is True
-    await cleanup_started.wait()
-    shutdown = asyncio.create_task(bot.shutdown())
-    await asyncio.sleep(0)
-    assert not task.done()
-    finish_cleanup.set()
-    await shutdown
+    shutdown = None
+    try:
+        request_stop()
+        assert bot._shutting_down is True
+        await asyncio.wait_for(cleanup_started.wait(), timeout=1)
+        request_stop()
+        shutdown = asyncio.create_task(bot.shutdown())
+        await asyncio.sleep(0)
+        assert not task.done()
+        bot.close.assert_not_called()
+        finish_cleanup.set()
+        await asyncio.wait_for(shutdown, timeout=1)
+    finally:
+        finish_cleanup.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, *([shutdown] if shutdown else []), return_exceptions=True)
 
     assert task.cancelled()
     assert events == ["application stop requested", "agent canceled"]

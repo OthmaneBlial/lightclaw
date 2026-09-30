@@ -190,16 +190,7 @@ class BotBaseMixin:
 
     async def shutdown(self) -> None:
         """Stop bot-owned background tasks before closing their dependencies."""
-        active_requests = self._request_active_run_cancellation()
-        current = asyncio.current_task()
-        active_requests.update(
-            task
-            for messages in getattr(self, "_active_message_clear_events_by_session", {}).values()
-            for task in messages
-            if task is not current
-        )
-        for task in active_requests:
-            self._cancel_task_once(task)
+        active_requests = self._request_shutdown_cancellation()
         if active_requests:
             await asyncio.gather(*active_requests, return_exceptions=True)
         self._heartbeat_enabled = False
@@ -218,13 +209,20 @@ class BotBaseMixin:
         async with self._get_memory_wipe_lock():
             self.close()
 
-    def _request_active_run_cancellation(self) -> set[asyncio.Task[object]]:
+    def _request_shutdown_cancellation(self) -> set[asyncio.Task[object]]:
         self._shutting_down = True
+        current = asyncio.current_task()
         tasks = {
             task
             for task in getattr(self, "_active_run_tasks_by_session", {}).values()
-            if not task.done()
+            if not task.done() and task is not current
         }
+        tasks.update(
+            task
+            for messages in getattr(self, "_active_message_clear_events_by_session", {}).values()
+            for task in messages
+            if task is not current
+        )
         for task in tasks:
             self._cancel_task_once(task)
         return tasks

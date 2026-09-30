@@ -80,7 +80,7 @@ does not discard the heartbeat's memory update.
 
 Once a confirmed global wipe starts, canceling its handler waits for the database operation to finish, even after repeated cancellation requests. New chat requests and heartbeat runs remain queued until then, and cached summaries are discarded before those requests resume.
 
-During shutdown, the bot rejects new memory requests, waits for registered chat, voice, and heartbeat requests to finish cancellation, and lets an active global wipe complete before closing the database.
+On Ctrl+C or a termination signal, the bot rejects new requests and cancels registered chat, voice, heartbeat, and agent requests before Telegram drains its active updates. Shutdown waits for their cleanup and lets an active global wipe complete before closing the database.
 
 ## Optional embeddings
 

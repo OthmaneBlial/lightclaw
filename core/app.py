@@ -22,13 +22,13 @@ from .security import access_policy_label
 
 
 def _install_shutdown_signal_handlers(application: Application, bot: LightClawBot, *, loop=None):
-    """Cancel supervised agents before python-telegram-bot drains active updates."""
+    """Cancel supervised requests before python-telegram-bot drains active updates."""
     loop = asyncio.get_running_loop() if loop is None else loop
 
     def request_stop():
         if bot._shutting_down:
             return
-        bot._request_active_run_cancellation()
+        bot._request_shutdown_cancellation()
         application.stop_running()
 
     for stop_signal in (signal.SIGINT, signal.SIGTERM, signal.SIGABRT):
