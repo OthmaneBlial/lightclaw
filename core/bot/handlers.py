@@ -206,6 +206,12 @@ class BotHandlersMixin:
                     if isinstance(pending_multi.get("review"), dict)
                     else {}
                 )
+                if review.get("approval_blocked"):
+                    await self._reply_logged(
+                        update,
+                        "Approval blocked; edit the plan to expose all commands.",
+                    )
+                    return
                 if review.get("second_confirmation_required") and not review.get("second_confirmed"):
                     review["second_confirmation_prompted"] = True
                     pending_multi["review"] = review

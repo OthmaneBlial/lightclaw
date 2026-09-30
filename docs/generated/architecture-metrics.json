@@ -8,7 +8,7 @@
   "highest_branch_functions": [
     {
       "branch_points": 98,
-      "line": 127,
+      "line": 134,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -23,7 +23,7 @@
     {
       "branch_points": 86,
       "line": 16,
-      "lines": 498,
+      "lines": 500,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -35,9 +35,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 59,
+      "branch_points": 60,
       "line": 178,
-      "lines": 333,
+      "lines": 339,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -63,6 +63,13 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
+      "branch_points": 48,
+      "line": 246,
+      "lines": 189,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 47,
       "line": 105,
       "lines": 314,
@@ -75,13 +82,6 @@
       "lines": 94,
       "name": "_ingest_claude_progress_obj",
       "path": "core/bot/delegation/execution.py"
-    },
-    {
-      "branch_points": 46,
-      "line": 225,
-      "lines": 186,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 43,
@@ -115,7 +115,7 @@
   "largest_functions": [
     {
       "branch_points": 98,
-      "line": 127,
+      "line": 134,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -123,7 +123,7 @@
     {
       "branch_points": 86,
       "line": 16,
-      "lines": 498,
+      "lines": 500,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -142,9 +142,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 59,
+      "branch_points": 60,
       "line": 178,
-      "lines": 333,
+      "lines": 339,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -191,9 +191,9 @@
       "path": "core/bot/commands/cron.py"
     },
     {
-      "branch_points": 46,
-      "line": 225,
-      "lines": 186,
+      "branch_points": 48,
+      "line": 246,
+      "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -206,14 +206,14 @@
     },
     {
       "branch_points": 7,
-      "line": 276,
+      "line": 284,
       "lines": 169,
       "name": "_build_agents_plan_payload",
       "path": "core/bot/delegation/tasks.py"
     },
     {
       "branch_points": 25,
-      "line": 31,
+      "line": 39,
       "lines": 167,
       "name": "_build_multi_agent_worker_task",
       "path": "core/bot/delegation/tasks.py"
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 825,
-      "path": "core/jobs.py"
+      "lines": 827,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 820,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 825,
+      "path": "core/jobs.py"
     },
     {
       "lines": 813,
@@ -257,19 +257,19 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 566,
+      "lines": 568,
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 522,
-      "path": "core/bot/delegation/tasks.py"
-    },
-    {
-      "lines": 521,
+      "lines": 545,
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 512,
+      "lines": 530,
+      "path": "core/bot/delegation/tasks.py"
+    },
+    {
+      "lines": 518,
       "path": "core/bot/handlers.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19061,
+  "runtime_lines": 19108,
   "schema_version": 1
 }

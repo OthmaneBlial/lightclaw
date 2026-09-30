@@ -20,6 +20,14 @@ class DelegationMultiTaskMixin:
     def _render_pending_multi_reminder(self, session_id: str) -> str:
         remaining = self._pending_multi_plan_remaining_sec(session_id)
         mins = max(1, int((remaining + 59) // 60))
+        pending = self._get_pending_multi_plan(session_id)
+        review = pending.get("review") if pending and isinstance(pending.get("review"), dict) else {}
+        if review.get("approval_blocked"):
+            return (
+                "This plan has verification commands hidden from review.\n"
+                "Use <code>/agent multi edit &lt;feedback&gt;</code> to reduce the command list, "
+                "or <code>/agent multi cancel</code> to discard it."
+            )
         return (
             "A multi-agent plan is pending confirmation.\n"
             "Use <code>/agent multi confirm</code> (or reply <code>yes</code>) to run it.\n"

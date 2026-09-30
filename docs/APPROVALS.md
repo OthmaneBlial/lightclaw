@@ -6,11 +6,13 @@ LightClaw treats a Telegram request and an execution approval as separate events
 
 Before a multi-agent run, the bot shows:
 
-- declared changed paths and acceptance commands;
+- declared changed paths and acceptance commands, labeled by worker;
 - the capability profile and computed risk level;
 - a bounded duration range based on lane count;
 - an explicit notice when cost is unavailable from the local CLI before execution;
-- compact actions for Approve, Edit scope, Deny, and Cancel.
+- controls for approval, editing, denial, and cancellation.
+
+Approval review shows up to six commands. Plans with more than six command checks cannot be approved until the plan is edited to expose every command.
 
 If scope is missing, the review says so rather than inventing paths. Editing a scope regenerates the plan and requires a new approval.
 

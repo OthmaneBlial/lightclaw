@@ -20,6 +20,8 @@ from ..jobs import JobStateError
 from ..markdown import _escape_html
 from ..receipts import read_receipt
 
+MAX_REVIEWED_COMMANDS = 6
+
 
 class BotApprovalsMixin:
     _SECOND_CONFIRM_PATTERNS = (
@@ -34,7 +36,17 @@ class BotApprovalsMixin:
         approval_id: str,
         *,
         second_confirmation: bool = False,
+        approval_blocked: bool = False,
     ) -> InlineKeyboardMarkup:
+        if approval_blocked:
+            return InlineKeyboardMarkup(
+                [[
+                    InlineKeyboardButton(
+                        "Edit plan", callback_data=f"lc:plan:edit:{approval_id}"
+                    ),
+                    InlineKeyboardButton("Deny", callback_data=f"lc:plan:deny:{approval_id}"),
+                ]]
+            )
         if second_confirmation:
             return InlineKeyboardMarkup(
                 [
@@ -149,14 +161,16 @@ class BotApprovalsMixin:
                         continue
                     command = str(check.get("command") or "").strip()
                     if command:
-                        commands.append(command)
+                        label = str(contract.get("label") or "worker").strip()
+                        commands.append(f"{label}: {command}")
         combined = " ".join([goal, *paths, *commands]).lower()
         high_risk = any(re.search(pattern, combined) for pattern in self._SECOND_CONFIRM_PATTERNS)
         worker_count = max(1, len(contracts))
         item["review"] = {
             "risk_level": "high" if high_risk else "medium",
             "changed_paths": list(dict.fromkeys(paths))[:20],
-            "proposed_commands": list(dict.fromkeys(commands))[:20],
+            "proposed_commands": commands[:20],
+            "approval_blocked": len(commands) > MAX_REVIEWED_COMMANDS,
             "estimated_minutes": {"min": worker_count * 2, "max": worker_count * 15},
             "estimated_cost": "not available from local CLI before execution",
             "second_confirmation_required": high_risk,
@@ -190,7 +204,10 @@ class BotApprovalsMixin:
             ),
             "Proposed commands: "
             + (
-                ", ".join(f"<code>{_escape_html(str(command))}</code>" for command in commands[:6])
+                ", ".join(
+                    f"<code>{_escape_html(str(command))}</code>"
+                    for command in commands[:MAX_REVIEWED_COMMANDS]
+                )
                 if commands
                 else "none declared by acceptance contracts"
             ),
@@ -199,6 +216,10 @@ class BotApprovalsMixin:
         ]
         if review.get("second_confirmation_required"):
             lines.append("⚠️ Publishing, credentials, destructive language, or external scope triggered a second confirmation.")
+        if review.get("approval_blocked"):
+            lines.append(
+                "⛔ Approval disabled: commands are hidden from review. Edit the plan to expose all commands."
+            )
         return "\n".join(lines)
 
     @staticmethod
@@ -303,6 +324,9 @@ class BotApprovalsMixin:
                 await self._reply_logged(proxy, "Denied pending plan. Nothing was executed.")
                 return
             review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
+            if decision in {"approve", "confirm-risk"} and review.get("approval_blocked"):
+                await self._reply_logged(proxy, "Approval blocked; edit the plan to expose all commands.")
+                return
             if decision == "approve" and review.get("second_confirmation_required"):
                 review["second_confirmation_prompted"] = True
                 pending["review"] = review

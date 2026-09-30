@@ -50,6 +50,13 @@ class CommandsAgentExecutionMixin:
                 parse_mode=ParseMode.HTML,
             )
             return
+        review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
+        if review.get("approval_blocked"):
+            await self._reply_logged(
+                update,
+                "Approval blocked; edit the plan to expose all commands.",
+            )
+            return
 
         goal = str(pending.get("goal") or "").strip()
         workers_obj = pending.get("workers")

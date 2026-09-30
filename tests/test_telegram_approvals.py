@@ -36,12 +36,132 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
     review = pending["review"]
     assert review["risk_level"] == "high"
     assert review["changed_paths"] == ["docs/release.md"]
-    assert review["proposed_commands"] == ["python -m pytest"]
+    assert review["proposed_commands"] == ["release: python -m pytest"]
     assert review["estimated_minutes"] == {"min": 2, "max": 15}
     assert review["second_confirmation_required"] is True
     rendered = bot._render_plan_review(pending)
     assert "docs/release.md" in rendered
     assert "python -m pytest" in rendered
+
+
+def test_plan_with_hidden_commands_cannot_be_approved():
+    bot = LightClawBot.__new__(LightClawBot)
+    approval_id = "0123456789abcdef"
+    commands = [f"python -m pytest tests/test_{index}.py" for index in range(7)]
+    pending = bot._decorate_pending_plan(
+        {
+            "goal": "Run reviewed checks",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "label": "builder",
+                        "acceptance_checks": [
+                            {"type": "command_succeeds", "command": command}
+                            for command in commands
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+    pending["approval_id"] = approval_id
+    review = pending["review"]
+    assert review["approval_blocked"] is True
+    assert "commands are hidden from review" in bot._render_plan_review(pending)
+    keyboard_data = {
+        button.callback_data
+        for row in bot._inline_plan_keyboard(
+            approval_id,
+            approval_blocked=review["approval_blocked"],
+        ).inline_keyboard
+        for button in row
+    }
+    assert f"lc:plan:approve:{approval_id}" not in keyboard_data
+    assert f"lc:plan:edit:{approval_id}" in keyboard_data
+
+    reviewable = bot._decorate_pending_plan(
+        {
+            "goal": "Run reviewed checks",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "label": "builder",
+                        "acceptance_checks": [
+                            {"type": "command_succeeds", "command": command}
+                            for command in commands[:6]
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+    assert reviewable["review"]["approval_blocked"] is False
+    assert commands[5] in bot._render_plan_review(reviewable)
+
+
+@pytest.mark.asyncio
+async def test_hidden_plan_command_callback_is_refused():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    pending = {
+        "approval_id": "0123456789abcdef",
+        "review": {
+            "proposed_commands": ["python -m pytest"],
+            "approval_blocked": True,
+            "second_confirmation_required": False,
+        },
+    }
+    bot._get_pending_multi_plan = lambda _session: pending
+    bot._reply_logged = AsyncMock()
+    bot._execute_approved_plan_action = AsyncMock()
+    query = SimpleNamespace(
+        data="lc:plan:approve:0123456789abcdef",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    bot._execute_approved_plan_action.assert_not_awaited()
+    assert "blocked" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+async def test_pending_plan_execution_refuses_hidden_commands():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._get_pending_multi_plan = lambda _session: {
+        "review": {"approval_blocked": True}
+    }
+    bot._reply_logged = AsyncMock()
+
+    await bot._execute_pending_multi_plan_impl(SimpleNamespace(), "456")
+
+    assert "blocked" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+async def test_text_confirmation_refuses_hidden_commands():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._session_id_from_update = lambda _update: "456"
+    bot._log_user_message = Mock()
+    bot._get_pending_multi_plan = lambda _session: {
+        "review": {"approval_blocked": True}
+    }
+    bot._classify_pending_multi_reply = lambda _text: "confirm"
+    bot._reply_logged = AsyncMock()
+    bot._execute_pending_multi_plan = AsyncMock()
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=456))
+
+    await bot._process_user_message(update, SimpleNamespace(), "yes")
+
+    assert "blocked" in bot._reply_logged.await_args.args[1].lower()
+    bot._execute_pending_multi_plan.assert_not_awaited()
 
 
 def test_inline_keyboards_cover_required_plan_and_result_actions():

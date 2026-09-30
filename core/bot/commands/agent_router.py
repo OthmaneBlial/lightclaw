@@ -226,7 +226,7 @@ class CommandsAgentRouterMixin:
                     workers=list(pending_payload.get("workers") or []),
                     plan_payload=preview_payload,
                     warnings=[str(item) for item in preview_warnings],
-                    include_confirm_hint=True,
+                    include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
                 )
                 preview += "\n\n" + self._render_plan_review(pending_payload)
                 await self._reply_logged(
@@ -234,7 +234,8 @@ class CommandsAgentRouterMixin:
                     preview,
                     parse_mode=ParseMode.HTML,
                     reply_markup=self._inline_plan_keyboard(
-                        str(pending_payload["approval_id"])
+                        str(pending_payload["approval_id"]),
+                        approval_blocked=bool(pending_payload["review"]["approval_blocked"]),
                     ),
                 )
                 return
@@ -292,7 +293,7 @@ class CommandsAgentRouterMixin:
                 workers=list(pending_payload.get("workers") or []),
                 plan_payload=preview_payload,
                 warnings=[str(item) for item in preview_warnings],
-                include_confirm_hint=True,
+                include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
             )
             preview += "\n\n" + self._render_plan_review(pending_payload)
             await self._reply_logged(
@@ -300,7 +301,8 @@ class CommandsAgentRouterMixin:
                 preview,
                 parse_mode=ParseMode.HTML,
                 reply_markup=self._inline_plan_keyboard(
-                    str(pending_payload["approval_id"])
+                    str(pending_payload["approval_id"]),
+                    approval_blocked=bool(pending_payload["review"]["approval_blocked"]),
                 ),
             )
 
