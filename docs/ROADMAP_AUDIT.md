@@ -53,12 +53,13 @@ roadmap's “proof over claims” rule.
   Python 3.10.21, 3.11.16, 3.12.14, 3.13.1, and 3.14.7. Python 3.10–3.13 emitted three
   third-party deprecation warnings each; Python 3.14 emitted four from `python-telegram-bot`
   and `google-genai`.
-- Latest canonical quality suite at `980c824` on 2026-09-30: all 451 tests passed on macOS
+- Latest canonical quality suite at `2a48d4f` on 2026-09-30: all 452 tests passed on macOS
   arm64 with Python 3.14.7; lint, docs, architecture, dependency audit, and package build/install
-  also passed. The suite covers the bounded inline diff preview, eight-file mobile summary, and
-  resistance to replacing the patch path with a symlink during Telegram delivery.
+  also passed. The suite covers the bounded per-user summary cache, bounded inline diff preview,
+  eight-file mobile summary, and resistance to replacing the patch path with a symlink during
+  Telegram delivery.
   One third-party `google-genai` deprecation warning remains. This run does not extend the
-  earlier five-version test result to all 451 tests.
+  earlier five-version test result to all 452 tests.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
