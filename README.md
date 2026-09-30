@@ -173,6 +173,7 @@ Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Re
 - [Telegram approvals and chat file-operation limits](docs/APPROVALS.md)
 - [Architecture and enforced growth budgets](docs/ARCHITECTURE.md)
 - [Run receipts and sanitized Run Cards](docs/RUN_RECEIPTS.md)
+- [Scheduled Telegram reminders and durable job control](docs/JOB_CONTROL.md)
 - [Threat model](docs/THREAT_MODEL.md) and [privacy boundaries](docs/PRIVACY.md)
 - [Provider contract and generated compatibility evidence](docs/PROVIDERS.md)
 - [Multi-agent guide](MULTI_AGENT.md) and [reproducible showcase](showcase/)

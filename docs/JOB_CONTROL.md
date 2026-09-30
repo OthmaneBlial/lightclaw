@@ -32,3 +32,16 @@ lightclaw jobs retry <run-id> --lane <failed-idempotent-lane>
 ```
 
 A running cancellation becomes `cancel_requested`; the in-process heartbeat cancels the process tree and records `canceled`. Resume and retry fail closed for non-resumable or non-idempotent lanes. These commands never publish, push, or delete a workspace.
+
+## Schedule Telegram reminders
+
+`/cron` manages reminders for the current Telegram chat. The bot must remain running to deliver them.
+
+```text
+/cron add every 30 Check the build
+/cron add at 2026-10-01 09:00 Review the release notes
+/cron list
+/cron remove <id>
+```
+
+Date and time use the bot host's local timezone. `/cron` with no arguments lists reminders. Each reminder is scoped to the chat that created it.
