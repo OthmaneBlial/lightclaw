@@ -104,10 +104,16 @@ class BotBaseMixin:
         self._delegation_deny_patterns = self._compile_delegation_deny_patterns()
 
     def close(self) -> None:
-        """Close durable stores during a clean application shutdown."""
-        self.llm.close()
-        self.jobs.close()
-        self.memory.db.close()
+        """Close every resource, then surface the first shutdown error."""
+        first_error: Exception | None = None
+        for close in (self.llm.close, self.jobs.close, self.memory.db.close):
+            try:
+                close()
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
 
     def _create_background_task(self, coroutine) -> asyncio.Task:
         task = asyncio.create_task(coroutine)

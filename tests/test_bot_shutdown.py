@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from core.bot import LightClawBot
+
+
+def test_close_releases_all_resources_when_provider_close_fails():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.llm = Mock()
+    bot.llm.close.side_effect = RuntimeError("provider close failed")
+    bot.jobs = Mock()
+    bot.memory = SimpleNamespace(db=Mock())
+
+    with pytest.raises(RuntimeError, match="provider close failed"):
+        bot.close()
+
+    bot.jobs.close.assert_called_once_with()
+    bot.memory.db.close.assert_called_once_with()
 
 
 @pytest.mark.asyncio
