@@ -53,7 +53,7 @@ roadmap's “proof over claims” rule.
   Python 3.10.21, 3.11.16, 3.12.14, 3.13.1, and 3.14.7. Python 3.10–3.13 emitted three
   third-party deprecation warnings each; Python 3.14 emitted four from `python-telegram-bot`
   and `google-genai`.
-- Latest canonical quality suite at `ab2b43f` on 2026-09-30: all 429 tests passed on macOS
+- Latest canonical quality suite at `feafcf3` on 2026-09-30: all 429 tests passed on macOS
   arm64 with Python 3.14.7; lint, docs, architecture, dependency audit, and package build/install
   also passed. This run does not extend the earlier five-version test result to all 429 tests.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
