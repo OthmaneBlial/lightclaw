@@ -55,6 +55,25 @@ def validate_workspace_root(raw_root: str | Path) -> Path:
     return root
 
 
+def ensure_private_metadata_dir(root: str | Path, *parts: str) -> Path:
+    """Create a private metadata directory without following planted symlinks."""
+    current = validate_workspace_root(root)
+    for part in (METADATA_DIRNAME, *parts):
+        if part in {"", ".", ".."} or "/" in part or "\\" in part:
+            raise WorkspaceSafetyError("private metadata path contains an unsafe directory name")
+        current = current / part
+        if current.is_symlink():
+            raise WorkspaceSafetyError("private metadata directory must not be a symlink")
+        try:
+            current.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
+        if current.is_symlink() or not current.is_dir():
+            raise WorkspaceSafetyError("private metadata path must contain real directories")
+        current.chmod(0o700)
+    return current
+
+
 def capture_git_checkpoint(workspace: Path) -> dict[str, object]:
     """Capture starting Git identity without mutating the workspace."""
 
@@ -110,7 +129,8 @@ def register_task_workspace(root: Path, workspace: Path, goal: str) -> dict[str,
         "starting_files": [],
         "starting_git": capture_git_checkpoint(workspace),
     }
-    _atomic_private_json(root / METADATA_DIRNAME / f"{relative.name}.json", metadata)
+    metadata_dir = ensure_private_metadata_dir(root)
+    _atomic_private_json(metadata_dir / f"{relative.name}.json", metadata)
     return metadata
 
 

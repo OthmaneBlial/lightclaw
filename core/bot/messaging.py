@@ -19,15 +19,12 @@ from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
-from ..workspaces import validate_workspace_root
+from ..workspaces import WorkspaceSafetyError, ensure_private_metadata_dir
 
 
 class BotMessagingMixin:
     def _write_long_response_artifact(self, text: str) -> Path:
-        root = validate_workspace_root(self.config.workspace_path)
-        output = root / ".lightclaw-meta" / "messages"
-        output.mkdir(parents=True, exist_ok=True, mode=0o700)
-        output.chmod(0o700)
+        output = ensure_private_metadata_dir(self.config.workspace_path, "messages")
         path = output / f"response-{int(time.time())}-{secrets.token_hex(4)}.md"
         fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=output)
         temp = Path(raw_temp)
@@ -76,7 +73,19 @@ class BotMessagingMixin:
     async def _send_response(self, placeholder, update: Update, markdown_response: str):
         """Send bounded Markdown chunks after converting each one to HTML."""
         if len(markdown_response) > 6000 or self._is_large_code_leak(markdown_response):
-            artifact = self._write_long_response_artifact(markdown_response)
+            try:
+                artifact = self._write_long_response_artifact(markdown_response)
+            except (OSError, WorkspaceSafetyError):
+                log.warning("Could not save long result under private workspace metadata")
+                failure = (
+                    "Could not save this long result safely. Check the workspace's "
+                    "`.lightclaw-meta` directory."
+                )
+                if placeholder:
+                    await self._try_send(placeholder.edit_text, failure)
+                elif update.message:
+                    await self._try_send(update.message.reply_text, failure)
+                return
             summary = (
                 "Result is too large for safe inline review. "
                 "Attached as a private Markdown artifact."

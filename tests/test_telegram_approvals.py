@@ -11,6 +11,7 @@ from telegram import InputFile
 
 from core.bot import LightClawBot
 from core.jobs import JobStore
+from core.workspaces import WorkspaceSafetyError
 
 
 def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
@@ -577,6 +578,28 @@ async def test_long_result_is_private_file_artifact_not_chat_wall(tmp_path):
     assert len(files) == 1
     assert stat.S_IMODE(files[0].stat().st_mode) == 0o600
     assert files[0].read_text(encoding="utf-8").startswith("evidence")
+
+
+@pytest.mark.asyncio
+async def test_long_result_refuses_symlinked_private_metadata(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (workspace / ".lightclaw-meta").symlink_to(outside, target_is_directory=True)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    placeholder = SimpleNamespace(edit_text=AsyncMock())
+    update = SimpleNamespace(message=None)
+
+    with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
+        bot._write_long_response_artifact("private result")
+
+    await bot._send_response(placeholder, update, "private result\n" * 1000)
+
+    placeholder.edit_text.assert_awaited_once()
+    assert "Could not save this long result safely" in placeholder.edit_text.await_args.args[0]
+    assert list(outside.iterdir()) == []
 
 
 @pytest.mark.asyncio

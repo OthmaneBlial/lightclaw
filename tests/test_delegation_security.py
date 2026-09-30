@@ -13,6 +13,7 @@ import pytest
 
 from core.bot.delegation.execution import DelegationExecutionMixin
 from core.jobs import JobStore
+from core.workspaces import WorkspaceSafetyError
 
 
 class ExecutionHarness(DelegationExecutionMixin):
@@ -105,6 +106,21 @@ def test_invalid_profile_falls_back_to_workspace_sandbox(tmp_path: Path):
         "codex", tmp_path, "task", False, "not-real"
     )
     assert command[command.index("--sandbox") + 1] == "workspace-write"
+
+
+def test_receipt_output_refuses_symlinked_private_metadata_subdirectory(tmp_path: Path):
+    root = tmp_path / "workspace"
+    (root / ".lightclaw-meta").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / ".lightclaw-meta" / "receipts").symlink_to(outside, target_is_directory=True)
+    harness = ExecutionHarness()
+    harness.config.workspace_path = str(root)
+
+    with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
+        harness._receipt_output_dir("run-123")
+
+    assert list(outside.iterdir()) == []
 
 
 async def test_streaming_timeout_kills_worker_process_group_and_preserves_existing_files(
