@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from .fs import sha256_file
 from .receipts import _write_private, read_receipt
 from .security import delegated_process_env, redact_text
+from .workspaces import ensure_private_workspace_dir
 
 
 class ArtifactError(ValueError):
@@ -246,6 +247,17 @@ def _safe_selected_path(raw: str) -> str:
     return candidate.as_posix()
 
 
+def _validate_workspace_path(root: Path, relative: str, label: str) -> None:
+    current = root
+    parts = PurePosixPath(relative).parts
+    for index, part in enumerate(parts):
+        current /= part
+        if current.is_symlink() or (
+            index < len(parts) - 1 and current.exists() and not current.is_dir()
+        ):
+            raise ArtifactError(f"{label} contains a symlink or non-directory parent: {relative}")
+
+
 def apply_selected_files(
     source_workspace: str | Path,
     target_workspace: str | Path,
@@ -255,52 +267,72 @@ def apply_selected_files(
     apply: bool = False,
 ) -> dict[str, object]:
     """Preview or atomically copy selected files, backing up only overwritten targets."""
-    source = Path(source_workspace).expanduser().resolve()
-    target = Path(target_workspace).expanduser().resolve()
-    if not source.is_dir() or not target.is_dir() or target.is_symlink():
+    source_path = Path(source_workspace).expanduser()
+    target_path = Path(target_workspace).expanduser()
+    if (
+        source_path.is_symlink()
+        or target_path.is_symlink()
+        or not source_path.is_dir()
+        or not target_path.is_dir()
+    ):
         raise ArtifactError("source and target must be real directories")
+    source = source_path.resolve()
+    target = target_path.resolve()
     paths = list(dict.fromkeys(_safe_selected_path(path) for path in selected_paths))
     if not paths:
         raise ArtifactError("at least one selected file is required")
+    backup_id = _safe_selected_path(run_id)
+    if "/" in backup_id:
+        raise ArtifactError("run id must be a single safe path component")
     operations: list[dict[str, object]] = []
-    backup_root = target / ".lightclaw-backups" / _safe_selected_path(run_id)
+    planned: list[tuple[Path, Path, Path | None]] = []
     for relative in paths:
+        if PurePosixPath(relative).parts[0] == ".lightclaw-backups":
+            raise ArtifactError("selected path uses the reserved backup directory")
         source_file = source / relative
         destination = target / relative
-        if source_file.is_symlink() or not source_file.is_file():
+        _validate_workspace_path(source, relative, "selected source")
+        if not source_file.is_file():
             raise ArtifactError(f"selected source is not a regular file: {relative}")
-        try:
-            source_file.resolve(strict=True).relative_to(source)
-        except ValueError as exc:
-            raise ArtifactError(f"selected source escapes workspace: {relative}") from exc
-        if destination.is_symlink():
-            raise ArtifactError(f"refusing symlink target: {relative}")
-        try:
-            destination.resolve(strict=False).relative_to(target)
-        except ValueError as exc:
-            raise ArtifactError(f"selected path escapes target: {relative}") from exc
+        _validate_workspace_path(target, relative, "target path")
+        if destination.exists() and not destination.is_file():
+            raise ArtifactError(f"selected target is not a regular file: {relative}")
+        backup: Path | None = None
+        if destination.exists():
+            backup_relative = f".lightclaw-backups/{backup_id}/{relative}"
+            _validate_workspace_path(target, backup_relative, "backup path")
+            backup = target / backup_relative
+            if backup.exists():
+                raise ArtifactError(f"backup already exists; refusing to overwrite it: {relative}")
         operation = {
             "path": relative,
             "change": "overwrite" if destination.exists() else "create",
             "source_sha256": sha256_file(source_file),
-            "backup": (backup_root / relative).as_posix() if destination.exists() else None,
+            "backup": backup.as_posix() if backup else None,
         }
         operations.append(operation)
-        if not apply:
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        if destination.exists():
-            backup = backup_root / relative
-            backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            shutil.copy2(destination, backup)
-        fd, raw_temp = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
-        os.close(fd)
-        temp = Path(raw_temp)
-        try:
-            shutil.copy2(source_file, temp)
-            os.replace(temp, destination)
-        finally:
-            temp.unlink(missing_ok=True)
+        planned.append((source_file, destination, backup))
+
+    if apply:
+        for _source_file, destination, backup in planned:
+            if backup is not None:
+                backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
+                backup_parent = ensure_private_workspace_dir(target, *backup_parts[:-1])
+                backup = backup_parent / backup_parts[-1]
+                if backup.is_symlink() or backup.exists():
+                    raise ArtifactError("backup path was created during apply")
+                shutil.copy2(destination, backup)
+
+        for source_file, destination, _backup in planned:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            fd, raw_temp = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
+            os.close(fd)
+            temp = Path(raw_temp)
+            try:
+                shutil.copy2(source_file, temp)
+                os.replace(temp, destination)
+            finally:
+                temp.unlink(missing_ok=True)
     return {
         "run_id": run_id,
         "source": source.as_posix(),

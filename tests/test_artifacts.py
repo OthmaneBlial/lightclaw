@@ -178,13 +178,88 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
     assert (
         target / ".lightclaw-backups" / "run-apply" / "src" / "chosen.py"
     ).read_text(encoding="utf-8") == "old\n"
+    assert stat.S_IMODE((target / ".lightclaw-backups").stat().st_mode) == 0o700
     assert unrelated.read_text(encoding="utf-8") == "user work\n"
 
     with pytest.raises(ArtifactError, match="safe and relative"):
         apply_selected_files(source, target, ["../unrelated.txt"], run_id="bad")
     (source / "linked.py").symlink_to(source / "src" / "chosen.py")
-    with pytest.raises(ArtifactError, match="regular file"):
+    with pytest.raises(ArtifactError, match="symlink"):
         apply_selected_files(source, target, ["linked.py"], run_id="bad")
+
+
+def test_selective_apply_preflights_all_backup_paths_before_mutating(tmp_path):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    outside = tmp_path / "outside"
+    source.mkdir()
+    target.mkdir()
+    outside.mkdir()
+    (source / "first.txt").write_text("new first\n", encoding="utf-8")
+    (source / "nested").mkdir()
+    (source / "nested" / "second.txt").write_text("new second\n", encoding="utf-8")
+    (target / "first.txt").write_text("old first\n", encoding="utf-8")
+    (target / "nested").mkdir()
+    (target / "nested" / "second.txt").write_text("old second\n", encoding="utf-8")
+    (outside / "second.txt").write_text("outside\n", encoding="utf-8")
+    backup_run = target / ".lightclaw-backups" / "run-symlink"
+    backup_run.mkdir(parents=True)
+    (backup_run / "nested").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ArtifactError, match="backup path contains a symlink"):
+        apply_selected_files(
+            source,
+            target,
+            ["first.txt", "nested/second.txt"],
+            run_id="run-symlink",
+            apply=True,
+        )
+
+    assert (target / "first.txt").read_text(encoding="utf-8") == "old first\n"
+    assert (target / "nested" / "second.txt").read_text(encoding="utf-8") == "old second\n"
+    assert (outside / "second.txt").read_text(encoding="utf-8") == "outside\n"
+    assert not (backup_run / "first.txt").exists()
+
+
+def test_selective_apply_never_overwrites_an_existing_backup(tmp_path):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "file.txt").write_text("new\n", encoding="utf-8")
+    (target / "file.txt").write_text("current target\n", encoding="utf-8")
+    backup = target / ".lightclaw-backups" / "run-repeat" / "file.txt"
+    backup.parent.mkdir(parents=True)
+    backup.write_text("original backup\n", encoding="utf-8")
+
+    with pytest.raises(ArtifactError, match="backup already exists"):
+        apply_selected_files(
+            source,
+            target,
+            ["file.txt"],
+            run_id="run-repeat",
+            apply=True,
+        )
+
+    assert (target / "file.txt").read_text(encoding="utf-8") == "current target\n"
+    assert backup.read_text(encoding="utf-8") == "original backup\n"
+
+
+def test_selective_apply_rejects_symlinked_workspace_roots(tmp_path):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "file.txt").write_text("source\n", encoding="utf-8")
+    source_link = tmp_path / "source-link"
+    target_link = tmp_path / "target-link"
+    source_link.symlink_to(source, target_is_directory=True)
+    target_link.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(ArtifactError, match="real directories"):
+        apply_selected_files(source_link, target, ["file.txt"], run_id="root-link")
+    with pytest.raises(ArtifactError, match="real directories"):
+        apply_selected_files(source, target_link, ["file.txt"], run_id="root-link")
 
 
 def test_selective_apply_hashes_large_source_without_read_bytes(tmp_path, monkeypatch):

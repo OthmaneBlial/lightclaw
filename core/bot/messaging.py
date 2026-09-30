@@ -19,12 +19,14 @@ from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
-from ..workspaces import WorkspaceSafetyError, ensure_private_metadata_dir
+from ..workspaces import WorkspaceSafetyError, ensure_private_workspace_dir
 
 
 class BotMessagingMixin:
     def _write_long_response_artifact(self, text: str) -> Path:
-        output = ensure_private_metadata_dir(self.config.workspace_path, "messages")
+        output = ensure_private_workspace_dir(
+            self.config.workspace_path, ".lightclaw-meta", "messages"
+        )
         path = output / f"response-{int(time.time())}-{secrets.token_hex(4)}.md"
         fd, raw_temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=output)
         temp = Path(raw_temp)

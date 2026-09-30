@@ -18,7 +18,7 @@ from ...jobs import JobStateError
 from ...logging_setup import log
 from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
-from ...workspaces import capture_git_checkpoint, ensure_private_metadata_dir
+from ...workspaces import capture_git_checkpoint, ensure_private_workspace_dir
 from .streams import BoundedStreamCapture
 
 
@@ -28,7 +28,9 @@ class DelegationExecutionMixin:
         return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
     def _receipt_output_dir(self, run_id: str) -> Path:
-        return ensure_private_metadata_dir(self.config.workspace_path, "receipts", run_id)
+        return ensure_private_workspace_dir(
+            self.config.workspace_path, ".lightclaw-meta", "receipts", run_id
+        )
 
     @staticmethod
     def _strip_ansi(text: str) -> str:
