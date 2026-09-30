@@ -4,6 +4,8 @@
 
 Allowlisted bots accept commands only in private Telegram chats because group members share session and approval state. Group use requires explicit public mode with no user allowlist.
 
+Plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps.
+
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 
 Delegated CLI output has per-line and per-stream limits. LightClaw marks truncated output for review.

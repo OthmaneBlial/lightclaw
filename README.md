@@ -145,6 +145,7 @@ Current capabilities include:
 - reviewable artifacts, plan-hash-bound selective apply that stages sources and backs up targets before replacement, and optional PR previews;
 - namespaced SQLite FTS5 lexical recall with retention, export, and selective delete;
 - permission-manifest skills with pinned provenance, hash review, and prompt-only activation;
+- plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps;
 - voice transcription (20 MB limit, explicit approval), scheduled jobs, heartbeat, Telegram, and terminal chat;
 - token-free fixture adapters covered by the canonical local quality suite.
 
