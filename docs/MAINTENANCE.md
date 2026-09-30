@@ -41,6 +41,6 @@ page. Do not add stars, downloads, coverage, release, container, PyPI, security-
 compatibility badges until the linked public signal is live and its scope is accurately
 labeled. Remove a badge when its source is retired.
 
-Marketing milestones never override failed CI, an open critical/high security finding, an
-unverified distribution, missing rollback instructions, or an unsatisfied external alpha
-gate.
+Marketing milestones never override failed local quality checks, an open critical/high
+security finding, an unverified distribution, missing rollback instructions, or an
+unsatisfied external alpha gate.

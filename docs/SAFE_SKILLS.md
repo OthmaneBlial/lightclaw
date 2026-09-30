@@ -77,7 +77,7 @@ LightClaw shows the source excerpt, owner, pinned version, capabilities, network
 
 Changing `SKILL.md` or `skill.json` changes the token, so stale approval cannot silently activate new instructions or permissions. Invalid or high-authority skills never enter prompt context.
 
-## CI contract
+## Validation contract
 
 Community skill repositories should run:
 
@@ -85,4 +85,7 @@ Community skill repositories should run:
 lightclaw skills validate --path path/to/skill
 ```
 
-LightClaw CI validates [the sample skill](../examples/safe-skill/) on every change. Copy that check into a skill repository before sharing it. Validation proves the manifest contract and file boundaries; it does not certify the quality or intent of the instructions.
+Run the local quality suite to validate [the sample skill](../examples/safe-skill/) as part
+of pre-push checks. The GitHub CI workflow is disabled. Copy the command into a skill
+repository before sharing it. Validation proves the manifest contract and file boundaries;
+it does not certify the quality or intent of the instructions.

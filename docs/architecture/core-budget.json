@@ -11,5 +11,5 @@
     "cold_start_p95_ms": 1000,
     "wheel_bytes": 1000000
   },
-  "review_policy": "CI rejects code or dependency growth beyond a limit. Raising a limit requires an ADR or an explicit architecture-budget rationale in the same review."
+  "review_policy": "The local quality suite enforces these limits; GitHub CI is disabled. Raising a limit requires an ADR or an explicit architecture-budget rationale in the same review."
 }

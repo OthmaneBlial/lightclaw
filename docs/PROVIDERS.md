@@ -41,7 +41,12 @@ The retry value is retries after the first attempt. SDK clients are closed expli
 
 ## Compatibility evidence
 
-The [generated compatibility matrix](generated/provider-compatibility.md) comes from the provider registry plus six versioned response fixtures. CI runs the shared contract suite and rejects matrix drift. Fixture success proves deterministic request/response mapping, normalized usage, retry/error behavior, and lifecycle handling. It does not prove live API availability, latency, cost, or model quality.
+The [generated compatibility matrix](generated/provider-compatibility.md) comes from the
+provider registry plus six versioned response fixtures. The canonical local quality suite
+runs the shared contract tests and rejects matrix drift; the GitHub CI workflow is disabled.
+Fixture success proves deterministic request/response mapping, normalized usage,
+retry/error behavior, and lifecycle handling. It does not prove live API availability,
+latency, cost, or model quality.
 
 xAI, DeepSeek, and Z.AI use their own provider identity and endpoint through an OpenAI-compatible transport. They are not represented as OpenAI-operated or OpenAI-certified services.
 

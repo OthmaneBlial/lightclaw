@@ -1,6 +1,9 @@
 # Real Telegram Verification
 
-The deterministic stories run without credentials and are the CI contract. This checklist is the separate manual proof for Telegram delivery, provider latency, and a real delegated coding-agent boundary. Never substitute fixture output for this evidence.
+The deterministic stories run without credentials and are covered by the canonical local
+quality suite. This checklist is the separate manual proof for Telegram delivery, provider
+latency, and a real delegated coding-agent boundary. Never substitute fixture output for
+this evidence.
 
 ## Preconditions
 

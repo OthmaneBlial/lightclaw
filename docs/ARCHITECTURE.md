@@ -44,7 +44,10 @@ python scripts/check_architecture.py --check
 python -m bench.runtime_footprint --output /tmp/lightclaw-runtime-footprint.json
 ```
 
-CI rejects stale metrics and budget overruns. Raising a limit requires an explicit architecture rationale; limits are not silently moved to make a change pass. Release builds attach a machine-readable runtime footprint containing cold-start samples, direct dependency list, and wheel size.
+The canonical local quality suite rejects stale metrics and budget overruns; the GitHub CI
+workflow is disabled. Raising a limit requires an explicit architecture rationale; limits
+are not silently moved to make a change pass. Release builds attach a machine-readable
+runtime footprint containing cold-start samples, direct dependency list, and wheel size.
 
 ## Decisions
 
