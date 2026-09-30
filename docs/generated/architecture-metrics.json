@@ -14,8 +14,8 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 95,
-      "line": 245,
+      "branch_points": 93,
+      "line": 241,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
@@ -78,7 +78,7 @@
     },
     {
       "branch_points": 47,
-      "line": 377,
+      "line": 343,
       "lines": 294,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
@@ -128,8 +128,8 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "branch_points": 95,
-      "line": 245,
+      "branch_points": 93,
+      "line": 241,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
@@ -164,7 +164,7 @@
     },
     {
       "branch_points": 47,
-      "line": 377,
+      "line": 343,
       "lines": 294,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
@@ -237,7 +237,7 @@
       "path": "skills.py"
     },
     {
-      "lines": 1018,
+      "lines": 1015,
       "path": "core/bot/file_ops.py"
     },
     {
@@ -253,7 +253,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 811,
+      "lines": 777,
       "path": "core/artifacts.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19651,
+  "runtime_lines": 19780,
   "schema_version": 1
 }

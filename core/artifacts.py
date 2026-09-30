@@ -13,7 +13,7 @@ import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
 
-from .fs import sha256_file
+from .fs import open_directory_at, open_regular_file_at, sha256_file
 from .receipts import _write_private, read_receipt
 from .security import delegated_process_env, redact_text
 
@@ -268,57 +268,23 @@ def _open_workspace_directory(
     create: bool = False,
     private: bool = False,
 ) -> int:
-    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-    directory_fd: int | None = None
     try:
-        directory_fd = os.open(root, flags)
-        for part in parts:
-            if create:
-                try:
-                    os.mkdir(part, 0o700 if private else 0o777, dir_fd=directory_fd)
-                except FileExistsError:
-                    pass
-            child_fd = os.open(part, flags, dir_fd=directory_fd)
-            try:
-                if private:
-                    os.fchmod(child_fd, 0o700)
-            except OSError:
-                os.close(child_fd)
-                raise
-            previous_fd = directory_fd
-            directory_fd = child_fd
-            os.close(previous_fd)
-        return directory_fd
+        return open_directory_at(root, parts, create=create, private=private)
     except OSError as exc:
-        if directory_fd is not None:
-            os.close(directory_fd)
         if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
             raise ArtifactError(f"{label} contains a symlink or non-directory parent") from exc
         raise ArtifactError(f"{label} could not be opened safely") from exc
 
 
 def _open_workspace_file(root: Path, relative: str, label: str) -> tuple[int, os.stat_result]:
-    parts = PurePosixPath(relative).parts
-    directory_fd = _open_workspace_directory(root, parts[:-1], label=label)
-    file_fd: int | None = None
     try:
-        file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
-        file_stat = os.fstat(file_fd)
-        if not stat.S_ISREG(file_stat.st_mode):
-            raise ArtifactError(f"{label} is not a regular file: {relative}")
-        return file_fd, file_stat
+        return open_regular_file_at(root, relative)
     except OSError as exc:
-        if file_fd is not None:
-            os.close(file_fd)
+        if exc.errno == errno.EINVAL:
+            raise ArtifactError(f"{label} is not a regular file: {relative}") from exc
         if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
             raise ArtifactError(f"{label} contains a symlink or non-regular file: {relative}") from exc
         raise ArtifactError(f"{label} is no longer available: {relative}") from exc
-    except ArtifactError:
-        if file_fd is not None:
-            os.close(file_fd)
-        raise
-    finally:
-        os.close(directory_fd)
 
 
 def _hash_fd(file_fd: int) -> str:

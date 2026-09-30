@@ -24,6 +24,7 @@ LightClaw memory and task workspaces are local by default. Model inference is no
 | Prompt injection | Human plan/privilege confirmation, restrictive capability profiles, bounded task workspaces | A model can still make harmful changes inside granted scope |
 | Secret theft by delegated worker | Minimal environment allowlist; credential redaction in logs/results; no parent environment copy | Secrets already stored in readable workspace files remain visible to a worker |
 | Secret disclosure through automatic edit retries | Common credential paths and detectable secret-bearing file contents are omitted from automatic retry/repair prompts; generated file blocks refuse common credential paths | Novel secret formats can evade detection; configured local coding-agent CLIs retain their own workspace access |
+| Symlink swap during chat file operations | Bounded reads and atomic writes walk workspace components through no-follow directory descriptors | Concurrent host processes can still change workspace contents; LightClaw is not an OS sandbox |
 | Delegated CLI output exhaustion | Streams are drained while each line is capped at 1 MiB and capture retains at most 2 Mi characters and 4,096 lines per stream | Final response may be truncated; review workspace changes and the run receipt |
 | Workspace escape | Resolved non-symlink root, per-task direct child directory, acceptance paths and command working directories resolved within the workspace, external ownership record, external CLI sandbox flags | Trusted host execution intentionally removes this protection |
 | Acceptance command host access | Commands and working directories are shown before approval; child environments exclude credentials; acceptance paths stay within the workspace | Acceptance commands are not OS-sandboxed by LightClaw and retain host-user permissions; use an OS/container boundary for untrusted repositories |
@@ -52,7 +53,7 @@ External agent CLIs remain separate security products. Their own version, authen
 - Deterministic quality fixtures require no paid API key and no Telegram account.
 - Active skills are valid prompt-guidance-only bundles whose reviewed instruction-and-manifest hash still matches; networked, writable, subprocess, or trusted-command declarations remain isolated from the core prompt.
 
-Regression tests cover authorization, environment isolation/redaction, provider routing, traversal and symlink escape, skill archive and permission boundaries, stale hash approval, process-tree termination, memory persistence, DAG dependency contracts, and scoped undo.
+Regression tests cover authorization, environment isolation/redaction, provider routing, traversal and symlink escape, chat file operations during symlink swaps, skill archive and permission boundaries, stale hash approval, process-tree termination, memory persistence, DAG dependency contracts, and scoped undo.
 
 ## Out of scope
 

@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+import core.bot.file_ops as file_ops
 from core.bot import LightClawBot
 from core.bot.file_ops import MAX_CHAT_FILE_BYTES, BotFileOpsMixin
 from core.types import FileOperationResult
@@ -62,6 +63,39 @@ async def test_edit_with_nul_path_is_rejected_without_crashing(tmp_path):
     assert operations[0].detail == "path contains NUL byte"
     assert "bad?name" in response
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.asyncio
+async def test_file_write_rejects_parent_swapped_to_symlink_before_write(
+    tmp_path, monkeypatch
+):
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested"
+    outside = tmp_path / "outside"
+    nested.mkdir(parents=True)
+    outside.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    write = file_ops._write_workspace_text
+    swapped = False
+
+    def swap_then_write(root, relative, content):
+        nonlocal swapped
+        if relative == "nested/file.txt" and not swapped:
+            swapped = True
+            nested.rename(workspace / "moved-nested")
+            nested.symlink_to(outside, target_is_directory=True)
+        return write(root, relative, content)
+
+    monkeypatch.setattr(file_ops, "_write_workspace_text", swap_then_write)
+
+    operations, _ = await bot._process_file_blocks(
+        "```txt:nested/file.txt\noutside write\n```"
+    )
+
+    assert swapped
+    assert operations[0].action == "error"
+    assert not (outside / "file.txt").exists()
 
 
 def test_response_compaction_keeps_plain_text_and_removes_markers_and_code():

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
+import secrets
+import stat
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -36,6 +39,169 @@ def read_text_bounded(
     if len(raw) > limit:
         raise FileTooLargeError(f"file exceeds the {limit}-byte read limit")
     return raw.decode(encoding)
+
+
+def _relative_parts(relative: str | Path) -> tuple[str, ...]:
+    path = PurePosixPath(str(relative))
+    if path.is_absolute() or not path.parts or any(part in {".", ".."} for part in path.parts):
+        raise ValueError("workspace path must be safe and relative")
+    return path.parts
+
+
+def open_directory_at(
+    root: str | Path,
+    parts: tuple[str, ...],
+    *,
+    create: bool = False,
+    private: bool = False,
+) -> int:
+    """Open a workspace directory by components without following symlinks."""
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd: int | None = None
+    try:
+        directory_fd = os.open(root, flags)
+        for part in parts:
+            if part in {"", ".", ".."} or "/" in part or "\x00" in part:
+                raise ValueError("workspace path must be safe and relative")
+            if create:
+                try:
+                    os.mkdir(part, 0o700 if private else 0o777, dir_fd=directory_fd)
+                except FileExistsError:
+                    pass
+            child_fd = os.open(part, flags, dir_fd=directory_fd)
+            try:
+                if private:
+                    os.fchmod(child_fd, 0o700)
+            except OSError:
+                os.close(child_fd)
+                raise
+            previous_fd = directory_fd
+            directory_fd = child_fd
+            os.close(previous_fd)
+        return directory_fd
+    except BaseException as exc:
+        if directory_fd is not None:
+            os.close(directory_fd)
+        if isinstance(exc, OSError) and exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise OSError(
+                exc.errno, "workspace path contains a symlink or non-directory parent"
+            ) from exc
+        raise
+
+
+def open_regular_file_at(
+    root: str | Path, relative: str | Path
+) -> tuple[int, os.stat_result]:
+    """Open one regular workspace file without following symlinks."""
+    parts = _relative_parts(relative)
+    directory_fd = open_directory_at(root, parts[:-1])
+    file_fd: int | None = None
+    try:
+        file_fd = os.open(
+            parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+        )
+        file_stat = os.fstat(file_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise OSError(errno.EINVAL, "workspace file is not a regular file")
+        return file_fd, file_stat
+    except OSError as exc:
+        if file_fd is not None:
+            os.close(file_fd)
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise OSError(
+                exc.errno, "workspace file contains a symlink or non-regular path"
+            ) from exc
+        raise
+    finally:
+        os.close(directory_fd)
+
+
+def read_text_bounded_at(
+    root: str | Path,
+    relative: str | Path,
+    max_bytes: int,
+    *,
+    encoding: str = "utf-8",
+) -> str:
+    """Read a bounded text file through a symlink-safe workspace descriptor."""
+    file_fd, _ = open_regular_file_at(root, relative)
+    limit = max(1, int(max_bytes))
+    with os.fdopen(file_fd, "rb") as handle:
+        raw = handle.read(limit + 1)
+    if len(raw) > limit:
+        raise FileTooLargeError(f"file exceeds the {limit}-byte read limit")
+    return bytes(raw).decode(encoding)
+
+
+def atomic_write_text_at(
+    root: str | Path,
+    relative: str | Path,
+    content: str,
+    *,
+    encoding: str = "utf-8",
+) -> None:
+    """Atomically write beneath a workspace using symlink-safe directory handles."""
+    parts = _relative_parts(relative)
+    directory_fd = open_directory_at(root, parts[:-1], create=True)
+    name = parts[-1]
+    temp_name: str | None = None
+    file_fd: int | None = None
+    try:
+        try:
+            current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            mode = 0o600
+        else:
+            if stat.S_ISLNK(current.st_mode):
+                raise OSError(errno.ELOOP, "refusing to replace a symlink")
+            if not stat.S_ISREG(current.st_mode):
+                raise OSError(errno.EINVAL, "workspace target is not a regular file")
+            mode = current.st_mode & 0o777
+
+        temp_name = f".{name}.{secrets.token_hex(8)}.tmp"
+        file_fd = os.open(
+            temp_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        with os.fdopen(file_fd, "w", encoding=encoding) as handle:
+            file_fd = None
+            handle.write(content)
+            handle.flush()
+            os.fchmod(handle.fileno(), mode)
+            os.fsync(handle.fileno())
+
+        try:
+            current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            pass
+        else:
+            if stat.S_ISLNK(current.st_mode):
+                raise OSError(errno.ELOOP, "refusing to replace a symlink")
+            if not stat.S_ISREG(current.st_mode):
+                raise OSError(errno.EINVAL, "workspace target is not a regular file")
+
+        os.replace(
+            temp_name,
+            name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        temp_name = None
+        try:
+            os.fsync(directory_fd)
+        except OSError:
+            pass
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+        if temp_name is not None:
+            try:
+                os.unlink(temp_name, dir_fd=directory_fd)
+            except FileNotFoundError:
+                pass
+        os.close(directory_fd)
 
 
 def atomic_write_text(

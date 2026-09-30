@@ -8,7 +8,7 @@ import re
 import time
 from pathlib import Path
 
-from ..fs import FileTooLargeError, atomic_write_text, read_text_bounded
+from ..fs import FileTooLargeError, atomic_write_text_at, read_text_bounded_at
 from ..logging_setup import log
 from ..security import has_sensitive_content, is_sensitive_path
 from ..types import FileOperationResult
@@ -19,21 +19,17 @@ _CHAT_FILE_LIMIT_MESSAGE = (
 )
 
 
-def _read_chat_file(target: Path) -> str:
+def _read_chat_file(workspace: Path, relative: str) -> str:
     try:
-        return read_text_bounded(target, MAX_CHAT_FILE_BYTES)
+        return read_text_bounded_at(workspace, relative, MAX_CHAT_FILE_BYTES)
     except FileTooLargeError as exc:
         raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE) from exc
 
 
-def _write_workspace_text(target: Path, content: str) -> None:
+def _write_workspace_text(workspace: Path, relative: str, content: str) -> None:
     if len(content) > MAX_CHAT_FILE_BYTES or len(content.encode("utf-8")) > MAX_CHAT_FILE_BYTES:
         raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE)
-    try:
-        mode = target.stat().st_mode & 0o777
-    except FileNotFoundError:
-        mode = 0o600
-    atomic_write_text(target, content, mode=mode)
+    atomic_write_text_at(workspace, relative, content)
 
 
 class BotFileOpsMixin:
@@ -301,17 +297,17 @@ class BotFileOpsMixin:
                 )
                 return f"[Save blocked: {rel_path}]"
 
-            before = None
-            if target.exists():
-                try:
-                    before = _read_chat_file(target)
-                except Exception as e:
-                    operations.append(FileOperationResult("error", rel_path, f"failed to read file: {e}"))
-                    return f"[Save failed: {rel_path}]"
+            workspace = Path(self.config.workspace_path).resolve()
+            try:
+                before = _read_chat_file(workspace, rel_path)
+            except FileNotFoundError:
+                before = None
+            except Exception as e:
+                operations.append(FileOperationResult("error", rel_path, f"failed to read file: {e}"))
+                return f"[Save failed: {rel_path}]"
 
             try:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                _write_workspace_text(target, content)
+                _write_workspace_text(workspace, rel_path, content)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Save failed: {rel_path}]"
@@ -497,12 +493,12 @@ class BotFileOpsMixin:
                 )
                 return f"[Edit blocked: {rel_path}]"
 
-            if not target.exists():
+            workspace = Path(self.config.workspace_path).resolve()
+            try:
+                before = _read_chat_file(workspace, rel_path)
+            except FileNotFoundError:
                 operations.append(FileOperationResult("error", rel_path, "file not found"))
                 return f"[Edit failed: {rel_path}]"
-
-            try:
-                before = _read_chat_file(target)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to read file: {e}"))
                 return f"[Edit failed: {rel_path}]"
@@ -517,7 +513,7 @@ class BotFileOpsMixin:
                 return f"[No changes: {rel_path}]"
 
             try:
-                _write_workspace_text(target, after)
+                _write_workspace_text(workspace, rel_path, after)
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Edit failed: {rel_path}]"
@@ -724,6 +720,7 @@ class BotFileOpsMixin:
         if not retryable_errors:
             return [], ""
 
+        workspace = Path(self.config.workspace_path).resolve()
         snippets: list[str] = []
         retry_paths: list[str] = []
         for op in retryable_errors:
@@ -732,10 +729,8 @@ class BotFileOpsMixin:
                 continue
             if is_sensitive_path(rel_path):
                 continue
-            if not target.exists():
-                continue
             try:
-                content = _read_chat_file(target)
+                content = _read_chat_file(workspace, rel_path)
             except Exception:
                 continue
             if has_sensitive_content(content):
@@ -812,15 +807,16 @@ class BotFileOpsMixin:
         snippets: list[str] = []
         sensitive_files_omitted = False
         oversized_files: list[str] = []
+        workspace = Path(self.config.workspace_path).resolve()
         for rel_path in target_files:
             if is_sensitive_path(rel_path):
                 sensitive_files_omitted = True
                 continue
             target, _, err = self._resolve_workspace_path(rel_path)
-            if err or target is None or not target.exists():
+            if err or target is None:
                 continue
             try:
-                content = _read_chat_file(target)
+                content = _read_chat_file(workspace, rel_path)
             except FileTooLargeError:
                 oversized_files.append(rel_path)
                 continue
@@ -922,9 +918,10 @@ class BotFileOpsMixin:
             seen_paths.add(path)
             ordered_html_paths.append(path)
 
+        workspace = Path(self.config.workspace_path).resolve()
         for rel_path in ordered_html_paths:
             target, _, err = self._resolve_workspace_path(rel_path)
-            if err or target is None or not target.exists():
+            if err or target is None:
                 continue
 
             max_attempts = 3
@@ -933,7 +930,7 @@ class BotFileOpsMixin:
 
             for attempt in range(1, max_attempts + 1):
                 try:
-                    content = _read_chat_file(target)
+                    content = _read_chat_file(workspace, rel_path)
                 except FileTooLargeError as exc:
                     repair_skipped = True
                     repair_ops.append(FileOperationResult("error", rel_path, str(exc)))
@@ -997,7 +994,7 @@ class BotFileOpsMixin:
                     repair_ops.extend(ops)
 
                 try:
-                    updated = _read_chat_file(target)
+                    updated = _read_chat_file(workspace, rel_path)
                 except Exception:
                     updated = ""
                 if updated and not self._is_incomplete_html_text(updated):

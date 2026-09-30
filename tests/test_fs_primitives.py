@@ -11,8 +11,10 @@ from core.fs import (
     FileTooLargeError,
     atomic_write_json,
     atomic_write_text,
+    atomic_write_text_at,
     read_json_object,
     read_text_bounded,
+    read_text_bounded_at,
     sha256_file,
 )
 
@@ -119,6 +121,32 @@ def test_atomic_write_does_not_chmod_destination_swapped_to_symlink(tmp_path, mo
     atomic_write_text(destination, "value", mode=0o600)
 
     assert victim.stat().st_mode & 0o777 == 0o644
+
+
+def test_workspace_text_io_rejects_symlinked_parent(tmp_path):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    (outside / "value.txt").write_text("safe", encoding="utf-8")
+    (workspace / "nested").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(OSError):
+        read_text_bounded_at(workspace, "nested/value.txt", 100)
+    with pytest.raises(OSError):
+        atomic_write_text_at(workspace, "nested/value.txt", "changed")
+
+    assert (outside / "value.txt").read_text(encoding="utf-8") == "safe"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="requires named pipes")
+def test_workspace_bounded_reader_rejects_named_pipe(tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    os.mkfifo(workspace / "pipe")
+
+    with pytest.raises(OSError, match="regular file"):
+        read_text_bounded_at(workspace, "pipe", 100)
 
 
 def test_json_reader_rejects_dangling_symlink_instead_of_using_default(tmp_path):
