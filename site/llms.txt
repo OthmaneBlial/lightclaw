@@ -16,6 +16,8 @@ Automatic edit retries omit common credential paths and file contents with detec
 
 Delegated CLI output has per-line and per-stream limits. LightClaw marks truncated output for review.
 
+Automatic task Git commands disable configured hooks and filesystem monitors; staging and checkouts bypass configured filters, commits skip signing, and diffs ignore external helpers.
+
 Selective local artifact apply requires a confirmed SHA-256 plan bound to source and target contents and permissions. All selected sources are staged and verified before target backups begin. If backup preparation fails, backups created in that attempt are removed and no selected file is replaced. A new target that appears during apply is not overwritten.
 
 Canonical site: https://othmaneblial.github.io/lightclaw/

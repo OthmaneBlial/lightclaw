@@ -124,6 +124,17 @@ def test_site_discloses_credential_context_guards() -> None:
     assert "generated edits cannot write common credential paths" in html
 
 
+def test_site_discloses_automatic_task_git_controls() -> None:
+    html, _ = _document()
+    llms = (SITE / "llms.txt").read_text(encoding="utf-8")
+
+    for content in (html, llms):
+        assert "disable configured hooks and filesystem monitors" in content
+        assert "staging and checkouts bypass configured filters" in content
+        assert "commits skip signing" in content
+        assert "diffs ignore external helpers" in content
+
+
 def test_site_discloses_private_sqlite_file_permissions() -> None:
     html, _ = _document()
     llms = (SITE / "llms.txt").read_text(encoding="utf-8")
