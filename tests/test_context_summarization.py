@@ -36,6 +36,11 @@ async def test_clear_during_summary_does_not_restore_old_context():
     bot._summarizing = set()
     bot._session_summaries = {}
     bot._summary_generation_by_session = {}
+    bot._pending_wipe_confirm = {}
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_trusted_agent_run_by_session = {}
+    bot._pending_voice_goal_by_session = {}
+    bot._voice_request_ids_by_session = {}
     bot._session_id_from_update = Mock(return_value="chat-42")
     bot._log_user_message = Mock()
     bot._privileged_rate_limited = Mock(return_value=False)

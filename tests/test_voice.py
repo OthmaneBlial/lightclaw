@@ -175,6 +175,64 @@ async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_ou
 
 
 @pytest.mark.asyncio
+async def test_clear_revokes_pending_actions_and_discards_inflight_voice(monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda update: str(update.effective_chat.id)
+    bot._log_user_message = Mock()
+    bot._privileged_rate_limited = Mock(return_value=False)
+    bot._invalidate_session_summary = Mock()
+    bot._session_summaries = {"456": "old", "other": "keep"}
+    bot._summary_generation_by_session = {}
+    bot._pending_wipe_confirm = {"456": 10.0, "other": 20.0}
+    bot._pending_multi_plan_by_session = {"other": {"goal": "keep"}}
+    bot._pending_trusted_agent_run_by_session = {"other": {"task": "keep"}}
+    bot._pending_voice_goal_by_session = {"other": {"text": "keep"}}
+    bot._voice_request_ids_by_session = {"other": "keep"}
+    bot.memory = SimpleNamespace(clear_session=Mock())
+    bot._reply_logged = AsyncMock()
+    transcription_started = asyncio.Event()
+    finish_transcription = asyncio.Event()
+
+    async def transcribe(_audio, _key):
+        transcription_started.set()
+        await finish_transcription.wait()
+        return "stale voice request"
+
+    monkeypatch.setattr("core.bot.handlers.transcribe_voice", transcribe)
+    voice_file = SimpleNamespace(
+        download_as_bytearray=AsyncMock(return_value=bytearray(b"audio"))
+    )
+    voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=456),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=voice, caption=""),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+    voice_task = asyncio.create_task(bot.handle_voice(update, context))
+    await transcription_started.wait()
+    bot._pending_multi_plan_by_session["456"] = {"goal": "stale"}
+    bot._pending_trusted_agent_run_by_session["456"] = {"task": "stale"}
+    bot._pending_voice_goal_by_session["456"] = {"text": "stale"}
+
+    await bot.cmd_clear(update, SimpleNamespace())
+    finish_transcription.set()
+    await voice_task
+
+    assert bot._pending_wipe_confirm == {"other": 20.0}
+    assert bot._pending_multi_plan_by_session == {"other": {"goal": "keep"}}
+    assert bot._pending_trusted_agent_run_by_session == {"other": {"task": "keep"}}
+    assert bot._pending_voice_goal_by_session == {"other": {"text": "keep"}}
+    assert bot._voice_request_ids_by_session == {"other": "keep"}
+    assert bot._session_summaries == {"other": "keep"}
+    assert bot.memory.clear_session.call_args.args == ("456",)
+    assert bot._reply_logged.await_count == 1
+    assert "Pending approvals" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
 async def test_voice_download_error_log_redacts_telegram_bot_token(caplog):
     token = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
     bot = LightClawBot.__new__(LightClawBot)

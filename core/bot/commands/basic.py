@@ -57,7 +57,7 @@ class CommandsBasicMixin:
             "🦞 <b>LightClaw Commands</b>\n\n"
             "/start - Welcome message\n"
             "/help - This help message\n"
-            "/clear - Clear conversation history\n"
+            "/clear - Clear history and pending approvals\n"
             "/wipe_memory - Wipe ALL memory (dangerous)\n"
             "/memory - Show memory statistics\n"
             "/recall &lt;query&gt; - Search past conversations\n"
@@ -87,13 +87,19 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/clear")
+        self._pending_wipe_confirm.pop(session_id, None)
+        self._clear_pending_multi_plan(session_id)
+        self._pending_trusted_agent_run_by_session.pop(session_id, None)
+        self._pending_voice_goal_by_session.pop(session_id, None)
+        self._voice_request_ids_by_session.pop(session_id, None)
         self._invalidate_session_summary(session_id)
         self.memory.clear_session(session_id)
         self._session_summaries.pop(session_id, None)
         await self._reply_logged(
             update,
-            "🗑️ Conversation cleared. Your memories from this chat have been reset.\n"
-            "Note: memories from other chats are preserved."
+            "🗑️ Conversation cleared. Pending approvals and confirmations were discarded.\n"
+            "Active runs continue; use their Cancel run button to stop them. "
+            "Memories from other chats are preserved."
         )
 
 
