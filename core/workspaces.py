@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import inspect
 import json
 import os
 import re
@@ -190,6 +191,27 @@ def resolve_owned_task(root: str | Path, task_name: str) -> tuple[Path, Path, di
         os.close(root_fd)
 
 
+def _remove_owned_tree_at(root_fd: int, name: str) -> None:
+    """Remove a task tree relative to its already-open workspace root."""
+    rmtree_parameters = inspect.signature(shutil.rmtree).parameters
+    if "dir_fd" in rmtree_parameters and shutil.rmtree.avoids_symlink_attacks:
+        shutil.rmtree(name, dir_fd=root_fd)
+        return
+
+    for _path, directories, files, directory_fd in os.fwalk(
+        name, topdown=False, follow_symlinks=False, dir_fd=root_fd
+    ):
+        for filename in files:
+            os.unlink(filename, dir_fd=directory_fd)
+        for directory in directories:
+            mode = os.stat(directory, dir_fd=directory_fd, follow_symlinks=False).st_mode
+            if stat.S_ISDIR(mode):
+                os.rmdir(directory, dir_fd=directory_fd)
+            else:
+                os.unlink(directory, dir_fd=directory_fd)
+    os.rmdir(name, dir_fd=root_fd)
+
+
 def undo_owned_task(root: str | Path, task_name: str, *, apply: bool = False) -> dict[str, object]:
     """Preview or delete one LightClaw-created task directory and nothing else."""
     root_path = validate_workspace_root(root)
@@ -206,10 +228,7 @@ def undo_owned_task(root: str | Path, task_name: str, *, apply: bool = False) ->
         }
         if not apply or not exists:
             return result
-        if not shutil.rmtree.avoids_symlink_attacks:
-            raise WorkspaceSafetyError("safe task workspace deletion is unavailable")
-
-        shutil.rmtree(workspace.name, dir_fd=root_fd)
+        _remove_owned_tree_at(root_fd, workspace.name)
         metadata["state"] = "undone"
         metadata["undone_at"] = int(time.time())
         _atomic_private_json(

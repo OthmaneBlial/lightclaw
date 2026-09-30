@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock
@@ -11,6 +10,7 @@ import pytest
 
 from core.workspaces import (
     WorkspaceSafetyError,
+    _remove_owned_tree_at,
     capture_git_checkpoint,
     ensure_private_workspace_dir,
     register_task_workspace,
@@ -42,6 +42,11 @@ def test_owned_task_undo_is_dry_run_by_default_and_scoped(tmp_path: Path):
     owned = root / "20260823_120000_safe-task"
     owned.mkdir()
     (owned / "created.txt").write_text("agent output", encoding="utf-8")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    keep = outside / "keep.txt"
+    keep.write_text("user data", encoding="utf-8")
+    (owned / "escape").symlink_to(outside, target_is_directory=True)
     sibling = root / "user-project"
     sibling.mkdir()
     user_file = sibling / "keep.txt"
@@ -58,6 +63,7 @@ def test_owned_task_undo_is_dry_run_by_default_and_scoped(tmp_path: Path):
     applied = undo_owned_task(root, owned.name, apply=True)
     assert applied["applied"] is True
     assert not owned.exists()
+    assert keep.read_text(encoding="utf-8") == "user data"
     assert user_file.read_text(encoding="utf-8") == "pre-existing"
 
 
@@ -92,16 +98,14 @@ def test_undo_does_not_follow_root_symlink_swap(tmp_path: Path, monkeypatch: pyt
     keep = outside_task / "keep.txt"
     keep.write_text("user data", encoding="utf-8")
     moved_root = tmp_path / "workspace-original"
-    remove_tree = shutil.rmtree
+    remove_tree = _remove_owned_tree_at
 
-    def swap_root_then_remove(path, *args, **kwargs):
-        if path == owned.name and kwargs.get("dir_fd") is not None:
-            root.rename(moved_root)
-            root.symlink_to(outside, target_is_directory=True)
-        return remove_tree(path, *args, **kwargs)
+    def swap_root_then_remove(root_fd, name):
+        root.rename(moved_root)
+        root.symlink_to(outside, target_is_directory=True)
+        return remove_tree(root_fd, name)
 
-    swap_root_then_remove.avoids_symlink_attacks = remove_tree.avoids_symlink_attacks
-    monkeypatch.setattr("core.workspaces.shutil.rmtree", swap_root_then_remove)
+    monkeypatch.setattr("core.workspaces._remove_owned_tree_at", swap_root_then_remove)
     undo_owned_task(root, owned.name, apply=True)
 
     assert keep.read_text(encoding="utf-8") == "user data"
