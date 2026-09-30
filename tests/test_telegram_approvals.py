@@ -384,6 +384,55 @@ async def test_stale_or_unknown_plan_callback_cannot_execute():
 
 
 @pytest.mark.asyncio
+async def test_duplicate_plan_approval_callbacks_start_one_run():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "456"
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_multi_plan_ttl_sec = 900
+    bot._session_run_locks = {}
+    bot._active_run_tasks_by_session = {}
+    bot._reply_logged = AsyncMock()
+    approval_id = bot._set_pending_multi_plan(
+        "456",
+        {
+            "goal": "review the patch",
+            "workers": [("builder", "codex"), ("auditor", "claude")],
+            "plan_payload": {"workers": []},
+            "review": {"second_confirmation_required": False},
+        },
+    )["approval_id"]
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def execute_plan(**_kwargs):
+        started.set()
+        await release.wait()
+
+    bot._execute_multi_agent_plan = AsyncMock(side_effect=execute_plan)
+
+    def make_update():
+        query = SimpleNamespace(
+            data=f"lc:plan:approve:{approval_id}",
+            answer=AsyncMock(),
+            message=SimpleNamespace(),
+        )
+        return SimpleNamespace(
+            callback_query=query,
+            effective_user=SimpleNamespace(id=123),
+            effective_chat=SimpleNamespace(id=456, type="private"),
+            effective_message=query.message,
+        )
+
+    first = asyncio.create_task(bot.handle_run_action(make_update(), SimpleNamespace()))
+    await started.wait()
+    await bot.handle_run_action(make_update(), SimpleNamespace())
+    bot._execute_multi_agent_plan.assert_awaited_once()
+    release.set()
+    await first
+
+
+@pytest.mark.asyncio
 async def test_stale_voice_approval_cannot_process_replacement_transcription():
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True
