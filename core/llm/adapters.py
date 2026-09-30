@@ -185,7 +185,7 @@ class AnthropicAdapter(_ClosableAdapter):
         def _post() -> tuple[int, str]:
             with httpx.Client(
                 timeout=request.timeout_seconds,
-                follow_redirects=True,
+                follow_redirects=False,
             ) as client:
                 response = client.post(
                     f"{self.custom_base_url}/v1/messages",
@@ -196,7 +196,7 @@ class AnthropicAdapter(_ClosableAdapter):
 
         started = time.perf_counter()
         status_code, body_text = await asyncio.to_thread(_post)
-        if status_code >= 400:
+        if not 200 <= status_code < 300:
             detail = body_text.strip().replace("\n", " ")[:240]
             error = RuntimeError(
                 f"Claude compatibility HTTP error {status_code}: {detail or 'empty response'}"

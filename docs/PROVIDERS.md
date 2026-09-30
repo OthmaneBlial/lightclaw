@@ -39,6 +39,9 @@ PROVIDER_MAX_RETRIES=2
 
 The retry value is retries after the first attempt. SDK clients are closed explicitly during LightClaw shutdown.
 
+Custom Anthropic-compatible endpoints set with `ANTHROPIC_BASE_URL` receive direct
+requests. Redirects are rejected so the API key cannot be forwarded to another host.
+
 ## Compatibility evidence
 
 The [generated compatibility matrix](generated/provider-compatibility.md) comes from the

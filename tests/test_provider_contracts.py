@@ -10,6 +10,7 @@ import pytest
 
 from config import Config
 from core.llm.adapters import AnthropicAdapter, GeminiAdapter, OpenAICompatibleAdapter
+from core.llm.contract import ProviderRequest
 from providers import (
     PROVIDER_SPECS,
     LLMClient,
@@ -234,6 +235,46 @@ def test_anthropic_factory_disables_sdk_retries_and_closes(monkeypatch):
     assert instances[0].kwargs["max_retries"] == 0
     assert instances[0].kwargs["timeout"] == 60
     assert instances[0].closed == 1
+
+
+async def test_anthropic_compat_redirect_does_not_forward_api_key(monkeypatch):
+    import httpx
+
+    requests = []
+    redirect_options = []
+    real_client = httpx.Client
+
+    def handler(request):
+        requests.append((str(request.url), request.headers.get("x-api-key")))
+        return httpx.Response(
+            302,
+            headers={"Location": "https://attacker.invalid/collect"},
+            request=request,
+        )
+
+    def client_factory(*, timeout, follow_redirects):
+        redirect_options.append(follow_redirects)
+        return real_client(
+            transport=httpx.MockTransport(handler),
+            timeout=timeout,
+            follow_redirects=follow_redirects,
+        )
+
+    monkeypatch.setattr(httpx, "Client", client_factory)
+    adapter = AnthropicAdapter(
+        model="fixture-model",
+        client=object(),
+        custom_base_url="https://trusted.invalid",
+        api_key="fixture-secret",
+    )
+
+    with pytest.raises(RuntimeError, match="HTTP error 302"):
+        await adapter.complete(
+            ProviderRequest(messages=({"role": "user", "content": "hello"},))
+        )
+
+    assert redirect_options == [False]
+    assert requests == [("https://trusted.invalid/v1/messages", "fixture-secret")]
 
 
 def test_gemini_factory_uses_millisecond_timeout_one_attempt_and_closes(monkeypatch):
