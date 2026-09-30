@@ -1040,7 +1040,7 @@ class DelegationExecutionMixin:
                                 worker_pid=os.getpid(),
                             )
                             if current_job["status"] == "cancel_requested" and delegated_task:
-                                delegated_task.cancel()
+                                self._cancel_task_once(delegated_task)
                                 return
                         except JobStateError:
                             return
