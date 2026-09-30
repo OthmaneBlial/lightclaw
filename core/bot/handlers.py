@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import secrets
 import time
+from weakref import WeakValueDictionary
 
 from telegram import Update
 from telegram.constants import ChatAction, ParseMode
@@ -184,6 +185,17 @@ class BotHandlersMixin:
     # ── Core Processing Pipeline ──────────────────────────────
 
     async def _process_user_message(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str
+    ):
+        session_id = self._session_id_from_update(update)
+        locks = getattr(self, "_session_message_locks", None)
+        if locks is None:
+            locks = self._session_message_locks = WeakValueDictionary()
+        lock = locks.setdefault(session_id, asyncio.Lock())
+        async with lock:
+            await self._process_user_message_serialized(update, context, user_text)
+
+    async def _process_user_message_serialized(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str
     ):
         """

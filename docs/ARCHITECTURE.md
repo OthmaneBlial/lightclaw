@@ -19,6 +19,8 @@ LightClaw is a Telegram-first control surface around hosted model providers and 
 
 Compatibility compositions in `core/bot/commands/agent.py` and `core/bot/delegation/multi.py` preserve existing mixin imports without recombining implementation responsibilities.
 
+Core input processing is serialized per session to preserve message order; separate sessions remain concurrent. Run-control callbacks keep an independent path so active work can still be canceled.
+
 ## Contribution map
 
 | Change | Start here | Required evidence |
