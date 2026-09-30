@@ -332,7 +332,7 @@
           <article class="boundary-card reveal">
             <span class="boundary-tag safe">🔒 FAIL CLOSED</span>
             <h3>Owner access</h3>
-            <p>Allowlisted bots accept commands only in private chats. Group chats share approval state, so they require explicit public mode and no user allowlist.</p>
+            <p>Allowlisted bots accept commands only in private chats. Group chats share approval state, so they require explicit public mode and no user allowlist. Local terminal chat needs no Telegram allowlist and keeps a separate memory scope.</p>
           </article>
           <article class="boundary-card reveal">
             <span class="boundary-tag safe">🧼 MINIMAL ENV</span>
@@ -347,7 +347,7 @@
           <article class="boundary-card reveal">
             <span class="boundary-tag warn">⚠️ YOUR DECISION</span>
             <h3>Trusted execution</h3>
-            <p>Trusted host commands require a separate confirmation. Acceptance checks run as user-approved host subprocesses with a minimal environment, but LightClaw does not sandbox them; review commands and use OS/container isolation for untrusted repositories.</p>
+            <p>Trusted host runs show the complete task before the requester approves that specific review. Old or incomplete reviews cannot authorize a replacement request. Acceptance checks run as user-approved host subprocesses with a minimal environment, but LightClaw does not sandbox them; review commands and use OS/container isolation for untrusted repositories.</p>
           </article>
         </div>
 
