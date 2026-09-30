@@ -14,6 +14,8 @@ Chat history and session summaries live in namespaced local SQLite memory. They 
 
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 
+Telegram replies and saved long-result artifacts redact configured secrets and recognizable credential patterns; detection is heuristic.
+
 Delegated CLI output has per-line and per-stream limits. LightClaw marks truncated output for review.
 
 Automatic task Git commands disable configured hooks and filesystem monitors; staging and checkouts bypass configured filters, commits skip signing, and diffs ignore external helpers.
