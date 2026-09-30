@@ -62,6 +62,14 @@ def _strip_inline_comment(value: str) -> str:
     return re.sub(r"\s+#.*$", "", cleaned).strip()
 
 
+def _int_env(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    try:
+        return default if raw is None else int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
+
+
 def _parse_allowed_users(raw: str) -> list[str]:
     """Parse TELEGRAM_ALLOWED_USERS as comma-separated numeric user IDs."""
     cleaned = _strip_inline_comment(raw)
@@ -216,8 +224,8 @@ def load_config() -> Config:
         gemini_api_key=_strip_inline_comment(os.getenv("GEMINI_API_KEY", "")),
         deepseek_api_key=_strip_inline_comment(os.getenv("DEEPSEEK_API_KEY", "")),
         zai_api_key=_strip_inline_comment(os.getenv("ZAI_API_KEY", "")),
-        provider_timeout_sec=int(os.getenv("PROVIDER_TIMEOUT_SEC", "60")),
-        provider_max_retries=int(os.getenv("PROVIDER_MAX_RETRIES", "2")),
+        provider_timeout_sec=_int_env("PROVIDER_TIMEOUT_SEC", 60),
+        provider_max_retries=_int_env("PROVIDER_MAX_RETRIES", 2),
         telegram_bot_token=_strip_inline_comment(os.getenv("TELEGRAM_BOT_TOKEN", "")),
         telegram_allowed_users=allowed,
         telegram_public_bot_ack=_parse_bool(
@@ -225,18 +233,18 @@ def load_config() -> Config:
             default=False,
         ),
         memory_db_path=os.getenv("MEMORY_DB_PATH", ".lightclaw/lightclaw.db"),
-        memory_top_k=int(os.getenv("MEMORY_TOP_K", "5")),
-        memory_retention_days=int(os.getenv("MEMORY_RETENTION_DAYS", "90")),
-        memory_max_interactions=int(os.getenv("MEMORY_MAX_INTERACTIONS", "10000")),
-        memory_max_db_mb=int(os.getenv("MEMORY_MAX_DB_MB", "64")),
-        memory_query_timeout_ms=int(os.getenv("MEMORY_QUERY_TIMEOUT_MS", "100")),
-        memory_candidate_limit=int(os.getenv("MEMORY_CANDIDATE_LIMIT", "200")),
+        memory_top_k=_int_env("MEMORY_TOP_K", 5),
+        memory_retention_days=_int_env("MEMORY_RETENTION_DAYS", 90),
+        memory_max_interactions=_int_env("MEMORY_MAX_INTERACTIONS", 10_000),
+        memory_max_db_mb=_int_env("MEMORY_MAX_DB_MB", 64),
+        memory_query_timeout_ms=_int_env("MEMORY_QUERY_TIMEOUT_MS", 100),
+        memory_candidate_limit=_int_env("MEMORY_CANDIDATE_LIMIT", 200),
         workspace_path=os.getenv("WORKSPACE_PATH", ".lightclaw/workspace"),
-        context_window=int(os.getenv("CONTEXT_WINDOW", "128000")),
-        max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "12000")),
-        local_agent_timeout_sec=int(os.getenv("LOCAL_AGENT_TIMEOUT_SEC", "1800")),
-        local_agent_progress_interval_sec=int(
-            os.getenv("LOCAL_AGENT_PROGRESS_INTERVAL_SEC", "30")
+        context_window=_int_env("CONTEXT_WINDOW", 128_000),
+        max_output_tokens=_int_env("MAX_OUTPUT_TOKENS", 12_000),
+        local_agent_timeout_sec=_int_env("LOCAL_AGENT_TIMEOUT_SEC", 1_800),
+        local_agent_progress_interval_sec=_int_env(
+            "LOCAL_AGENT_PROGRESS_INTERVAL_SEC", 30
         ),
         local_agent_safety_mode=os.getenv("LOCAL_AGENT_SAFETY_MODE", "strict"),
         local_agent_capability_profile=os.getenv(
@@ -252,9 +260,7 @@ def load_config() -> Config:
             os.getenv("LOCAL_AGENT_MULTI_AUTO_CONTINUE", "no"),
             default=False,
         ),
-        local_agent_multi_repair_attempts=int(
-            os.getenv("LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS", "1")
-        ),
+        local_agent_multi_repair_attempts=_int_env("LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS", 1),
         skills_hub_base_url=os.getenv("SKILLS_HUB_BASE_URL", "https://clawhub.ai") or "https://clawhub.ai",
         skills_state_path=os.getenv("SKILLS_STATE_PATH", ".lightclaw/skills_state.json") or ".lightclaw/skills_state.json",
         groq_api_key=_strip_inline_comment(os.getenv("GROQ_API_KEY", "")),

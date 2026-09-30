@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 
+import pytest
+
 from config import Config, load_config
 from core.bot.base import BotBaseMixin
 from core.security import (
@@ -31,6 +33,18 @@ def test_config_parses_explicit_public_override(monkeypatch):
 
     assert cfg.telegram_public_bot_ack is True
     assert cfg.telegram_allowed_users == ["123", "-456"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["PROVIDER_TIMEOUT_SEC", "MEMORY_TOP_K", "LOCAL_AGENT_MULTI_REPAIR_ATTEMPTS"],
+)
+def test_invalid_integer_setting_names_the_configuration_key(monkeypatch, name):
+    monkeypatch.setenv(name, "not-an-integer")
+
+    with pytest.raises(ValueError, match=f"^{name} must be an integer$") as exc:
+        load_config()
+    assert "not-an-integer" not in str(exc.value)
 
 
 def test_bot_authorization_fails_closed_and_honors_allowlist():
