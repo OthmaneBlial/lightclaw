@@ -192,7 +192,7 @@ class JobStore:
                 )
             self.db.commit()
         try:
-            self.path.chmod(0o600)
+            os.chmod(self.path, 0o600, follow_symlinks=False)
         except OSError:
             pass
 

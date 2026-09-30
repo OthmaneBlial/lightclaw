@@ -66,6 +66,27 @@ def test_jobs_persist_across_restart_with_private_database(tmp_path):
     second.close()
 
 
+def test_job_store_does_not_chmod_database_symlink_target(tmp_path, monkeypatch):
+    database = tmp_path / "jobs.db"
+    victim = tmp_path / "victim.db"
+    victim.write_text("private", encoding="utf-8")
+    os.chmod(victim, 0o644)
+    chmod = os.chmod
+
+    def swap_then_chmod(path, mode, *, dir_fd=None, follow_symlinks=True):
+        if os.fspath(path) == str(database):
+            database.unlink()
+            database.symlink_to(victim)
+        return chmod(path, mode, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(os, "chmod", swap_then_chmod)
+    store = JobStore(database)
+    store.close()
+
+    assert victim.read_text(encoding="utf-8") == "private"
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o644
+
+
 def test_concurrent_approval_transition_writes_one_event_across_connections(tmp_path):
     database = tmp_path / "jobs.db"
     stores = [JobStore(database) for _ in range(8)]
