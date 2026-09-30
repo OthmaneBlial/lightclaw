@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -18,10 +19,24 @@ class CronHarness(CommandsCronMixin, BotMessagingMixin):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("error", "minimum_delay"),
-    [(NetworkError("timed out"), 60), (RetryAfter(120), 120)],
+    ("error", "minimum_delay", "retry_after"),
+    [
+        pytest.param(NetworkError("timed out"), 60, None, id="network"),
+        pytest.param(RetryAfter(120), 120, None, id="integer"),
+        pytest.param(
+            RetryAfter(120), 120, timedelta(seconds=120), id="duration"
+        ),
+    ],
 )
-async def test_failed_cron_delivery_is_retained_with_retry_delay(error, minimum_delay):
+async def test_failed_cron_delivery_is_retained_with_retry_delay(
+    error, minimum_delay, retry_after, monkeypatch
+):
+    if retry_after is not None:
+        monkeypatch.setattr(
+            RetryAfter,
+            "retry_after",
+            property(lambda _self: retry_after),
+        )
     bot = CronHarness()
     now = time.time()
     jobs = [
