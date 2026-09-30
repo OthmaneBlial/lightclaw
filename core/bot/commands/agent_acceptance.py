@@ -8,6 +8,7 @@ import re
 import shlex
 import signal
 import stat
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -352,10 +353,17 @@ class CommandsAgentAcceptanceMixin:
             return f"command canceled: `{command}`"
 
         async def run_command() -> str:
+            cwd_fd = None
             try:
+                root = workspace.resolve(strict=True)
+                cwd_fd = open_directory_at(root, cwd.relative_to(root).parts)
                 process = await asyncio.create_subprocess_exec(
+                    sys.executable, "-I", "-c",
+                    "import os,sys;fd=int(sys.argv[1]);os.fchdir(fd);os.close(fd);"
+                    "os.execvpe(sys.argv[2],sys.argv[2:],os.environ)",
+                    str(cwd_fd),
                     *argv,
-                    cwd=str(cwd),
+                    pass_fds=(cwd_fd,),
                     stdin=asyncio.subprocess.DEVNULL,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -364,6 +372,9 @@ class CommandsAgentAcceptanceMixin:
                 )
             except Exception as e:
                 return f"command failed to start `{command}`: {e}"
+            finally:
+                if cwd_fd is not None:
+                    os.close(cwd_fd)
 
             stdout_capture = BoundedStreamCapture("stdout")
             stderr_capture = BoundedStreamCapture("stderr")

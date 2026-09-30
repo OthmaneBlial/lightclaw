@@ -89,7 +89,58 @@ def test_acceptance_command_rejects_cwd_symlink_outside_workspace(tmp_path, monk
     assert "outside the workspace" in failure
 
 
-def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monkeypatch):
+@pytest.mark.parametrize("phase", ["validation", "launch"])
+def test_acceptance_command_cwd_cannot_be_redirected_at_launch(tmp_path, monkeypatch, phase):
+    workspace = tmp_path / "workspace"
+    target = workspace / "checked"
+    target.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    original_resolve = bot._resolve_multi_workspace_path
+    original_launch = asyncio.create_subprocess_exec
+    passed_fds = []
+
+    def swap():
+        target.rename(workspace / "original")
+        target.symlink_to(outside, target_is_directory=True)
+
+    def resolve(*args):
+        path = original_resolve(*args)
+        if phase == "validation":
+            swap()
+        return path
+
+    async def launch(*args, **kwargs):
+        passed_fds.extend(kwargs.get("pass_fds", ()))
+        if phase == "launch":
+            swap()
+        return await original_launch(*args, **kwargs)
+
+    monkeypatch.setattr(bot, "_resolve_multi_workspace_path", resolve)
+    monkeypatch.setattr("core.bot.commands.agent_acceptance.asyncio.create_subprocess_exec", launch)
+    command = shlex.join([
+        sys.executable, "-c", "from pathlib import Path; Path('marker').write_text('executed')"
+    ])
+    failure = bot._run_multi_acceptance_command(workspace, {"command": command, "cwd": "checked"})
+
+    assert not (outside / "marker").exists()
+    if phase == "launch":
+        assert failure == ""
+        assert (workspace / "original" / "marker").exists()
+        assert passed_fds
+        for fd in passed_fds:
+            with pytest.raises(OSError):
+                os.fstat(fd)
+    else:
+        assert failure
+        assert not (workspace / "original" / "marker").exists()
+
+
+@pytest.mark.parametrize("launch_failure", [False, True])
+def test_acceptance_command_uses_secret_free_minimal_environment_and_closes_cwd(
+    tmp_path, monkeypatch, launch_failure
+):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
@@ -97,6 +148,10 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
     launched = {}
 
     async def run(*argv, **kwargs):
+        launched["argv"] = argv
+        launched["kwargs"] = kwargs
+        if launch_failure:
+            raise OSError("fixture launch failure")
         stdout = asyncio.StreamReader()
         stderr = asyncio.StreamReader()
         stdout.feed_eof()
@@ -110,8 +165,6 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
             return 0
 
         process.wait = wait
-        launched["argv"] = argv
-        launched["kwargs"] = kwargs
         return process
 
     monkeypatch.setattr(
@@ -123,13 +176,18 @@ def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monke
         workspace, {"command": "python -c pass"}
     )
 
-    assert failure == ""
+    assert bool(failure) is launch_failure
+    if launch_failure:
+        assert "fixture launch failure" in failure
     child_env = launched["kwargs"]["env"]
     assert "TELEGRAM_BOT_TOKEN" not in child_env
     assert "LIGHTCLAW_TEST_SECRET" not in child_env
     assert child_env["LIGHTCLAW_DELEGATED"] == "1"
     assert child_env["CI"] == "1"
     assert launched["kwargs"]["start_new_session"] is (os.name == "posix")
+    for fd in launched["kwargs"]["pass_fds"]:
+        with pytest.raises(OSError):
+            os.fstat(fd)
 
 
 def test_acceptance_command_bounds_captured_output_and_keeps_error_detail(tmp_path):

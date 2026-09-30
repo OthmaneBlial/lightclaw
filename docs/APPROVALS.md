@@ -34,6 +34,8 @@ fully printed review by passing its ID to the command handler.
 
 `command_succeeds` checks run as host subprocesses after approval. They receive a minimal environment and an in-workspace working directory, but LightClaw does not add an operating-system sandbox around them. Review each command; use OS/container isolation for untrusted repositories.
 
+The command working directory is opened without following relative directory symlinks after path resolution. A short isolated Python child enters this directory through the inherited descriptor, closes it, and replaces itself with the approved command. A symlink swap before opening fails; a swap after opening cannot redirect the command into the replacement directory. Internal workspace aliases remain supported.
+
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
 
 Handoff JSON is read relative to the task workspace. Symlinks in the file or its relative parent directories are rejected, including replacements made during path validation.
