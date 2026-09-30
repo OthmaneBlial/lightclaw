@@ -837,6 +837,10 @@ class CommandsAgentExecutionMixin:
             if value:
                 artifact_paths.append(str(value))
 
+        await self._record_multi_job_finalization(
+            run_id, receipt_checks, failures, final_lines
+        )
+
         receipt = {
             "run_id": run_id,
             "original_goal": goal,
@@ -878,12 +882,6 @@ class CommandsAgentExecutionMixin:
         self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
         self._last_run_workspaces_by_session[session_id] = multi_workspace.as_posix()
 
-        await asyncio.to_thread(
-            self.jobs.finish,
-            run_id,
-            succeeded=not failures,
-            error="; ".join(failures[:6])[:500],
-        )
         self._cancel_task_once(durable_heartbeat)
         try:
             await durable_heartbeat

@@ -9,7 +9,7 @@
     {
       "branch_points": 97,
       "line": 221,
-      "lines": 698,
+      "lines": 696,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -116,7 +116,7 @@
     {
       "branch_points": 97,
       "line": 221,
-      "lines": 698,
+      "lines": 696,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 918,
+      "lines": 916,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20739,
+  "runtime_lines": 20775,
   "schema_version": 1
 }

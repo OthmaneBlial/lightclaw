@@ -419,3 +419,65 @@ async def test_canceled_run_retries_sqlite_error_when_releasing_job(
         assert "Retrying durable job cancellation after SQLite error" in caplog.text
     finally:
         bot.jobs.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failures_before_success", [1, 2])
+async def test_durable_job_finish_retries_and_records_sqlite_failure(
+    tmp_path, monkeypatch, failures_before_success
+):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    workspace = tmp_path / "repo"
+    job = bot.jobs.create_job(
+        workspace=workspace,
+        session_id="fixture-session",
+        goal="finish after a transient lock",
+        approved_scope="fixture",
+        risk_level="medium",
+        capability_profile="workspace-write",
+        plan=[
+            {
+                "label": "delegation",
+                "depends_on": [],
+                "owned_paths": [],
+                "idempotent": False,
+                "resumable": False,
+                "max_attempts": 1,
+            }
+        ],
+        status="queued",
+        run_id="finish-retry",
+    )
+    bot.jobs.claim_next(workspace=workspace)
+    bot.jobs.update_lane(job["run_id"], "delegation", "succeeded")
+    finish = bot.jobs.finish
+    failures_remaining = failures_before_success
+
+    def fail_finish_once(*args, **kwargs):
+        nonlocal failures_remaining
+        if failures_remaining:
+            failures_remaining -= 1
+            raise sqlite3.OperationalError("database is locked")
+        return finish(*args, **kwargs)
+
+    monkeypatch.setattr(bot.jobs, "finish", fail_finish_once)
+    try:
+        checks: list[dict[str, object]] = []
+        failures: list[str] = []
+        lines: list[str] = []
+        await bot._record_multi_job_finalization(
+            str(job["run_id"]), checks, failures, lines
+        )
+        if failures_before_success == 1:
+            assert bot.jobs.get_job(str(job["run_id"]))["status"] == "succeeded"
+            assert checks[0]["passed"] is True
+            assert failures == []
+            assert lines == []
+        else:
+            assert bot.jobs.get_job(str(job["run_id"]))["status"] == "running"
+            assert checks[0]["passed"] is False
+            assert failures == ["durable job finalization failed: OperationalError"]
+            assert lines and "receipt is marked failed" in lines[0]
+    finally:
+        bot.jobs.close()

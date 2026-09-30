@@ -178,6 +178,57 @@ class DelegationWorkspaceMixin:
             f"Run ID: `{run_id}`. See local logs for details."
         )
 
+    async def _finish_durable_job(self, store, run_id: str, succeeded: bool, error: str) -> str:
+        target = "succeeded" if succeeded else "failed"
+        for attempt in range(2):
+            try:
+                current = await await_thread_completion(store.get_job, run_id)
+                status = str(current["status"])
+                if status in {"succeeded", "failed", "canceled"}:
+                    if status == "canceled" and succeeded:
+                        return "job was canceled before finalization"
+                    return "" if status in {target, "canceled"} else f"job ended as {status}"
+                if status == "cancel_requested":
+                    await await_thread_completion(store.mark_canceled, run_id)
+                    return "job was canceled before finalization" if succeeded else ""
+                await await_thread_completion(
+                    store.finish, run_id, succeeded=succeeded, error=error
+                )
+                return ""
+            except sqlite3.OperationalError:
+                if attempt == 0:
+                    log.warning("Retrying durable job finish after SQLite error: %s", run_id)
+                    continue
+                log.exception("Could not finish durable job %s", run_id)
+                return "OperationalError"
+            except Exception as exc:
+                log.exception("Could not finish durable job %s", run_id)
+                return type(exc).__name__
+
+    async def _record_multi_job_finalization(
+        self,
+        run_id: str,
+        checks: list[dict[str, object]],
+        failures: list[str],
+        lines: list[str],
+    ) -> str:
+        error = await self._finish_durable_job(
+            self.jobs, run_id, not failures, "; ".join(failures[:6])[:500]
+        )
+        checks.append(
+            {
+                "name": "durable job finalization",
+                "passed": not error,
+                "evidence": error or "terminal job state recorded",
+            }
+        )
+        if error:
+            failures.append(f"durable job finalization failed: {error}")
+            lines.append(
+                "⚠️ Local job history could not record a terminal state; receipt is marked failed."
+            )
+        return error
+
     async def _finalize_durable_delegation(self, store, run_id: str, result) -> str:
         succeeded = bool(result.get("ok"))
         lane_status = "succeeded" if succeeded else "failed"
@@ -187,20 +238,7 @@ class DelegationWorkspaceMixin:
                 await await_thread_completion(
                     store.update_lane, run_id, "delegation", lane_status, error=error
                 )
-                current = await await_thread_completion(store.get_job, run_id)
-                if current["status"] in {"succeeded", "failed", "canceled"}:
-                    if current["status"] == "canceled" and succeeded:
-                        return "job was canceled before finalization"
-                    if current["status"] not in {lane_status, "canceled"}:
-                        return f"job ended as {current['status']} before finalization"
-                    return ""
-                if current["status"] == "cancel_requested":
-                    await await_thread_completion(store.mark_canceled, run_id)
-                else:
-                    await await_thread_completion(
-                        store.finish, run_id, succeeded=succeeded, error=error
-                    )
-                return ""
+                return await self._finish_durable_job(store, run_id, succeeded, error)
             except sqlite3.OperationalError:
                 if attempt == 0:
                     log.warning("Retrying durable run finalization after SQLite error: %s", run_id)
