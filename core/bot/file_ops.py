@@ -47,7 +47,7 @@ class BotFileOpsMixin:
 
         workspace = Path(self.config.workspace_path).resolve()
         lexical = workspace / path_text
-        # Explicitly reject existing symlink segments to prevent workspace escape via link hops.
+        # Check links first because exists() follows them and reports False for dangling links.
         probe = workspace
         for part in Path(path_text).parts:
             if part in ("", "."):
@@ -55,10 +55,10 @@ class BotFileOpsMixin:
             if part == "..":
                 return None, None, "parent traversal is not allowed"
             probe = probe / part
-            if not probe.exists():
-                break
             if probe.is_symlink():
                 return None, None, f"path segment is a symlink: {part}"
+            if not probe.exists():
+                break
 
         candidate = lexical.resolve()
         try:

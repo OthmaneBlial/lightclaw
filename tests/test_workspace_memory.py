@@ -24,6 +24,14 @@ def test_workspace_path_blocks_parent_absolute_and_symlink_escape(tmp_path):
     assert harness._resolve_workspace_path(str(outside / "file.txt"))[2]
     assert "symlink" in (harness._resolve_workspace_path("escape/file.txt")[2] or "")
 
+    dangling_target = workspace / "redirect-target"
+    dangling = workspace / "redirect"
+    dangling.symlink_to(dangling_target, target_is_directory=True)
+    target, _, error = harness._resolve_workspace_path("redirect/new.txt")
+    assert target is None
+    assert "symlink" in (error or "")
+    assert not dangling_target.exists()
+
     target, relative, error = harness._resolve_workspace_path("safe/file.txt")
     assert error is None
     assert relative == "safe/file.txt"
