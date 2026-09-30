@@ -2,7 +2,7 @@ from __future__ import annotations
 
 try:
     import tomllib
-except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 CI lane
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 runtime.
     import tomli as tomllib
 
 from bench import runtime_footprint

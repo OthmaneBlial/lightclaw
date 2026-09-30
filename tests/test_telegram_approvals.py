@@ -915,7 +915,8 @@ async def test_duplicate_cancel_does_not_interrupt_run_cleanup():
     await cleanup_started.wait()
     await bot.handle_run_action(make_update(), SimpleNamespace())
 
-    assert task.cancelling() == 1
+    await asyncio.sleep(0)
+    assert not task.done()
     finish_cleanup.set()
     with pytest.raises(asyncio.CancelledError):
         await task

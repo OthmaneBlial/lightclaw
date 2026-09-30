@@ -273,14 +273,14 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 530,
-      "path": "core/bot/delegation/tasks.py"
+      "lines": 531,
+      "path": "core/bot/base.py"
     },
     {
-      "lines": 520,
-      "path": "core/bot/base.py"
+      "lines": 530,
+      "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 20822,
+  "runtime_lines": 20833,
   "schema_version": 1
 }

@@ -7,6 +7,7 @@ import heapq
 import re
 import secrets
 import time
+import weakref
 from pathlib import Path
 
 from telegram import Update
@@ -25,6 +26,7 @@ from ..security import access_policy_label, is_sensitive_path
 
 # ponytail: bounded in-process LRU; use shared storage if public traffic exceeds this ceiling.
 MAX_PRIVILEGED_RATE_LIMIT_KEYS = 4096
+_LEGACY_CANCELLED_TASKS = weakref.WeakSet()
 
 
 class BotBaseMixin:
@@ -129,8 +131,17 @@ class BotBaseMixin:
         return task
 
     def _cancel_task_once(self, task: asyncio.Task) -> None:
-        if not task.done() and not task.cancelling():
-            task.cancel()
+        if task.done():
+            return
+        cancelling = getattr(task, "cancelling", None)
+        if cancelling is not None:
+            if cancelling():
+                return
+        elif task in _LEGACY_CANCELLED_TASKS:
+            return
+        else:
+            _LEGACY_CANCELLED_TASKS.add(task)
+        task.cancel()
 
     async def shutdown(self) -> None:
         """Stop bot-owned background tasks before closing their dependencies."""

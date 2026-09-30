@@ -11,6 +11,27 @@ from core.app import _install_shutdown_signal_handlers
 from core.bot import LightClawBot
 
 
+def test_cancel_task_once_supports_python_310_task_api():
+    class LegacyTask:
+        def __init__(self):
+            self.cancel_calls = 0
+
+        @staticmethod
+        def done():
+            return False
+
+        def cancel(self):
+            self.cancel_calls += 1
+
+    bot = LightClawBot.__new__(LightClawBot)
+    task = LegacyTask()
+
+    bot._cancel_task_once(task)
+    bot._cancel_task_once(task)
+
+    assert task.cancel_calls == 1
+
+
 def test_close_releases_all_resources_when_provider_close_fails():
     bot = LightClawBot.__new__(LightClawBot)
     bot.llm = Mock()
@@ -73,6 +94,7 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
     started = asyncio.Event()
     cleanup_started = asyncio.Event()
     finish_cleanup = asyncio.Event()
+    cancellation_requested = asyncio.Event()
     events: list[str] = []
 
     async def active_run():
@@ -98,7 +120,7 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
 
     class FakeApplication:
         def stop_running(self):
-            assert task.cancelling()
+            assert cancellation_requested.is_set()
             events.append("application stop requested")
 
     bot = LightClawBot.__new__(LightClawBot)
@@ -109,6 +131,13 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
     task = asyncio.create_task(active_run())
     bot._active_run_tasks_by_session = {"chat": task}
     bot.close = Mock()
+    cancel_task_once = bot._cancel_task_once
+
+    def record_cancellation(candidate):
+        cancel_task_once(candidate)
+        cancellation_requested.set()
+
+    bot._cancel_task_once = record_cancellation
     loop = FakeLoop()
     request_stop = _install_shutdown_signal_handlers(FakeApplication(), bot, loop=loop)
     await started.wait()
@@ -118,7 +147,7 @@ async def test_shutdown_signal_cancels_agents_before_stopping_application():
     await cleanup_started.wait()
     shutdown = asyncio.create_task(bot.shutdown())
     await asyncio.sleep(0)
-    assert task.cancelling() == 1
+    assert not task.done()
     finish_cleanup.set()
     await shutdown
 
