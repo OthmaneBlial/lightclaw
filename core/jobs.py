@@ -395,7 +395,7 @@ class JobStore:
                 raise JobStateError(f"cannot transition {current_status} to {target}")
             finished = now if target in TERMINAL_STATUSES else None
             updated = self.db.execute(
-                "UPDATE jobs SET status = ?, updated_at = ?, finished_at = COALESCE(?, finished_at), last_error = ? WHERE run_id = ? AND status = ?",
+                "UPDATE jobs SET status = ?, updated_at = ?, finished_at = ?, last_error = ? WHERE run_id = ? AND status = ?",
                 (target, now, finished, str(error), run_id, current_status),
             )
             if updated.rowcount != 1:

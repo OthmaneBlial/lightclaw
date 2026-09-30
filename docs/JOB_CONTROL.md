@@ -35,6 +35,8 @@ lightclaw jobs retry <run-id> --lane <failed-idempotent-lane>
 
 A running cancellation becomes `cancel_requested`; the in-process heartbeat cancels the process tree and records `canceled`. Resume and retry fail closed for non-resumable or non-idempotent lanes. These commands never publish, push, or delete a workspace.
 
+Resume and retry clear the job's previous `finished_at` until it reaches a terminal state again. The original `started_at` remains available across attempts; events record the individual transitions.
+
 Delegated POSIX processes wait for TERM/KILL cleanup and stream draining before cancellation returns. Repeated cancellation requests do not interrupt that cleanup or a pending process-group registration/unregistration. Detached descendants can still escape the process group.
 
 Cancellation also covers agent startup, before the process group is registered. Before output streaming begins, cleanup closes stdin and discards stdout/stderr in bounded chunks rather than retaining unread pipe buffers. Failed process-group registration still forces immediate termination.

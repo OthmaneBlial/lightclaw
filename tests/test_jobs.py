@@ -531,6 +531,25 @@ def test_resume_requeues_interrupted_lane_and_counts_new_attempt(tmp_path):
     store.close()
 
 
+def test_resumed_failed_job_clears_previous_completion_timestamp(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    workspace = tmp_path / "repo"
+    job = _create(store, workspace)
+    claimed = store.claim_next(workspace=workspace)
+    failed = store.finish(job["run_id"], succeeded=False)
+    assert failed["finished_at"] is not None
+    try:
+        resumed = store.resume(job["run_id"])
+        assert resumed["status"] == "queued"
+        assert resumed["finished_at"] is None
+        restarted = store.claim_next(workspace=workspace)
+        assert restarted["finished_at"] is None
+        assert restarted["started_at"] == claimed["started_at"]
+        assert store.finish(job["run_id"], succeeded=True)["finished_at"] is not None
+    finally:
+        store.close()
+
+
 def test_resume_refuses_to_exceed_interrupted_lane_attempt_bound(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     plan = _plan()
