@@ -141,7 +141,10 @@ class CommandsCronMixin:
         try:
             while True:
                 await asyncio.sleep(max(15, int(self._cron_poll_sec)))
-                await self._run_due_cron_jobs(bot)
+                try:
+                    await self._run_due_cron_jobs(bot)
+                except Exception as e:
+                    log.error(f"Cron scheduler iteration failed; retrying: {e}")
         except asyncio.CancelledError:
             pass
         except Exception as e:

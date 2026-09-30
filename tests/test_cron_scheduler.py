@@ -56,3 +56,29 @@ async def test_failed_cron_delivery_is_retained_with_retry_delay(error, minimum_
     stored_jobs = {job["id"]: job for job in writes[0]["jobs"]}
     assert stored_jobs["periodic"]["next_run_at"] >= now + 300
     assert stored_jobs["reminder"]["next_run_at"] >= now + minimum_delay
+
+
+@pytest.mark.asyncio
+async def test_cron_loop_retries_after_transient_iteration_error(monkeypatch):
+    bot = CronHarness()
+    bot._cron_poll_sec = 15
+    bot._cron_task = object()
+    attempts = 0
+
+    async def no_wait(_seconds):
+        return None
+
+    async def run_due(_telegram_bot):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise OSError("temporary store failure")
+        raise asyncio.CancelledError
+
+    bot._run_due_cron_jobs = run_due
+    monkeypatch.setattr("core.bot.commands.cron.asyncio.sleep", no_wait)
+
+    await bot._cron_loop(SimpleNamespace())
+
+    assert attempts == 2
+    assert bot._cron_task is None

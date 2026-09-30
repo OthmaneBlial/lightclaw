@@ -185,7 +185,7 @@
     },
     {
       "branch_points": 26,
-      "line": 279,
+      "line": 282,
       "lines": 206,
       "name": "cmd_cron",
       "path": "core/bot/commands/cron.py"
@@ -277,10 +277,10 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 484,
+      "lines": 487,
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19153,
+  "runtime_lines": 19156,
   "schema_version": 1
 }
