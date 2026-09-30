@@ -38,6 +38,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- Telegram `/show` now limits durable-job counts to the current chat.
 - Refreshed the README and Pages site with a brighter, playful visual identity while keeping
   alpha status, approval boundaries, and fixture limits explicit.
 - DeepSeek defaults and onboarding now use supported model IDs; retired `deepseek-chat` and

@@ -37,10 +37,18 @@ def _plan(*, overlap: bool = False, resumable: bool = True):
     ]
 
 
-def _create(store: JobStore, workspace, *, priority=0, plan=None, status="queued"):
+def _create(
+    store: JobStore,
+    workspace,
+    *,
+    priority=0,
+    plan=None,
+    status="queued",
+    session_id="fixture",
+):
     return store.create_job(
         workspace=workspace,
-        session_id="fixture",
+        session_id=session_id,
         goal="bounded fixture goal",
         approved_scope="src only",
         risk_level="medium",
@@ -396,6 +404,23 @@ def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
         store.resume(job["run_id"])
     store.request_cancel(job["run_id"])
     assert store.claim_next(workspace=tmp_path / "repo")["run_id"] == queued["run_id"]
+    store.close()
+
+
+def test_job_diagnostics_can_be_scoped_to_one_telegram_session(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    own_workspace = tmp_path / "own"
+    other_workspace = tmp_path / "other"
+    own_job = _create(store, own_workspace, session_id="chat-own")
+    other_job = _create(store, other_workspace, session_id="chat-other")
+    store.claim_next(workspace=own_workspace, worker_pid=999999)
+    store.claim_next(workspace=other_workspace, worker_pid=999998)
+
+    report = store.diagnostics(session_id="chat-own")
+
+    assert report["counts"] == {"running": 1}
+    assert [job["run_id"] for job in report["active"]] == [own_job["run_id"]]
+    assert other_job["run_id"] not in {job["run_id"] for job in report["active"]}
     store.close()
 
 

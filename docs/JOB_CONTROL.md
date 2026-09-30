@@ -21,7 +21,7 @@ lightclaw jobs list --status queued --json
 lightclaw jobs status <run-id>
 ```
 
-Telegram `/show` reports active, queued, and stalled counts without exposing job goals or Telegram identifiers.
+Telegram `/show` reports active, queued, and stalled counts for the current chat only; it does not expose job goals or other chats' activity.
 
 ## Control a job
 

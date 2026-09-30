@@ -50,7 +50,7 @@ class BotHandlersMixin:
         file_mode = self._get_file_mode(session_id)
         pending_multi = self._get_pending_multi_plan(session_id)
         multi_defaults = ", ".join(self.config.local_agent_multi_default_agents)
-        job_diagnostics = self.jobs.diagnostics()
+        job_diagnostics = self.jobs.diagnostics(session_id=session_id)
         job_counts = job_diagnostics.get("counts", {})
         queue_count = int(job_counts.get("queued", 0)) if isinstance(job_counts, dict) else 0
         active_count = (

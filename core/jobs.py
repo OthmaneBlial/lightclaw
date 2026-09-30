@@ -751,14 +751,14 @@ class JobStore:
             recovered.append(str(row["run_id"]))
         return recovered
 
-    def diagnostics(self) -> dict[str, object]:
+    def diagnostics(self, *, session_id: str | None = None) -> dict[str, object]:
         with self._lock:
             rows = self.db.execute(
-                "SELECT status, COUNT(*) AS count FROM jobs GROUP BY status ORDER BY status"
+                "SELECT status, COUNT(*) AS count FROM jobs WHERE (? IS NULL OR session_id = ?) GROUP BY status ORDER BY status", (session_id, session_id)
             ).fetchall()
             counts = {str(row["status"]): int(row["count"]) for row in rows}
             active = self.db.execute(
-                "SELECT run_id, workspace, heartbeat_at, worker_pid FROM jobs WHERE status IN ('running', 'cancel_requested', 'stalled') ORDER BY updated_at DESC LIMIT 20"
+                "SELECT run_id, workspace, heartbeat_at, worker_pid FROM jobs WHERE (? IS NULL OR session_id = ?) AND status IN ('running', 'cancel_requested', 'stalled') ORDER BY updated_at DESC LIMIT 20", (session_id, session_id)
             ).fetchall()
         return {
             "schema_version": JOB_SCHEMA_VERSION,
