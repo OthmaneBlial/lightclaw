@@ -74,6 +74,8 @@ lightclaw memory prune
 
 After checking the matched IDs or count, add `--apply`. A record ID outside the selected user/workspace scope is never deleted. Telegram `/clear` removes only the current bound session and revokes its pending actions; an in-flight chat reply may finish but cannot restore cleared history. Confirmed `/wipe_memory` removes all local memory and pending actions across chats; in-flight chat replies may finish but are not restored. In groups, the initiating Telegram user must confirm it within 90 seconds. Confirmation expires on wall-clock changes or machine sleep. Already-active runs continue.
 
+Once a confirmed global wipe starts, canceling its handler waits for the database operation to finish. New chat requests remain queued until then, and cached summaries are discarded before those requests resume.
+
 ## Optional embeddings
 
 `memory.EmbeddingAdapter` is a small typed protocol with `name`, `version`, and `embed(text)`. Vectors are stored with adapter provenance and can only rerank FTS5 candidates. Adapter errors fall back to the lexical record or lexical query result. LightClaw ships no default embedding provider, sends no memory to an embedding service by default, and does not call lexical retrieval “semantic.”

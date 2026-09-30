@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -165,3 +166,66 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_k
     bot.memory.ingest.assert_not_called()
     assert chat_calls == 1
     assert bot._active_message_clear_events_by_session == {}
+
+
+@pytest.mark.asyncio
+async def test_cancelled_global_wipe_finishes_before_new_chat_is_admitted():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "chat-42"
+    bot._log_user_message = Mock()
+    bot._clear_pending_actions = Mock()
+    bot._invalidate_active_summaries = Mock()
+    bot._pending_wipe_confirm = {
+        "chat-42": {
+            "user_id": 42,
+            "expires_at": 9_999_999_999,
+            "expires_monotonic": 9_999_999_999,
+        }
+    }
+    bot._session_summaries = {"chat-42": "old summary"}
+    bot._reply_logged = AsyncMock()
+    history = ["old message"]
+    started = asyncio.Event()
+    release = threading.Event()
+    loop = asyncio.get_running_loop()
+
+    def clear_all():
+        loop.call_soon_threadsafe(started.set)
+        assert release.wait(timeout=5), "wipe was not released"
+        history.clear()
+
+    async def process(_update, _context, user_text, _clear_event):
+        history.append(user_text)
+
+    bot.memory = SimpleNamespace(clear_all=clear_all)
+    bot._process_user_message_serialized = process
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        message=SimpleNamespace(),
+    )
+    wipe = asyncio.create_task(
+        bot.cmd_wipe_memory(update, SimpleNamespace(args=["confirm"]))
+    )
+    new_chat = None
+    try:
+        await asyncio.wait_for(started.wait(), timeout=2)
+        wipe.cancel()
+        await asyncio.sleep(0)
+        assert bot._get_memory_wipe_lock().locked()
+        assert not wipe.done()
+        new_chat = asyncio.create_task(
+            bot._process_user_message(update, SimpleNamespace(), "new message")
+        )
+        await asyncio.sleep(0)
+        assert not new_chat.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await wipe
+        await asyncio.wait_for(new_chat, timeout=2)
+        assert history == ["new message"]
+        assert bot._session_summaries == {}
+        bot._reply_logged.assert_not_awaited()
+    finally:
+        release.set()
+        await asyncio.gather(wipe, *([new_chat] if new_chat else []), return_exceptions=True)

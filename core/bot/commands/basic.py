@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 
 from telegram import Update
@@ -10,6 +9,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ...markdown import _escape_html
+from ..delegation.workspace import await_thread_completion
 
 
 class CommandsBasicMixin:
@@ -127,9 +127,11 @@ class CommandsBasicMixin:
                     self._invalidate_active_message_requests()
                     self._clear_pending_actions()
                     self._invalidate_active_summaries()
-                    await asyncio.to_thread(self.memory.clear_all)
-                    self._invalidate_active_summaries()
-                    self._session_summaries.clear()
+                    try:
+                        await await_thread_completion(self.memory.clear_all)
+                    finally:
+                        self._invalidate_active_summaries()
+                        self._session_summaries.clear()
                 await self._reply_logged(
                     update,
                     "🧨 <b>All memory wiped.</b>\n"
