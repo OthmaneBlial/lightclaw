@@ -3,9 +3,12 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from core.bot import LightClawBot
 from lightclaw_cli import build_parser
 from skills import (
     MAX_SKILL_TEXT_BYTES,
@@ -129,6 +132,45 @@ def test_remove_active_skill_deactivates_it_before_deleting_files(tmp_path):
     assert removed.skill_id == record.skill_id
     assert not record.directory.exists()
     assert manager.list_active("chat") == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_skill_state_stops_chat_before_llm_request():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(memory_top_k=5)
+    bot._session_id_from_update = lambda _update: "chat"
+    bot._log_user_message = Mock()
+    bot._log_bot_message = Mock()
+    bot._heartbeat_last_chat_id = ""
+    bot._agent_mode_by_session = {}
+    bot._get_pending_multi_plan = lambda _session_id: None
+    bot._llm_backoff_active = lambda: False
+    bot.memory = SimpleNamespace(
+        recall=Mock(return_value=[]),
+        format_memories_for_prompt=Mock(return_value=""),
+        get_recent=Mock(return_value=[]),
+    )
+    bot._filter_recalled_memories = lambda memories: memories
+    bot._clean_orphan_messages = lambda messages: messages
+    bot._filter_recent_context = lambda messages: messages
+    bot._get_session_summary = lambda _session_id: ""
+
+    def invalid_state(_session_id):
+        raise SkillError("skills state is invalid; no changes were made")
+
+    bot.skills = SimpleNamespace(prompt_context=invalid_state)
+    bot.llm = SimpleNamespace(chat=AsyncMock())
+    bot._send_response = AsyncMock()
+    update = SimpleNamespace(
+        effective_chat=None,
+        message=SimpleNamespace(reply_text=AsyncMock(return_value=None)),
+    )
+
+    await bot._process_user_message(update, SimpleNamespace(), "hello")
+
+    bot.llm.chat.assert_not_awaited()
+    bot._send_response.assert_awaited_once()
+    assert "not sent to an agent" in bot._send_response.await_args.args[2]
 
 
 def test_manifest_change_invalidates_existing_approval(tmp_path):
