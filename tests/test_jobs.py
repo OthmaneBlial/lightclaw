@@ -6,7 +6,9 @@ import sqlite3
 import stat
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -62,6 +64,35 @@ def test_jobs_persist_across_restart_with_private_database(tmp_path):
     assert [lane["label"] for lane in restored["lanes"]] == ["backend", "frontend"]
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     second.close()
+
+
+def test_concurrent_approval_transition_writes_one_event_across_connections(tmp_path):
+    database = tmp_path / "jobs.db"
+    stores = [JobStore(database) for _ in range(8)]
+    job = _create(stores[0], tmp_path / "repo", status="awaiting_approval")
+    barrier = threading.Barrier(len(stores))
+
+    def approve(store: JobStore) -> bool:
+        barrier.wait(timeout=5)
+        try:
+            store.approve(job["run_id"])
+        except JobStateError:
+            return False
+        return True
+
+    try:
+        with ThreadPoolExecutor(max_workers=len(stores)) as pool:
+            results = list(pool.map(approve, stores))
+        event_count = stores[0].db.execute(
+            "SELECT count(*) FROM job_events WHERE run_id = ? AND kind = 'approved'",
+            (job["run_id"],),
+        ).fetchone()[0]
+        assert results.count(True) == 1
+        assert event_count == 1
+        assert stores[0].get_job(job["run_id"])["status"] == "queued"
+    finally:
+        for store in stores:
+            store.close()
 
 
 def test_priority_queue_and_one_active_writer_per_workspace(tmp_path):

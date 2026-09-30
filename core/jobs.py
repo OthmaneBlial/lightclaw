@@ -380,14 +380,21 @@ class JobStore:
             row = self.db.execute("SELECT status FROM jobs WHERE run_id = ?", (run_id,)).fetchone()
             if row is None:
                 raise JobStateError(f"unknown run: {run_id}")
-            if row["status"] not in allowed:
-                raise JobStateError(f"cannot transition {row['status']} to {target}")
+            current_status = str(row["status"])
+            if current_status not in allowed:
+                raise JobStateError(f"cannot transition {current_status} to {target}")
             finished = now if target in TERMINAL_STATUSES else None
-            self.db.execute(
-                "UPDATE jobs SET status = ?, updated_at = ?, finished_at = COALESCE(?, finished_at), last_error = ? WHERE run_id = ?",
-                (target, now, finished, str(error), run_id),
+            updated = self.db.execute(
+                "UPDATE jobs SET status = ?, updated_at = ?, finished_at = COALESCE(?, finished_at), last_error = ? WHERE run_id = ? AND status = ?",
+                (target, now, finished, str(error), run_id, current_status),
             )
-            self._event(run_id, event, {"from": row["status"], "to": target})
+            if updated.rowcount != 1:
+                current = self.db.execute(
+                    "SELECT status FROM jobs WHERE run_id = ?", (run_id,)
+                ).fetchone()
+                status = str(current["status"]) if current else "missing"
+                raise JobStateError(f"cannot transition {status} to {target}")
+            self._event(run_id, event, {"from": current_status, "to": target})
         return self.get_job(run_id)
 
     def claim_next(self, *, workspace: str | Path | None = None, worker_pid: int | None = None) -> dict[str, object] | None:
