@@ -53,6 +53,21 @@ def main() -> int:
             [PYTHON, "scripts/generate_provider_matrix.py", "--check"],
         )
         _run("architecture budget", [PYTHON, "scripts/check_architecture.py", "--check"])
+        for requirements in ("requirements-runtime.txt", "requirements-dev.txt"):
+            _run(
+                f"locked dependency resolution ({requirements})",
+                [
+                    PYTHON,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--dry-run",
+                    "--quiet",
+                    "--require-hashes",
+                    "-r",
+                    requirements,
+                ],
+            )
         _run(
             "runtime footprint",
             [PYTHON, "-m", "bench.runtime_footprint", "--output", str(footprint)],
