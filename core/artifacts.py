@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import errno
+import hashlib
 import json
 import os
 import re
-import shutil
+import secrets
+import stat
 import subprocess
 import tempfile
 from pathlib import Path, PurePosixPath
@@ -13,7 +16,6 @@ from pathlib import Path, PurePosixPath
 from .fs import sha256_file
 from .receipts import _write_private, read_receipt
 from .security import delegated_process_env, redact_text
-from .workspaces import ensure_private_workspace_dir
 
 
 class ArtifactError(ValueError):
@@ -258,6 +260,120 @@ def _validate_workspace_path(root: Path, relative: str, label: str) -> None:
             raise ArtifactError(f"{label} contains a symlink or non-directory parent: {relative}")
 
 
+def _open_workspace_directory(
+    root: Path,
+    parts: tuple[str, ...],
+    *,
+    label: str,
+    create: bool = False,
+    private: bool = False,
+) -> int:
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory_fd: int | None = None
+    try:
+        directory_fd = os.open(root, flags)
+        for part in parts:
+            if create:
+                try:
+                    os.mkdir(part, 0o700 if private else 0o777, dir_fd=directory_fd)
+                except FileExistsError:
+                    pass
+            child_fd = os.open(part, flags, dir_fd=directory_fd)
+            try:
+                if private:
+                    os.fchmod(child_fd, 0o700)
+            except OSError:
+                os.close(child_fd)
+                raise
+            previous_fd = directory_fd
+            directory_fd = child_fd
+            os.close(previous_fd)
+        return directory_fd
+    except OSError as exc:
+        if directory_fd is not None:
+            os.close(directory_fd)
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise ArtifactError(f"{label} contains a symlink or non-directory parent") from exc
+        raise ArtifactError(f"{label} could not be opened safely") from exc
+
+
+def _open_workspace_file(root: Path, relative: str, label: str) -> tuple[int, os.stat_result]:
+    parts = PurePosixPath(relative).parts
+    directory_fd = _open_workspace_directory(root, parts[:-1], label=label)
+    file_fd: int | None = None
+    try:
+        file_fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory_fd)
+        file_stat = os.fstat(file_fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise ArtifactError(f"{label} is not a regular file: {relative}")
+        return file_fd, file_stat
+    except OSError as exc:
+        if file_fd is not None:
+            os.close(file_fd)
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise ArtifactError(f"{label} contains a symlink or non-regular file: {relative}") from exc
+        raise ArtifactError(f"{label} is no longer available: {relative}") from exc
+    except ArtifactError:
+        if file_fd is not None:
+            os.close(file_fd)
+        raise
+    finally:
+        os.close(directory_fd)
+
+
+def _hash_fd(file_fd: int) -> str:
+    digest = hashlib.sha256()
+    while chunk := os.read(file_fd, 1024 * 1024):
+        digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _copy_fd(source_fd: int, destination_fd: int) -> str:
+    digest = hashlib.sha256()
+    while chunk := os.read(source_fd, 1024 * 1024):
+        digest.update(chunk)
+        remaining = memoryview(chunk)
+        while remaining:
+            written = os.write(destination_fd, remaining)
+            if not written:
+                raise OSError("short write while copying selected artifact")
+            remaining = remaining[written:]
+    return digest.hexdigest()
+
+
+def _copy_to_temp(
+    source_fd: int,
+    directory_fd: int,
+    name: str,
+    source_stat: os.stat_result,
+) -> tuple[str, str]:
+    temp_name = f".{name}.{secrets.token_hex(8)}.tmp"
+    temp_fd = os.open(
+        temp_name,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+        0o600,
+        dir_fd=directory_fd,
+    )
+    try:
+        digest = _copy_fd(source_fd, temp_fd)
+        os.fchmod(temp_fd, stat.S_IMODE(source_stat.st_mode))
+        os.utime(temp_fd, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
+        os.fsync(temp_fd)
+    except BaseException:
+        os.close(temp_fd)
+        _unlink_at(directory_fd, temp_name)
+        raise
+    os.close(temp_fd)
+    return temp_name, digest
+
+
+def _unlink_at(directory_fd: int, name: str) -> None:
+    try:
+        os.unlink(name, dir_fd=directory_fd)
+    except FileNotFoundError:
+        pass
+
+
 def apply_selected_files(
     source_workspace: str | Path,
     target_workspace: str | Path,
@@ -285,20 +401,23 @@ def apply_selected_files(
     if "/" in backup_id:
         raise ArtifactError("run id must be a single safe path component")
     operations: list[dict[str, object]] = []
-    planned: list[tuple[Path, Path, Path | None]] = []
+    planned: list[tuple[str, Path, Path | None, str]] = []
     for relative in paths:
         if PurePosixPath(relative).parts[0] == ".lightclaw-backups":
             raise ArtifactError("selected path uses the reserved backup directory")
-        source_file = source / relative
         destination = target / relative
         _validate_workspace_path(source, relative, "selected source")
-        if not source_file.is_file():
-            raise ArtifactError(f"selected source is not a regular file: {relative}")
+        source_fd, _source_stat = _open_workspace_file(source, relative, "selected source")
+        try:
+            source_sha256 = _hash_fd(source_fd)
+        finally:
+            os.close(source_fd)
         _validate_workspace_path(target, relative, "target path")
-        if destination.exists() and not destination.is_file():
+        destination_exists = destination.exists()
+        if destination_exists and not destination.is_file():
             raise ArtifactError(f"selected target is not a regular file: {relative}")
         backup: Path | None = None
-        if destination.exists():
+        if destination_exists:
             backup_relative = f".lightclaw-backups/{backup_id}/{relative}"
             _validate_workspace_path(target, backup_relative, "backup path")
             backup = target / backup_relative
@@ -306,40 +425,73 @@ def apply_selected_files(
                 raise ArtifactError(f"backup already exists; refusing to overwrite it: {relative}")
         operation = {
             "path": relative,
-            "change": "overwrite" if destination.exists() else "create",
-            "source_sha256": sha256_file(source_file),
+            "change": "overwrite" if destination_exists else "create",
+            "source_sha256": source_sha256,
             "backup": backup.as_posix() if backup else None,
         }
         operations.append(operation)
-        planned.append((source_file, destination, backup))
+        planned.append((relative, destination, backup, source_sha256))
 
     if apply:
-        for _source_file, destination, backup in planned:
-            if backup is not None:
-                backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
-                backup_parent = ensure_private_workspace_dir(target, *backup_parts[:-1])
-                backup = backup_parent / backup_parts[-1]
-                if backup.is_symlink() or backup.exists():
-                    raise ArtifactError("backup path was created during apply")
-                fd, raw_temp = tempfile.mkstemp(prefix=f".{backup.name}.", dir=backup.parent)
-                os.close(fd)
-                temp = Path(raw_temp)
-                try:
-                    shutil.copy2(destination, temp)
-                    os.link(temp, backup)
-                finally:
-                    temp.unlink(missing_ok=True)
-
-        for source_file, destination, _backup in planned:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            fd, raw_temp = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination.parent)
-            os.close(fd)
-            temp = Path(raw_temp)
+        for relative, _destination, backup, _source_sha256 in planned:
+            if backup is None:
+                continue
+            backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
+            backup_parent_fd = _open_workspace_directory(
+                target,
+                backup_parts[:-1],
+                label="backup path",
+                create=True,
+                private=True,
+            )
+            target_fd: int | None = None
+            temp_name: str | None = None
             try:
-                shutil.copy2(source_file, temp)
-                os.replace(temp, destination)
+                target_fd, target_stat = _open_workspace_file(target, relative, "target path")
+                temp_name, _ = _copy_to_temp(
+                    target_fd, backup_parent_fd, backup_parts[-1], target_stat
+                )
+                try:
+                    os.link(
+                        temp_name,
+                        backup_parts[-1],
+                        src_dir_fd=backup_parent_fd,
+                        dst_dir_fd=backup_parent_fd,
+                        follow_symlinks=False,
+                    )
+                except FileExistsError as exc:
+                    raise ArtifactError(
+                        f"backup already exists; refusing to overwrite it: {relative}"
+                    ) from exc
             finally:
-                temp.unlink(missing_ok=True)
+                if target_fd is not None:
+                    os.close(target_fd)
+                if temp_name is not None:
+                    _unlink_at(backup_parent_fd, temp_name)
+                os.close(backup_parent_fd)
+
+        for relative, _destination, _backup, expected_sha256 in planned:
+            source_fd, source_stat = _open_workspace_file(source, relative, "selected source")
+            parent_fd: int | None = None
+            temp_name: str | None = None
+            try:
+                parts = PurePosixPath(relative).parts
+                parent_fd = _open_workspace_directory(
+                    target, parts[:-1], label="target path", create=True
+                )
+                temp_name, copied_sha256 = _copy_to_temp(
+                    source_fd, parent_fd, parts[-1], source_stat
+                )
+                if copied_sha256 != expected_sha256:
+                    raise ArtifactError(f"selected source changed during apply: {relative}")
+                os.rename(temp_name, parts[-1], src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                temp_name = None
+            finally:
+                os.close(source_fd)
+                if parent_fd is not None:
+                    if temp_name is not None:
+                        _unlink_at(parent_fd, temp_name)
+                    os.close(parent_fd)
     return {
         "run_id": run_id,
         "source": source.as_posix(),

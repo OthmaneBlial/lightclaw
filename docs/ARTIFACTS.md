@@ -45,7 +45,13 @@ lightclaw artifact apply <run-id> \
   --apply
 ```
 
-LightClaw rejects absolute paths, traversal, symlink sources, and symlinks anywhere in selected target or backup paths. Existing selected files are copied to private `.lightclaw-backups/<run-id>/` directories first; an existing backup is never overwritten. Unselected and unrelated files are never touched.
+LightClaw rejects absolute paths, traversal, symlink sources, and symlinks anywhere in selected target
+or backup paths. During `--apply`, it opens selected files without following symlinks, copies relative
+to opened workspace directories, and verifies copied bytes against the source hash calculated
+during that apply operation's preflight. A concurrent source change aborts that file before
+replacement. Existing selected files are copied to private `.lightclaw-backups/<run-id>/` directories
+first; an existing
+backup is never overwritten. Unselected and unrelated files are never touched.
 
 ## Optional pull request
 

@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from core import artifacts as artifact_module
 from core.artifacts import (
     ArtifactError,
     accept_artifact,
@@ -152,6 +153,8 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
     (source / "src" / "chosen.py").write_text("new\n", encoding="utf-8")
     (source / "created.txt").write_text("created\n", encoding="utf-8")
     (target / "src" / "chosen.py").write_text("old\n", encoding="utf-8")
+    (source / "src" / "chosen.py").chmod(0o751)
+    (target / "src" / "chosen.py").chmod(0o640)
     unrelated = target / "unrelated.txt"
     unrelated.write_text("user work\n", encoding="utf-8")
 
@@ -174,10 +177,11 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
     )
     assert applied["applied"] is True
     assert (target / "src" / "chosen.py").read_text(encoding="utf-8") == "new\n"
+    assert stat.S_IMODE((target / "src" / "chosen.py").stat().st_mode) == 0o751
     assert (target / "created.txt").read_text(encoding="utf-8") == "created\n"
-    assert (
-        target / ".lightclaw-backups" / "run-apply" / "src" / "chosen.py"
-    ).read_text(encoding="utf-8") == "old\n"
+    backup = target / ".lightclaw-backups" / "run-apply" / "src" / "chosen.py"
+    assert backup.read_text(encoding="utf-8") == "old\n"
+    assert stat.S_IMODE(backup.stat().st_mode) == 0o640
     assert stat.S_IMODE((target / ".lightclaw-backups").stat().st_mode) == 0o700
     assert unrelated.read_text(encoding="utf-8") == "user work\n"
 
@@ -186,6 +190,104 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
     (source / "linked.py").symlink_to(source / "src" / "chosen.py")
     with pytest.raises(ArtifactError, match="symlink"):
         apply_selected_files(source, target, ["linked.py"], run_id="bad")
+
+
+def test_selective_apply_rejects_source_symlink_replaced_after_validation(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    source_file = source / "selected.txt"
+    source_file.write_text("approved\n", encoding="utf-8")
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside secret\n", encoding="utf-8")
+    validate = artifact_module._validate_workspace_path
+    swapped = False
+
+    def validate_then_swap(root, relative, label):
+        nonlocal swapped
+        validate(root, relative, label)
+        if label == "selected source" and not swapped:
+            swapped = True
+            source_file.unlink()
+            source_file.symlink_to(outside)
+
+    monkeypatch.setattr("core.artifacts._validate_workspace_path", validate_then_swap)
+    with pytest.raises(ArtifactError, match="symlink"):
+        apply_selected_files(source, target, ["selected.txt"], run_id="run-race", apply=True)
+
+    assert not (target / "selected.txt").exists()
+    assert outside.read_text(encoding="utf-8") == "outside secret\n"
+
+
+def test_selective_apply_rejects_target_parent_symlink_replaced_after_validation(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    outside = tmp_path / "outside"
+    source.mkdir()
+    target.mkdir()
+    outside.mkdir()
+    (source / "nested").mkdir()
+    (target / "nested").mkdir()
+    (source / "nested" / "selected.txt").write_text("new\n", encoding="utf-8")
+    validate = artifact_module._validate_workspace_path
+    swapped = False
+
+    def validate_then_swap(root, relative, label):
+        nonlocal swapped
+        validate(root, relative, label)
+        if label == "target path" and not swapped:
+            swapped = True
+            (target / "nested").rmdir()
+            (target / "nested").symlink_to(outside, target_is_directory=True)
+
+    monkeypatch.setattr("core.artifacts._validate_workspace_path", validate_then_swap)
+    with pytest.raises(ArtifactError, match="symlink"):
+        apply_selected_files(
+            source,
+            target,
+            ["nested/selected.txt"],
+            run_id="run-race",
+            apply=True,
+        )
+
+    assert not (outside / "selected.txt").exists()
+
+
+def test_selective_apply_rejects_source_changed_after_preflight(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    source_file = source / "selected.txt"
+    source_file.write_text("reviewed\n", encoding="utf-8")
+    open_file = artifact_module._open_workspace_file
+    selected_opens = 0
+
+    def change_before_copy(root, relative, label):
+        nonlocal selected_opens
+        if label == "selected source":
+            selected_opens += 1
+            if selected_opens == 2:
+                source_file.write_text("changed after preview\n", encoding="utf-8")
+        return open_file(root, relative, label)
+
+    monkeypatch.setattr("core.artifacts._open_workspace_file", change_before_copy)
+    with pytest.raises(ArtifactError, match="changed during apply"):
+        apply_selected_files(
+            source,
+            target,
+            ["selected.txt"],
+            run_id="run-race",
+            apply=True,
+        )
+
+    assert not (target / "selected.txt").exists()
+    assert source_file.read_text(encoding="utf-8") == "changed after preview\n"
 
 
 def test_selective_apply_preflights_all_backup_paths_before_mutating(tmp_path):
@@ -245,7 +347,7 @@ def test_selective_apply_never_overwrites_an_existing_backup(tmp_path):
     assert backup.read_text(encoding="utf-8") == "original backup\n"
 
 
-def test_selective_apply_cleans_up_a_failed_partial_backup(tmp_path, monkeypatch):
+def test_selective_apply_cleans_up_a_failed_backup_link(tmp_path, monkeypatch):
     source = tmp_path / "source"
     target = tmp_path / "target"
     source.mkdir()
@@ -254,12 +356,11 @@ def test_selective_apply_cleans_up_a_failed_partial_backup(tmp_path, monkeypatch
     (target / "file.txt").write_text("original target\n", encoding="utf-8")
     backup_parent = target / ".lightclaw-backups" / "run-failure"
 
-    def fail_during_copy(_source, destination):
-        Path(destination).write_text("partial backup\n", encoding="utf-8")
-        raise OSError("simulated backup write failure")
+    def fail_backup_link(*_args, **_kwargs):
+        raise OSError("simulated backup link failure")
 
-    monkeypatch.setattr("core.artifacts.shutil.copy2", fail_during_copy)
-    with pytest.raises(OSError, match="simulated backup write failure"):
+    monkeypatch.setattr("core.artifacts.os.link", fail_backup_link)
+    with pytest.raises(OSError, match="simulated backup link failure"):
         apply_selected_files(
             source,
             target,
