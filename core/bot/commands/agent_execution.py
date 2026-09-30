@@ -65,12 +65,16 @@ class CommandsAgentExecutionMixin:
             raise
 
     async def _await_multi_preflight_thread(
-        self, run_id: str, workspace: Path, function, *args
+        self, run_id: str, workspace: Path, function, *args, **kwargs
     ):
         try:
-            return await _to_thread_completion(function, *args)
+            return await _to_thread_completion(function, *args, **kwargs)
         except asyncio.CancelledError:
             await self._cleanup_unclaimed_multi_workspace(run_id, workspace)
+            raise
+        except Exception as exc:
+            if not isinstance(exc, ArtifactError):
+                await self._cleanup_unclaimed_multi_workspace(run_id, workspace)
             raise
 
     async def _evaluate_multi_worker_acceptance_off_thread(
@@ -292,7 +296,9 @@ class CommandsAgentExecutionMixin:
         )
 
         handoff_dir = multi_workspace / "handoff"
-        handoff_dir.mkdir(parents=True, exist_ok=True)
+        await self._await_multi_preflight_thread(
+            run_id, multi_workspace, handoff_dir.mkdir, parents=True, exist_ok=True
+        )
         try:
             checkpoint = await self._await_multi_preflight_thread(
                 run_id,

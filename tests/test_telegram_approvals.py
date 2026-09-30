@@ -1062,6 +1062,40 @@ async def test_cancelled_multi_workspace_creation_removes_late_owned_directory(
 
 
 @pytest.mark.asyncio
+async def test_failed_multi_workspace_preflight_removes_unannounced_workspace(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(root))
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_multi_plan_ttl_sec = 900
+    bot._set_pending_multi_plan(
+        "456",
+        {
+            "goal": "fail before workspace announcement",
+            "workers": [("builder", "codex"), ("reviewer", "claude")],
+            "plan_payload": {"workers": []},
+        },
+    )
+    bot._active_run_ids_by_session = {}
+    bot._active_run_tasks_by_session = {}
+    bot._active_worker_tasks_by_run = {}
+    bot._active_run_heartbeats_by_run = {}
+    bot._reply_logged = AsyncMock()
+    bot._write_agents_plan_file = Mock(side_effect=OSError("workspace is read-only"))
+
+    await bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+
+    assert [path.name for path in root.iterdir()] == [".lightclaw-meta"]
+    metadata = list((root / ".lightclaw-meta").glob("*.json"))
+    assert len(metadata) == 1
+    assert json.loads(metadata[0].read_text(encoding="utf-8"))["state"] == "undone"
+    assert "No agent was started" in bot._reply_logged.await_args.args[1]
+    bot.jobs.close()
+
+
+@pytest.mark.asyncio
 async def test_unexpected_multi_plan_failure_cleans_workers_and_fails_job(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
     bot._pending_multi_plan_by_session = {}
