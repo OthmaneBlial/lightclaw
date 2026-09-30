@@ -36,6 +36,12 @@ fully printed review by passing its ID to the command handler.
 
 The command working directory is opened without following relative directory symlinks after path resolution. A short isolated Python child enters this directory through the inherited descriptor, closes it, and replaces itself with the approved command. A symlink swap before opening fails; a swap after opening cannot redirect the command into the replacement directory. Internal workspace aliases remain supported.
 
+Acceptance commands and existence checks preserve the requested task directory itself for the
+no-follow opener. A task root replaced by a symlink cannot be used to execute commands or
+satisfy existence checks, including a root already replaced when validation begins. Aliases in configured
+parent directories remain supported; a command launched after opening stays in its original
+directory even if the task root is then renamed and replaced.
+
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
 
 Handoff JSON is read relative to the task workspace. Symlinks in the file or its relative parent directories are rejected, including replacements made during path validation.

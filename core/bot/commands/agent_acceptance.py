@@ -354,7 +354,7 @@ class CommandsAgentAcceptanceMixin:
 
         async def run_command() -> str:
             try:
-                root = workspace.resolve(strict=True)
+                root = workspace.parent.resolve(strict=True) / workspace.name
                 process = await create_subprocess_at(
                     root, cwd.relative_to(root).parts, *argv,
                     stdin=asyncio.subprocess.DEVNULL,
@@ -529,7 +529,7 @@ class CommandsAgentAcceptanceMixin:
         relative_path: str,
     ) -> Path | None:
         try:
-            root = workspace.resolve(strict=True)
+            root = workspace.parent.resolve(strict=True) / workspace.name
             path = (root / relative_path).resolve()
             path.relative_to(root)
             return path
@@ -555,7 +555,7 @@ class CommandsAgentAcceptanceMixin:
         self, workspace: Path, relative: str, *, file_only: bool = False
     ) -> bool:
         try:
-            root = workspace.resolve(strict=True)
+            root = workspace.parent.resolve(strict=True) / workspace.name
             path = self._resolve_multi_workspace_path(root, relative)
             if path is None:
                 return False

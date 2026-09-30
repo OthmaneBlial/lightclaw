@@ -137,6 +137,53 @@ def test_acceptance_command_cwd_cannot_be_redirected_at_launch(tmp_path, monkeyp
         assert not (workspace / "original" / "marker").exists()
 
 
+@pytest.mark.parametrize("phase", ["existing", "validation", "launch"])
+@pytest.mark.parametrize("parent_alias", [False, True])
+def test_acceptance_keeps_requested_root_boundary(tmp_path, monkeypatch, phase, parent_alias):
+    actual_parent = tmp_path / "actual"
+    actual_parent.mkdir()
+    parent = tmp_path / "alias" if parent_alias else actual_parent
+    if parent_alias:
+        parent.symlink_to(actual_parent, target_is_directory=True)
+    workspace = parent / "workspace"
+    (workspace / "checked").mkdir(parents=True)
+    outside = tmp_path / "outside"
+    (outside / "checked").mkdir(parents=True)
+    (outside / "checked" / "proof.txt").write_text("outside proof")
+    original = tmp_path / "original-workspace"
+    bot = LightClawBot.__new__(LightClawBot)
+    resolve = bot._resolve_multi_workspace_path
+    launch = asyncio.create_subprocess_exec
+
+    def swap():
+        workspace.rename(original)
+        workspace.symlink_to(outside, target_is_directory=True)
+
+    def resolve_with_swap(*args):
+        if phase == "validation" and not workspace.is_symlink():
+            swap()
+        return resolve(*args)
+
+    async def launch_with_swap(*args, **kwargs):
+        if phase == "launch":
+            swap()
+        return await launch(*args, **kwargs)
+
+    if phase == "existing":
+        swap()
+    monkeypatch.setattr(bot, "_resolve_multi_workspace_path", resolve_with_swap)
+    monkeypatch.setattr("core.bot.commands.agent_acceptance.asyncio.create_subprocess_exec", launch_with_swap)
+    command = shlex.join([sys.executable, "-c", "from pathlib import Path; Path('marker').write_text('executed')"])
+
+    failure = bot._run_multi_acceptance_command(workspace, {"command": command, "cwd": "checked"})
+
+    assert not (outside / "checked" / "marker").exists()
+    assert not bot._multi_workspace_path_exists(workspace, "checked/proof.txt", file_only=True)
+    assert (outside / "checked" / "proof.txt").read_text() == "outside proof"
+    assert bool(failure) is (phase != "launch")
+    assert (original / "checked" / "marker").exists() is (phase == "launch")
+
+
 @pytest.mark.parametrize("launch_failure", [False, True])
 def test_acceptance_command_uses_secret_free_minimal_environment_and_closes_cwd(
     tmp_path, monkeypatch, launch_failure
