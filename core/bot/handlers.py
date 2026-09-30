@@ -239,32 +239,16 @@ class BotHandlersMixin:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str
     ):
         session_id = self._session_id_from_update(update)
-        current = asyncio.current_task()
-        clear_event = asyncio.Event()
-        async with self._get_memory_wipe_lock():
-            active_messages = getattr(
-                self, "_active_message_clear_events_by_session", None
-            )
-            if active_messages is None:
-                active_messages = self._active_message_clear_events_by_session = {}
-            session_messages = active_messages.setdefault(session_id, {})
-            if current:
-                session_messages[current] = clear_event
-        locks = getattr(self, "_session_message_locks", None)
-        if locks is None:
-            locks = self._session_message_locks = WeakValueDictionary()
-        lock = locks.setdefault(session_id, asyncio.Lock())
-        try:
+        async with self._memory_request_guard(session_id) as clear_event:
+            locks = getattr(self, "_session_message_locks", None)
+            if locks is None:
+                locks = self._session_message_locks = WeakValueDictionary()
+            lock = locks.setdefault(session_id, asyncio.Lock())
             async with lock:
                 if not clear_event.is_set():
                     await self._process_user_message_serialized(
                         update, context, user_text, clear_event
                     )
-        finally:
-            if current:
-                session_messages.pop(current, None)
-            if not session_messages:
-                active_messages.pop(session_id, None)
 
     async def _process_user_message_serialized(
         self,

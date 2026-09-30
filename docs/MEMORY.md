@@ -74,7 +74,11 @@ lightclaw memory prune
 
 After checking the matched IDs or count, add `--apply`. A record ID outside the selected user/workspace scope is never deleted. Telegram `/clear` removes only the current bound session and revokes its pending actions; an in-flight chat reply may finish but cannot restore cleared history. Confirmed `/wipe_memory` removes all local memory and pending actions across chats; in-flight chat replies may finish but are not restored. In groups, the initiating Telegram user must confirm it within 90 seconds. Confirmation expires on wall-clock changes or machine sleep. Already-active runs continue.
 
-Once a confirmed global wipe starts, canceling its handler waits for the database operation to finish, even after repeated cancellation requests. New chat requests remain queued until then, and cached summaries are discarded before those requests resume.
+Scheduled heartbeat updates obey the same clears: a result already in progress may
+finish and be delivered, but cannot restore cleared history. A clear of another chat
+does not discard the heartbeat's memory update.
+
+Once a confirmed global wipe starts, canceling its handler waits for the database operation to finish, even after repeated cancellation requests. New chat requests and heartbeat runs remain queued until then, and cached summaries are discarded before those requests resume.
 
 ## Optional embeddings
 

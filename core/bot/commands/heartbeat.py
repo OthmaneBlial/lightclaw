@@ -16,6 +16,7 @@ from ...fs import FileTooLargeError, read_text_bounded
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import build_system_prompt, runtime_root_from_workspace
+from ..messaging import _TelegramHTMLChunker
 
 MAX_HEARTBEAT_BYTES = 64 * 1024
 
@@ -110,6 +111,10 @@ class CommandsHeartbeatMixin:
 
 
     async def _run_heartbeat_once(self, bot, session_id: str):
+        async with self._memory_request_guard(session_id) as clear_event:
+            await self._run_heartbeat_once_impl(bot, session_id, clear_event)
+
+    async def _run_heartbeat_once_impl(self, bot, session_id: str, clear_event: asyncio.Event):
         heartbeat_path = self._heartbeat_file_path()
         if not heartbeat_path.exists():
             return
@@ -167,6 +172,8 @@ class CommandsHeartbeatMixin:
             f"{heartbeat_body}\n"
         )
 
+        if clear_event.is_set():
+            return
         try:
             response = await self.llm.chat(
                 [{"role": "user", "content": heartbeat_prompt}],
@@ -260,14 +267,14 @@ class CommandsHeartbeatMixin:
             final_response = compact
 
         final_markdown = f"💓 Heartbeat update\n\n{final_response}"
-        chunks = self._chunk_message(final_markdown, max_len=3000)
+        chunks = _TelegramHTMLChunker(max_len=3000)
+        chunks.feed(markdown_to_telegram_html(final_markdown))
 
         async def _send_message(text: str, parse_mode: str | None = None):
             return await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
 
         sent_ok = False
-        for chunk in chunks:
-            html_chunk = markdown_to_telegram_html(chunk)
+        for html_chunk in chunks.finish():
             if await self._try_send(_send_message, html_chunk):
                 sent_ok = True
 
@@ -275,7 +282,8 @@ class CommandsHeartbeatMixin:
             return
 
         self._heartbeat_last_run_at = time.time()
-        self.memory.ingest("assistant", f"[heartbeat]\n\n{final_response}", session_id)
+        if not clear_event.is_set():
+            self.memory.ingest("assistant", f"[heartbeat]\n\n{final_response}", session_id)
 
 
     async def cmd_heartbeat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

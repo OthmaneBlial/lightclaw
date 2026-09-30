@@ -8,6 +8,7 @@ import re
 import secrets
 import time
 import weakref
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from telegram import Update
@@ -135,6 +136,25 @@ class BotBaseMixin:
             if session_id is None or active_session == session_id:
                 for clear_event in messages.values():
                     clear_event.set()
+
+    @asynccontextmanager
+    async def _memory_request_guard(self, session_id: str):
+        current = asyncio.current_task()
+        clear_event = asyncio.Event()
+        async with self._get_memory_wipe_lock():
+            active_messages = getattr(self, "_active_message_clear_events_by_session", None)
+            if active_messages is None:
+                active_messages = self._active_message_clear_events_by_session = {}
+            session_messages = active_messages.setdefault(session_id, {})
+            if current:
+                session_messages[current] = clear_event
+        try:
+            yield clear_event
+        finally:
+            if current:
+                session_messages.pop(current, None)
+            if not session_messages:
+                active_messages.pop(session_id, None)
 
     def _create_background_task(self, coroutine) -> asyncio.Task:
         task = asyncio.create_task(coroutine)
