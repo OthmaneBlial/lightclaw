@@ -826,6 +826,57 @@ async def test_active_cancel_button_requests_the_matching_run():
 
 
 @pytest.mark.asyncio
+async def test_duplicate_cancel_does_not_interrupt_run_cleanup():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "active-run"
+    bot.is_update_allowed = lambda _update: True
+    bot._active_run_ids_by_session = {"456": run_id}
+    bot.jobs = SimpleNamespace(request_cancel=Mock())
+    bot._reply_logged = AsyncMock()
+    started = asyncio.Event()
+    cleanup_started = asyncio.Event()
+    finish_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+
+    async def run_with_cleanup():
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cleanup_started.set()
+            await finish_cleanup.wait()
+            cleanup_finished.set()
+            raise
+
+    task = asyncio.create_task(run_with_cleanup())
+    bot._active_run_tasks_by_session = {"456": task}
+
+    def make_update():
+        query = SimpleNamespace(
+            data=f"lc:run:cancel:{bot._run_action_token(run_id)}",
+            answer=AsyncMock(),
+            message=SimpleNamespace(),
+        )
+        return SimpleNamespace(
+            callback_query=query,
+            effective_user=SimpleNamespace(id=123),
+            effective_chat=SimpleNamespace(id=456, type="private"),
+            effective_message=query.message,
+        )
+
+    await started.wait()
+    await bot.handle_run_action(make_update(), SimpleNamespace())
+    await cleanup_started.wait()
+    await bot.handle_run_action(make_update(), SimpleNamespace())
+
+    assert task.cancelling() == 1
+    finish_cleanup.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cleanup_finished.is_set()
+
+
+@pytest.mark.asyncio
 async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
     bot._pending_multi_plan_by_session = {}
