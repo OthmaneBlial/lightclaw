@@ -8,7 +8,7 @@
   "highest_branch_functions": [
     {
       "branch_points": 98,
-      "line": 162,
+      "line": 212,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -115,7 +115,7 @@
   "largest_functions": [
     {
       "branch_points": 98,
-      "line": 162,
+      "line": 212,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 861,
-      "path": "memory.py"
+      "lines": 905,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 855,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 861,
+      "path": "memory.py"
     },
     {
       "lines": 835,
@@ -281,6 +281,6 @@
       "path": "core/bot/base.py"
     }
   ],
-  "runtime_lines": 20455,
+  "runtime_lines": 20505,
   "schema_version": 1
 }

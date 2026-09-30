@@ -13,6 +13,7 @@ from telegram.constants import ParseMode
 
 from ...artifacts import ArtifactError, create_patch_bundle, initialize_artifact_repository
 from ...jobs import JobConflictError, JobStateError
+from ...logging_setup import log
 from ...markdown import _escape_html
 from ...receipts import write_receipt
 
@@ -62,9 +63,58 @@ class CommandsAgentExecutionMixin:
                 finally:
                     if self._active_run_tasks_by_session.get(session_id) is current:
                         self._active_run_tasks_by_session.pop(session_id, None)
+                    run_id = self._active_run_ids_by_session.get(session_id)
+                    if run_id:
+                        await self._cleanup_abandoned_multi_run(
+                            update, session_id, run_id
+                        )
         finally:
             if locks.get(session_id) is lock and not lock.locked():
                 locks.pop(session_id, None)
+
+    async def _cleanup_abandoned_multi_run(
+        self, update: Update, session_id: str, run_id: str
+    ) -> None:
+        worker_tasks = list(self._active_worker_tasks_by_run.pop(run_id, {}))
+        heartbeat = self._active_run_heartbeats_by_run.pop(run_id, None)
+        for task in worker_tasks:
+            self._cancel_task_once(task)
+        if heartbeat:
+            self._cancel_task_once(heartbeat)
+        tasks = worker_tasks + ([heartbeat] if heartbeat else [])
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        failure = "Multi-agent orchestration exited unexpectedly."
+        try:
+            job = await asyncio.to_thread(self.jobs.get_job, run_id)
+            if job["status"] in {"running", "cancel_requested"}:
+                for lane in job["lanes"]:
+                    if lane["status"] in {"queued", "running"}:
+                        try:
+                            await asyncio.to_thread(
+                                self.jobs.update_lane,
+                                run_id,
+                                str(lane["label"]),
+                                "failed",
+                                error=failure,
+                            )
+                        except JobStateError:
+                            pass
+                await asyncio.to_thread(
+                    self.jobs.finish, run_id, succeeded=False, error=failure
+                )
+                await self._reply_logged(
+                    update,
+                    "⚠️ Multi-agent run stopped unexpectedly and was marked failed. "
+                    "Its task workspace remains available for inspection.",
+                )
+        except JobStateError:
+            pass
+        except Exception:
+            log.exception("Failed to finalize abandoned multi-agent run %s", run_id)
+        finally:
+            self._release_multi_run_tracking(session_id, run_id)
 
     async def _execute_pending_multi_plan_impl(self, update: Update, session_id: str):
         pending = self._get_pending_multi_plan(session_id)

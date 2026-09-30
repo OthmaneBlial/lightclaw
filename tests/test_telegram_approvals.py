@@ -625,6 +625,7 @@ async def test_duplicate_plan_approval_callbacks_start_one_run():
     bot._pending_multi_plan_ttl_sec = 900
     bot._session_run_locks = {}
     bot._active_run_tasks_by_session = {}
+    bot._active_run_ids_by_session = {}
     bot._reply_logged = AsyncMock()
     approval_id = bot._set_pending_multi_plan(
         "456",
@@ -978,6 +979,102 @@ async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(tmp_p
     assert worker_cleaned.is_set()
     assert heartbeat_holder[0].cancelled()
     assert "456" not in bot._active_run_ids_by_session
+    bot.jobs.close()
+
+
+@pytest.mark.asyncio
+async def test_unexpected_multi_plan_failure_cleans_workers_and_fails_job(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_multi_plan_ttl_sec = 900
+    bot._set_pending_multi_plan(
+        "456",
+        {
+            "goal": "fixture multi run",
+            "workers": [("builder", "codex"), ("reviewer", "claude")],
+            "plan_payload": {"workers": []},
+        },
+    )
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    bot._active_run_ids_by_session = {}
+    bot._active_run_tasks_by_session = {}
+    bot._active_worker_tasks_by_run = {}
+    bot._active_run_heartbeats_by_run = {}
+    bot._reply_logged = AsyncMock()
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    worker_started = asyncio.Event()
+    worker_cleaned = asyncio.Event()
+    never = asyncio.Event()
+    run_id_holder: list[str] = []
+    heartbeat_holder: list[asyncio.Task] = []
+
+    async def fake_execute_multi_agent_plan(**kwargs):
+        run_id = kwargs["run_id"]
+        run_id_holder.append(run_id)
+        bot.jobs.create_job(
+            workspace=workspace,
+            session_id="456",
+            goal="fixture multi run",
+            approved_scope="fixture",
+            risk_level="medium",
+            capability_profile="workspace-write",
+            plan=[
+                {
+                    "label": "builder",
+                    "depends_on": [],
+                    "owned_paths": ["src.py"],
+                    "idempotent": True,
+                    "resumable": True,
+                },
+                {
+                    "label": "reviewer",
+                    "depends_on": ["builder"],
+                    "owned_paths": ["tests.py"],
+                    "idempotent": True,
+                    "resumable": True,
+                },
+            ],
+            status="queued",
+            run_id=run_id,
+        )
+        bot.jobs.claim_next(workspace=workspace, worker_pid=999999)
+        bot.jobs.update_lane(run_id, "builder", "running")
+        bot._active_run_ids_by_session["456"] = run_id
+
+        async def worker():
+            worker_started.set()
+            try:
+                await never.wait()
+            finally:
+                worker_cleaned.set()
+
+        async def heartbeat():
+            await never.wait()
+
+        worker_task = asyncio.create_task(worker())
+        heartbeat_task = asyncio.create_task(heartbeat())
+        bot._active_worker_tasks_by_run[run_id] = {worker_task: "builder"}
+        bot._active_run_heartbeats_by_run[run_id] = heartbeat_task
+        heartbeat_holder.append(heartbeat_task)
+        await worker_started.wait()
+        raise RuntimeError("fixture orchestration failure")
+
+    bot._execute_multi_agent_plan = fake_execute_multi_agent_plan
+    with pytest.raises(RuntimeError, match="fixture orchestration failure"):
+        await bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+
+    run_id = run_id_holder[0]
+    job = bot.jobs.get_job(run_id)
+    assert job["status"] == "failed"
+    assert [lane["status"] for lane in job["lanes"]] == ["failed", "failed"]
+    assert worker_cleaned.is_set()
+    assert heartbeat_holder[0].cancelled()
+    assert bot._active_worker_tasks_by_run == {}
+    assert bot._active_run_heartbeats_by_run == {}
+    assert bot._active_run_ids_by_session == {}
+    assert bot._active_run_tasks_by_session == {}
+    bot._reply_logged.assert_awaited_once()
     bot.jobs.close()
 
 
