@@ -75,6 +75,27 @@ def test_acceptance_command_rejects_cwd_symlink_outside_workspace(tmp_path, monk
     run.assert_not_called()
 
 
+def test_acceptance_command_uses_secret_free_minimal_environment(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
+    monkeypatch.setenv("LIGHTCLAW_TEST_SECRET", "provider-secret")
+    run = Mock(return_value=SimpleNamespace(returncode=0, stdout="", stderr=""))
+    monkeypatch.setattr("core.bot.commands.agent_acceptance.subprocess.run", run)
+    bot = LightClawBot.__new__(LightClawBot)
+
+    failure = bot._run_multi_acceptance_command(
+        workspace, {"command": "python -c pass"}
+    )
+
+    assert failure == ""
+    child_env = run.call_args.kwargs["env"]
+    assert "TELEGRAM_BOT_TOKEN" not in child_env
+    assert "LIGHTCLAW_TEST_SECRET" not in child_env
+    assert child_env["LIGHTCLAW_DELEGATED"] == "1"
+    assert child_env["CI"] == "1"
+
+
 def test_handoff_acceptance_rejects_symlinked_parent_outside_workspace(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()

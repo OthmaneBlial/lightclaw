@@ -10,6 +10,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from ...fs import FileTooLargeError, read_json_object
+from ...security import delegated_process_env
 
 MAX_MULTI_HANDOFF_JSON_BYTES = 1024 * 1024
 
@@ -348,6 +349,7 @@ class CommandsAgentAcceptanceMixin:
                 text=True,
                 timeout=timeout_sec,
                 check=False,
+                env=delegated_process_env(extra={"CI": "1"}),
             )
         except subprocess.TimeoutExpired:
             return f"command timed out after {timeout_sec}s: `{command}`"

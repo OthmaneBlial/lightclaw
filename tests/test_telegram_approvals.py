@@ -48,6 +48,7 @@ def test_plan_review_exposes_scope_commands_estimate_and_second_confirmation():
     rendered = bot._render_plan_review(pending)
     assert "docs/release.md" in rendered
     assert "python -m pytest" in rendered
+    assert "does not sandbox" in rendered
 
 
 @pytest.mark.asyncio

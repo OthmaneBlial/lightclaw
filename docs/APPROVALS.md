@@ -6,7 +6,7 @@ LightClaw treats a Telegram request and an execution approval as separate events
 
 Before a multi-agent run, the bot shows:
 
-- declared changed paths and acceptance commands, labeled by worker;
+- declared changed paths, acceptance commands, and each command's working directory, labeled by worker;
 - the capability profile and computed risk level;
 - a bounded duration range based on lane count;
 - an explicit notice when cost is unavailable from the local CLI before execution;
@@ -15,6 +15,8 @@ Before a multi-agent run, the bot shows:
 Approval review shows up to six commands. Plans with more than six command checks cannot be approved until the plan is edited to expose every command.
 
 If scope is missing, the review says so rather than inventing paths. Editing a scope regenerates the plan and requires a new approval.
+
+`command_succeeds` checks run as host subprocesses after approval. They receive a minimal environment and an in-workspace working directory, but LightClaw does not add an operating-system sandbox around them. Review each command; use OS/container isolation for untrusted repositories.
 
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
 

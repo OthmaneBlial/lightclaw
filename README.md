@@ -151,16 +151,18 @@ Current capabilities include:
 
 An empty `TELEGRAM_ALLOWED_USERS` blocks startup. Allowlisted mode accepts commands and callbacks
 only in private chats because group members share session and approval state. Group use requires
-intentionally public mode (`LIGHTCLAW_PUBLIC_BOT_ACK=yes`) with no user allowlist. Delegated
-processes get a minimal environment that excludes Telegram/provider keys. Delegated CLI output is
-bounded per line and per stream; LightClaw flags truncation for review. Automatic edit retries omit
+intentionally public mode (`LIGHTCLAW_PUBLIC_BOT_ACK=yes`) with no user allowlist. Delegated agents
+and acceptance subprocesses receive a minimal environment that excludes Telegram/provider keys.
+Delegated CLI output is bounded per line and per stream; LightClaw flags truncation for review.
+Automatic edit retries omit
 common credential paths and files with detectable secrets; model-generated file blocks cannot
 write common credential paths and cap each chat-edited file at 2 MiB. Use a delegated local-agent
 task for larger files. Scheduled `HEARTBEAT.md` input is capped at 64 KiB; larger files are skipped.
-Secret detection is heuristic. `lightclaw undo`
+Acceptance commands are user-approved host processes, not sandboxed by LightClaw; review them and
+use OS/container isolation for untrusted repositories. Secret detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.
 
-These controls do not protect the host after you explicitly enable `trusted-command`, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
+These controls do not protect the host after you explicitly enable `trusted-command`, approve a malicious acceptance command, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
 
 Read [SECURITY.md](SECURITY.md) and the [threat model](docs/THREAT_MODEL.md). Report vulnerabilities through [private vulnerability reporting](https://github.com/OthmaneBlial/lightclaw/security/advisories/new), never a public issue.
 

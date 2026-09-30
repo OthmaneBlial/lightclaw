@@ -216,6 +216,10 @@ class BotApprovalsMixin:
             f"Estimated duration: <code>{estimate.get('min', '?')}–{estimate.get('max', '?')} min</code>",
             f"Estimated cost: <code>{_escape_html(str(review.get('estimated_cost', 'unknown')))}</code>",
         ]
+        if commands:
+            lines.append(
+                "⚠️ Acceptance commands run on the host; LightClaw does not sandbox them."
+            )
         if review.get("second_confirmation_required"):
             lines.append("⚠️ Publishing, credentials, destructive language, or external scope triggered a second confirmation.")
         if review.get("approval_blocked"):
