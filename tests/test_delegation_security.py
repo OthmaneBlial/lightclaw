@@ -141,6 +141,23 @@ async def test_streaming_timeout_kills_worker_process_group_and_preserves_existi
     assert existing.read_text(encoding="utf-8") == "user data"
 
 
+async def test_streaming_timeout_also_covers_prompt_stdin_write(tmp_path: Path):
+    harness = TimeoutHarness()
+    harness._build_delegation_prompt = lambda task, workspace=None: task
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        "x" * (1024 * 1024),
+    )
+
+    result = await asyncio.wait_for(
+        harness._invoke_local_agent_streaming("codex", "large prompt", workspace=tmp_path),
+        timeout=2,
+    )
+
+    assert result["timed_out"] is True
+    assert result["exit_code"] == 124
+
+
 async def test_task_cancellation_kills_term_resistant_worker_process_group(tmp_path: Path):
     harness = TimeoutHarness(resistant_child=True)
     harness.config.local_agent_timeout_sec = 30

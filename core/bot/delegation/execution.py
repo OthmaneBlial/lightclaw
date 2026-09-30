@@ -737,6 +737,7 @@ class DelegationExecutionMixin:
         )
 
         timed_out = False
+        deadline = time.monotonic() + timeout_sec
         streams_task = asyncio.gather(
             read_stream(proc.stdout, stdout_capture),
             read_stream(proc.stderr, stderr_capture),
@@ -746,7 +747,12 @@ class DelegationExecutionMixin:
             if run_input is not None and proc.stdin:
                 try:
                     proc.stdin.write(run_input.encode("utf-8"))
-                    await proc.stdin.drain()
+                    await asyncio.wait_for(
+                        proc.stdin.drain(),
+                        timeout=max(0, deadline - time.monotonic()),
+                    )
+                except asyncio.TimeoutError:
+                    raise
                 except Exception:
                     pass
                 finally:
@@ -754,7 +760,10 @@ class DelegationExecutionMixin:
                         proc.stdin.close()
                     except Exception:
                         pass
-            await asyncio.wait_for(streams_task, timeout=timeout_sec)
+            await asyncio.wait_for(
+                streams_task,
+                timeout=max(0, deadline - time.monotonic()),
+            )
         except asyncio.TimeoutError:
             timed_out = True
             try:
@@ -762,6 +771,7 @@ class DelegationExecutionMixin:
             except Exception:
                 proc.kill()
             await proc.wait()
+            await asyncio.gather(streams_task, return_exceptions=True)
             stderr_capture.append_line(f"Timed out after {timeout_sec}s")
         except asyncio.CancelledError:
             cleanup_task = asyncio.create_task(terminate_process_tree())

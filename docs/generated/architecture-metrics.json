@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 74,
-      "line": 884,
+      "line": 894,
       "lines": 380,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -93,7 +93,7 @@
     {
       "branch_points": 41,
       "line": 562,
-      "lines": 264,
+      "lines": 274,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 74,
-      "line": 884,
+      "line": 894,
       "lines": 380,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -165,7 +165,7 @@
     {
       "branch_points": 41,
       "line": 562,
-      "lines": 264,
+      "lines": 274,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -225,12 +225,12 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1271,
-      "path": "core/bot/delegation/planning.py"
+      "lines": 1273,
+      "path": "core/bot/delegation/execution.py"
     },
     {
-      "lines": 1263,
-      "path": "core/bot/delegation/execution.py"
+      "lines": 1271,
+      "path": "core/bot/delegation/planning.py"
     },
     {
       "lines": 1194,
@@ -281,6 +281,6 @@
       "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 19311,
+  "runtime_lines": 19321,
   "schema_version": 1
 }
