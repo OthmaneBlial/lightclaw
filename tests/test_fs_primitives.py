@@ -102,6 +102,17 @@ def test_atomic_write_refuses_symlink_and_cleans_failed_temp(tmp_path, monkeypat
     assert not list(tmp_path.glob(".failed.txt.*.tmp"))
 
 
+def test_json_reader_rejects_dangling_symlink_instead_of_using_default(tmp_path):
+    target = tmp_path / "missing-state.json"
+    linked = tmp_path / "state.json"
+    linked.symlink_to(target)
+
+    with pytest.raises(OSError, match="symlink"):
+        read_json_object(linked, default={"jobs": []})
+
+    assert not target.exists()
+
+
 def test_json_reader_rejects_oversize_and_non_object(tmp_path, monkeypatch):
     path = tmp_path / "state.json"
     path.write_text(json.dumps([1, 2]), encoding="utf-8")

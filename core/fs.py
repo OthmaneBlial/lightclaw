@@ -100,9 +100,11 @@ def read_json_object(
     """Read one bounded, non-symlink JSON object or return a copied default."""
     source = Path(path)
     fallback = dict(default or {})
+    if source.is_symlink():
+        raise OSError("JSON state path must be a regular non-symlink file")
     if not source.exists():
         return fallback
-    if source.is_symlink() or not source.is_file():
+    if not source.is_file():
         raise OSError("JSON state path must be a regular non-symlink file")
     limit = max(1, int(max_bytes))
     with source.open("rb") as handle:
