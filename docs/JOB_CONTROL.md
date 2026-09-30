@@ -35,6 +35,8 @@ A running cancellation becomes `cancel_requested`; the in-process heartbeat canc
 
 Delegated POSIX processes wait for TERM/KILL cleanup and stream draining before cancellation returns. Repeated cancellation requests do not interrupt that cleanup or a pending process-group registration/unregistration. Detached descendants can still escape the process group.
 
+Cancellation also covers agent startup, before the process group is registered. Before output streaming begins, cleanup closes stdin and discards stdout/stderr in bounded chunks rather than retaining unread pipe buffers. Failed process-group registration still forces immediate termination.
+
 ## Schedule Telegram reminders
 
 `/cron` manages reminders for the current Telegram chat. The bot must remain running to deliver them.

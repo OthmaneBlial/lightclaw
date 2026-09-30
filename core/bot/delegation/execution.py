@@ -529,8 +529,36 @@ class DelegationExecutionMixin:
             }
 
         started = time.monotonic()
-        try:
-            proc = await asyncio.create_subprocess_exec(
+        async def terminate_process_tree(*, force: bool = False) -> None:
+            if proc.stdin:
+                proc.stdin.close()
+            if not force:
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except Exception:
+                    if proc.returncode is None:
+                        proc.terminate()
+                await asyncio.sleep(0.2)
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except Exception:
+                if proc.returncode is None:
+                    proc.kill()
+            await proc.wait()
+
+        async def terminate_before_streaming(*, force: bool = False) -> None:
+            async def drain(stream):
+                while await stream.read(65536):
+                    pass
+
+            await asyncio.gather(
+                terminate_process_tree(force=force), drain(proc.stdout), drain(proc.stderr)
+            )
+
+        creation_task = asyncio.create_task(
+            asyncio.create_subprocess_exec(
                 *cmd,
                 stdin=asyncio.subprocess.PIPE if run_input is not None else None,
                 stdout=asyncio.subprocess.PIPE,
@@ -539,6 +567,14 @@ class DelegationExecutionMixin:
                 env=env,
                 start_new_session=True,
             )
+        )
+        try:
+            proc = await await_task_completion(creation_task)
+        except asyncio.CancelledError:
+            if not creation_task.cancelled() and creation_task.exception() is None:
+                proc = creation_task.result()
+                await await_task_completion(asyncio.create_task(terminate_before_streaming()))
+            raise
         except Exception as e:
             return {
                 "ok": False,
@@ -549,22 +585,6 @@ class DelegationExecutionMixin:
                 "elapsed": 0.0,
                 "timed_out": False,
             }
-
-        async def terminate_process_tree() -> None:
-            try:
-                os.killpg(proc.pid, signal.SIGTERM)
-            except Exception:
-                if proc.returncode is None:
-                    proc.terminate()
-            await asyncio.sleep(0.2)
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            except Exception:
-                if proc.returncode is None:
-                    proc.kill()
-            await proc.wait()
 
         process_store = getattr(self, "jobs", None)
         process_group_registered = False
@@ -578,7 +598,7 @@ class DelegationExecutionMixin:
                 await asyncio.shield(registration_task)
             except asyncio.CancelledError:
                 async def abort_registration() -> None:
-                    await terminate_process_tree()
+                    await terminate_before_streaming()
                     try:
                         await registration_task
                     except Exception:
@@ -598,11 +618,9 @@ class DelegationExecutionMixin:
                 await await_task_completion(cleanup_task)
                 raise
             except Exception as e:
-                try:
-                    os.killpg(proc.pid, signal.SIGKILL)
-                except Exception:
-                    proc.kill()
-                await proc.wait()
+                await await_task_completion(
+                    asyncio.create_task(terminate_before_streaming(force=True))
+                )
                 return {
                     "ok": False,
                     "exit_code": 1,

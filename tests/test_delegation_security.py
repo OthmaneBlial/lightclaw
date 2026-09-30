@@ -360,6 +360,81 @@ async def test_cancellation_during_process_registration_kills_and_unregisters_wo
             await asyncio.gather(task, return_exceptions=True)
 
 
+@pytest.mark.parametrize("cancel_count", [1, 3])
+async def test_cancellation_during_startup_kills_term_resistant_child(
+    tmp_path: Path, monkeypatch, cancel_count
+):
+    harness = TimeoutHarness(resistant_child=True)
+    harness.config.local_agent_timeout_sec = 30
+    command, _ = harness._build_local_agent_command("codex", tmp_path, "task", True)
+    command[2] = (
+        "import os,pathlib; pathlib.Path('startup-pid.txt').write_text(str(os.getpid())); "
+        + command[2]
+    ).replace("time.sleep(30)", "os.write(1, b'x'*262144); time.sleep(30)")
+    harness._build_local_agent_command = lambda **_kwargs: (command, None)
+    create_process = asyncio.create_subprocess_exec
+    process = None
+
+    async def capture_process(*args, **kwargs):
+        nonlocal process
+        process = await create_process(*args, **kwargs)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", capture_process)
+    loop = asyncio.get_running_loop()
+    connect_read_pipe = loop.connect_read_pipe
+    connecting = asyncio.Event()
+    release = asyncio.Event()
+
+    async def delayed_connection(*args, **kwargs):
+        connecting.set()
+        await release.wait()
+        return await connect_read_pipe(*args, **kwargs)
+
+    monkeypatch.setattr(loop, "connect_read_pipe", delayed_connection)
+    task = asyncio.create_task(
+        harness._invoke_local_agent_streaming("codex", "task", workspace=tmp_path)
+    )
+    try:
+        await asyncio.wait_for(connecting.wait(), timeout=2)
+        for _ in range(100):
+            if (tmp_path / "child-ready.txt").exists():
+                break
+            await asyncio.sleep(.02)
+        assert (tmp_path / "child-ready.txt").exists()
+        for _ in range(cancel_count):
+            task.cancel()
+            await asyncio.sleep(0)
+        release.set()
+        _, pending = await asyncio.wait([task], timeout=2)
+        assert not pending, "startup cancellation blocked on undrained output"
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert process.stdout.at_eof()
+        assert process.stderr.at_eof()
+        await asyncio.sleep(2.3)
+        assert not (tmp_path / "child-survived.txt").exists()
+    finally:
+        release.set()
+        pid_path = tmp_path / "startup-pid.txt"
+        if pid_path.exists():
+            try:
+                os.killpg(int(pid_path.read_text()), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+        if not task.done():
+            task.cancel()
+        if process is not None:
+            async def drain(stream):
+                while await stream.read(65536):
+                    pass
+
+            await asyncio.gather(
+                drain(process.stdout), drain(process.stderr), return_exceptions=True
+            )
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_streaming_output_is_bounded_and_reports_truncation(tmp_path: Path):
     harness = TimeoutHarness()
     harness.config.local_agent_timeout_sec = 5
@@ -384,6 +459,36 @@ async def test_streaming_output_is_bounded_and_reports_truncation(tmp_path: Path
     assert len(result["stdout"].encode("utf-8")) <= 2 * 1024 * 1024
     assert "completed" in result["summary"]
     assert "truncated" in result["summary"].lower()
+
+
+async def test_failed_process_registration_kills_immediately(tmp_path: Path, monkeypatch):
+    harness = TimeoutHarness()
+    signals = []
+    killpg = os.killpg
+
+    def record_signal(pid, sig):
+        signals.append(sig)
+        killpg(pid, sig)
+
+    def reject_registration(*_args):
+        raise RuntimeError("registration fixture failure")
+
+    monkeypatch.setattr("core.bot.delegation.execution.os.killpg", record_signal)
+    harness.jobs = SimpleNamespace(register_process_group=reject_registration)
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [sys.executable, "-c", "import time; time.sleep(30)"], None
+    )
+
+    result = await asyncio.wait_for(
+        harness._invoke_local_agent_streaming(
+            "codex", "task", workspace=tmp_path, job_run_id="refused"
+        ),
+        timeout=2,
+    )
+
+    assert result["ok"] is False
+    assert "could not register delegated process group" in result["stderr"]
+    assert signals == [signal.SIGKILL]
 
 
 def test_delegation_unregisters_process_group_after_completion(tmp_path: Path):
