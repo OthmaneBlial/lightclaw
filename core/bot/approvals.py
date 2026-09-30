@@ -131,6 +131,13 @@ class BotApprovalsMixin:
         )
 
     @staticmethod
+    def _inline_trusted_keyboard(approval_id: str) -> InlineKeyboardMarkup:
+        return InlineKeyboardMarkup([[
+            InlineKeyboardButton("Approve host run", callback_data=f"lc:trusted:approve:{approval_id}"),
+            InlineKeyboardButton("Discard", callback_data=f"lc:trusted:deny:{approval_id}"),
+        ]])
+
+    @staticmethod
     def _run_action_token(run_id: str) -> str:
         return hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:16]
 
@@ -311,6 +318,19 @@ class BotApprovalsMixin:
         session_id = self._session_id_from_update(update)
         action = str(query.data or "")
         proxy = self._callback_proxy(update)
+
+        if action.startswith("lc:trusted:"):
+            parts = action.split(":")
+            if (
+                len(parts) != 4
+                or parts[2] not in {"approve", "deny"}
+                or not re.fullmatch(r"[0-9a-f]{16}", parts[3])
+            ):
+                await self._reply_logged(proxy, "Unknown or expired trusted-run action.")
+                return
+            decision = "confirm" if parts[2] == "approve" else "discard"
+            await self.cmd_agent(proxy, SimpleNamespace(args=["trusted", decision, parts[3]]))
+            return
 
         if action.startswith("lc:voice:"):
             parts = action.split(":")

@@ -14,18 +14,18 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
+      "branch_points": 94,
+      "line": 41,
+      "lines": 545,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
       "branch_points": 93,
       "line": 245,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
-    },
-    {
-      "branch_points": 86,
-      "line": 39,
-      "lines": 504,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 71,
@@ -63,6 +63,13 @@
       "path": "lightclaw_cli.py"
     },
     {
+      "branch_points": 52,
+      "line": 310,
+      "lines": 192,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 51,
       "line": 318,
       "lines": 187,
@@ -75,13 +82,6 @@
       "lines": 330,
       "name": "cmd_skills",
       "path": "core/bot/commands/skills.py"
-    },
-    {
-      "branch_points": 48,
-      "line": 303,
-      "lines": 179,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 47,
@@ -121,9 +121,9 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 86,
-      "line": 39,
-      "lines": 504,
+      "branch_points": 94,
+      "line": 41,
+      "lines": 545,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -205,18 +205,18 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
+      "branch_points": 52,
+      "line": 310,
+      "lines": 192,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 51,
       "line": 318,
       "lines": 187,
       "name": "_run_multi_acceptance_command",
       "path": "core/bot/commands/agent_acceptance.py"
-    },
-    {
-      "branch_points": 48,
-      "line": 303,
-      "lines": 179,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     }
   ],
   "largest_modules": [
@@ -261,16 +261,16 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 626,
+      "lines": 646,
       "path": "core/bot/approvals.py"
+    },
+    {
+      "lines": 638,
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "lines": 625,
       "path": "core/bot/handlers.py"
-    },
-    {
-      "lines": 595,
-      "path": "core/bot/commands/agent_router.py"
     },
     {
       "lines": 549,
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 20948,
+  "runtime_lines": 21011,
   "schema_version": 1
 }

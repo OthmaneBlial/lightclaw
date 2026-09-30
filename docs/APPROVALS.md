@@ -28,6 +28,24 @@ Destructive language and commands, privileged or network commands, publishing/de
 
 The plan preview shows worker responsibilities, expected outputs, owned paths, and acceptance commands. The risk scan checks the goal, worker roles, responsibilities, expected inputs and outputs, owned paths, and commands. These text checks are heuristic; review the full plan before approving.
 
+### Trusted host runs
+
+`/agent trusted <agent> <task>` shows the agent, complete task, and sandbox-removal
+warning before execution. Long reviews span several messages; approval buttons
+appear only on the final part. Review every part. Control and directional characters
+are replaced with visible marks in both the displayed task and the task sent to the agent.
+
+Approve host run and Discard are bound to that specific request and its requester.
+An older review cannot approve a replacement. Failed or interrupted review delivery
+invalidates that request. A confirmation arriving before delivery completes is rejected.
+Approval consumes the request before execution, so repeated confirmations cannot start
+another run.
+
+For terminal use, copy `/agent trusted confirm <review-id>` or
+`/agent trusted discard <review-id>` from the review. The former bare
+`/agent trusted confirm` command now returns guidance and executes nothing; it cannot
+identify which request was reviewed. Requests still expire after 90 seconds.
+
 ## Voice goals
 
 Voice transcription is limited to 20 MB and six requests per Telegram user per minute. Oversized declared files are rejected before download; any oversized downloaded data is discarded. Captions appear beside the transcription before approval, and both are part of the approved request. A request too long for one Telegram review message is rejected without creating a pending approval. A new valid voice request invalidates an older pending approval, and late results from older requests are discarded. Accepted input is displayed as “not executed” and retained in memory only as a short-lived pending action. Pending plans, voice approvals, and trusted-run confirmations carry wall-clock and monotonic deadlines; whichever is reached first expires them. Monotonic time prevents clock rollback from extending them, while wall time makes sleep consume their lifetime. Nothing enters the normal agent loop until the user taps Use transcription. Discard and expiry execute nothing.

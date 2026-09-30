@@ -117,7 +117,7 @@ class DelegationAgentsMixin:
             "<code>/agent run &lt;agent&gt; &lt;task&gt;</code> - one-shot with a specific agent\n"
             "<code>/agent observe &lt;agent&gt; &lt;task&gt;</code> - read-only one-shot\n"
             "<code>/agent trusted &lt;agent&gt; &lt;task&gt;</code> - request one unsandboxed run\n"
-            "<code>/agent trusted confirm</code> - confirm the pending trusted run\n"
+            "<code>/agent trusted confirm|discard &lt;review-id&gt;</code> - control the reviewed host run\n"
             "<code>/agent multi &lt;goal&gt;</code> - auto-plan multi-agent run\n"
             "<code>/agent multi @claude @codex &lt;goal&gt;</code> - prefer specific agents\n"
             "<code>/agent multi --agent &lt;label=agent&gt; [--agent ...] &lt;goal&gt;</code> - explicit worker roster\n"

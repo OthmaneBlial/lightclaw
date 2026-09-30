@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import re
+import secrets
 import time
 
 from telegram import Update
@@ -332,7 +334,7 @@ class CommandsAgentRouterMixin:
 
         if sub in {"observe", "trusted"}:
             profile = "observe" if sub == "observe" else "trusted-command"
-            if sub == "trusted" and len(args) >= 2 and args[1].lower() == "confirm":
+            if sub == "trusted" and len(args) >= 2 and args[1].lower() in {"confirm", "discard"}:
                 pending = self._pending_trusted_agent_run_by_session.get(session_id)
                 if not pending or self._pending_confirmation_expired(pending):
                     self._pending_trusted_agent_run_by_session.pop(session_id, None)
@@ -349,7 +351,22 @@ class CommandsAgentRouterMixin:
                         "Only the Telegram user who requested this trusted run can confirm it.",
                     )
                     return
+                if (
+                    len(args) != 3
+                    or not re.fullmatch(r"[0-9a-f]{16}", args[2])
+                    or not secrets.compare_digest(str(pending.get("approval_id") or ""), args[2])
+                    or not pending.get("reviewed")
+                ):
+                    await self._reply_logged(
+                        update,
+                        "Review the latest complete request, then use its Approve host run "
+                        "or Discard button, or /agent trusted confirm <review-id>.",
+                    )
+                    return
                 self._pending_trusted_agent_run_by_session.pop(session_id, None)
+                if args[1].lower() == "discard":
+                    await self._reply_logged(update, "Discarded trusted run. Nothing was executed.")
+                    return
                 agent = str(pending.get("agent") or "")
                 task = str(pending.get("task") or "")
                 await self._execute_one_shot_delegation(
@@ -379,22 +396,48 @@ class CommandsAgentRouterMixin:
 
             if sub == "trusted":
                 now = time.time()
-                self._pending_trusted_agent_run_by_session[session_id] = {
+                task = self._visible_review_text(task)
+                approval_id = secrets.token_hex(8)
+                pending = {
                     "user_id": update.effective_user.id,
+                    "approval_id": approval_id,
+                    "reviewed": False,
                     "agent": agent,
                     "task": task,
                     "expires_at": now + 90,
                     "expires_monotonic": time.monotonic() + 90,
                 }
-                await self._reply_logged(
-                    update,
+                self._pending_trusted_agent_run_by_session[session_id] = pending
+                preview = (
                     "⚠️ <b>Trusted host execution requested.</b>\n"
                     "This disables the coding agent sandbox for one run and may affect "
                     "files or processes outside the task workspace.\n\n"
-                    "The requesting Telegram user must confirm within 90 seconds with "
-                    "<code>/agent trusted confirm</code>.",
-                    parse_mode=ParseMode.HTML,
+                    f"<b>Agent:</b> <code>{_escape_html(agent)}</code>\n"
+                    f"<b>Task:</b>\n{_escape_html(task)}\n\n"
+                    "Only the requester can approve or discard within 90 seconds. "
+                    "Review every part before approving.\n"
+                    f"<code>/agent trusted confirm {approval_id}</code>\n"
+                    f"<code>/agent trusted discard {approval_id}</code>"
                 )
+                chunker = _TelegramHTMLChunker(max_len=3000)
+                chunker.feed(preview)
+                chunks = chunker.finish()
+                try:
+                    for index, chunk in enumerate(chunks):
+                        await self._reply_logged(
+                            update,
+                            chunk,
+                            parse_mode=ParseMode.HTML,
+                            reply_markup=(
+                                self._inline_trusted_keyboard(approval_id)
+                                if index == len(chunks) - 1 else None
+                            ),
+                        )
+                except BaseException:
+                    if self._pending_trusted_agent_run_by_session.get(session_id) is pending:
+                        self._pending_trusted_agent_run_by_session.pop(session_id, None)
+                    raise
+                pending["reviewed"] = True
                 return
 
             await self._execute_one_shot_delegation(
