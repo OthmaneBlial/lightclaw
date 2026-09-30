@@ -711,8 +711,10 @@ class JobStore:
         try:
             os.kill(pid, 0)
             return True
-        except OSError:
+        except ProcessLookupError:
             return False
+        except OSError:
+            return True
 
     @staticmethod
     def _worker_process_alive(pid: int | None, start_token: str | None) -> bool:

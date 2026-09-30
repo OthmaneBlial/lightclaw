@@ -508,6 +508,30 @@ def test_recovery_detects_reused_worker_pid(tmp_path):
     store.close()
 
 
+@pytest.mark.parametrize("probe_error", [PermissionError("probe denied"), OSError("probe failed")])
+def test_failed_worker_probe_keeps_live_workspace_locked(tmp_path, monkeypatch, probe_error):
+    database = tmp_path / "jobs.db"
+    workspace = tmp_path / "repo"
+    store = JobStore(database)
+    active = _create(store, workspace)
+    store.claim_next(workspace=workspace, worker_pid=os.getpid())
+    queued = _create(store, workspace)
+
+    def refuse_probe(pid, sig):
+        assert pid == os.getpid() and sig == 0
+        raise probe_error
+
+    monkeypatch.setattr("core.jobs.os.kill", refuse_probe)
+    try:
+        assert store.recover_stalled() == []
+        assert store.get_job(active["run_id"])["status"] == "running"
+        assert store.claim_next(workspace=workspace) is None
+        assert store.get_job(queued["run_id"])["status"] == "queued"
+        assert inspect_job_database(database)["stalled_run_ids"] == []
+    finally:
+        store.close()
+
+
 def test_legacy_job_database_migrates_worker_identity_column(tmp_path):
     database = tmp_path / "jobs.db"
     now = time.time()
