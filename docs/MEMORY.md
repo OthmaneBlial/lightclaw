@@ -72,7 +72,7 @@ lightclaw memory clear
 lightclaw memory prune
 ```
 
-After checking the matched IDs or count, add `--apply`. A record ID outside the selected user/workspace scope is never deleted. Telegram `/clear` removes only the current bound session; `/wipe_memory` still requires its separate time-bounded confirmation and removes all local memory.
+After checking the matched IDs or count, add `--apply`. A record ID outside the selected user/workspace scope is never deleted. Telegram `/clear` removes only the current bound session and revokes its pending actions. Confirmed `/wipe_memory` removes all local memory and pending actions across chats; already-active runs continue.
 
 ## Optional embeddings
 
