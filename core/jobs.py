@@ -421,17 +421,12 @@ class JobStore:
                     clause += " AND workspace = ?"
                     params.append(Path(workspace).expanduser().resolve().as_posix())
                 row = self.db.execute(
-                    f"SELECT run_id, workspace FROM jobs WHERE {clause} ORDER BY priority DESC, created_at ASC LIMIT 1",
+                    f"SELECT run_id FROM jobs WHERE {clause} AND workspace NOT IN ("
+                    "SELECT workspace FROM jobs WHERE status IN ('running', 'cancel_requested', 'stalled')"
+                    ") ORDER BY priority DESC, created_at ASC LIMIT 1",
                     params,
                 ).fetchone()
                 if row is None or (run_id is not None and row["run_id"] != run_id):
-                    self.db.commit()
-                    return None
-                active = self.db.execute(
-                    "SELECT run_id FROM jobs WHERE workspace = ? AND status IN ('running', 'cancel_requested', 'stalled')",
-                    (row["workspace"],),
-                ).fetchone()
-                if active is not None:
                     self.db.commit()
                     return None
                 now = time.time()

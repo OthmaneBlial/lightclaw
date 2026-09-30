@@ -7,7 +7,7 @@ LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in
 - One run can execute per Telegram conversation at a time; separate conversations remain concurrent.
 - A SQLite partial unique index permits only one `running` or `cancel_requested` writer for a resolved workspace.
 - Stalled jobs also block queued work in their workspace until an operator cancels or resumes them.
-- Queued work is claimed by priority, then creation time.
+- Queued work is claimed by priority, then creation time, among unlocked workspaces. A blocked workspace cannot stall the global queue for other workspaces.
 - Agent launch requests claim only their own run when it reaches the queue head. An older queued run remains queued rather than being marked running without an executor.
 - Every lane declares `idempotent` and `resumable`; unsafe lanes are explicitly non-resumable.
 - Parallel lanes with overlapping owned path trees are rejected before execution. An overlap is allowed only when the DAG orders those lanes sequentially.

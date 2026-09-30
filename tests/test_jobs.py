@@ -349,6 +349,33 @@ def test_priority_queue_and_one_active_writer_per_workspace(tmp_path):
     store.close()
 
 
+@pytest.mark.parametrize("blocking_status", ["running", "cancel_requested", "stalled"])
+def test_global_queue_skips_blocked_workspaces(tmp_path, blocking_status):
+    store = JobStore(tmp_path / "jobs.db")
+    blocked_workspace = tmp_path / "busy"
+    active = _create(store, blocked_workspace)
+    store.claim_next(workspace=blocked_workspace, worker_pid=999999)
+    if blocking_status == "cancel_requested":
+        store.request_cancel(active["run_id"])
+    elif blocking_status == "stalled":
+        assert store.recover_stalled() == [active["run_id"]]
+    blocked = _create(store, blocked_workspace, priority=100)
+    ready_workspace = tmp_path / "ready"
+    low = _create(store, ready_workspace, priority=1)
+    high = _create(store, ready_workspace, priority=50)
+    try:
+        claimed = store.claim_next()
+        assert claimed is not None
+        assert claimed["run_id"] == high["run_id"]
+        assert store.claim_next() is None
+        assert store.get_job(active["run_id"])["status"] == blocking_status
+        assert store.get_job(blocked["run_id"])["status"] == "queued"
+        store.finish(high["run_id"], succeeded=True)
+        assert store.claim_next()["run_id"] == low["run_id"]
+    finally:
+        store.close()
+
+
 def test_parallel_owned_path_overlap_is_rejected_but_sequential_overlap_is_allowed(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     with pytest.raises(JobConflictError, match="parallel lanes overlap"):
