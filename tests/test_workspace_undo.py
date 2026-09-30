@@ -109,6 +109,13 @@ def test_workspace_root_refuses_filesystem_root_and_symlink(tmp_path: Path):
     with pytest.raises(WorkspaceSafetyError, match="filesystem root"):
         validate_workspace_root(Path(Path.cwd().anchor))
 
+    missing_target = tmp_path / "missing-target"
+    broken_link = tmp_path / "broken-link"
+    broken_link.symlink_to(missing_target, target_is_directory=True)
+    with pytest.raises(WorkspaceSafetyError, match="must not be a symlink"):
+        validate_workspace_root(broken_link)
+    assert not missing_target.exists()
+
     actual = tmp_path / "actual"
     actual.mkdir()
     linked = tmp_path / "linked"

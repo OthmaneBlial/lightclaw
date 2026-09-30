@@ -45,7 +45,7 @@ def _atomic_private_json(path: Path, payload: dict[str, object]) -> None:
 def validate_workspace_root(raw_root: str | Path) -> Path:
     """Resolve a workspace root while rejecting a symlink as the configured root."""
     requested = Path(raw_root).expanduser()
-    if requested.exists() and requested.is_symlink():
+    if requested.is_symlink():
         raise WorkspaceSafetyError("configured workspace root must not be a symlink")
     root = requested.resolve()
     if root == Path(root.anchor):
