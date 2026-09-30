@@ -36,7 +36,7 @@
     },
     {
       "branch_points": 61,
-      "line": 231,
+      "line": 232,
       "lines": 348,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
@@ -143,7 +143,7 @@
     },
     {
       "branch_points": 61,
-      "line": 231,
+      "line": 232,
       "lines": 348,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
@@ -265,7 +265,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 580,
+      "lines": 581,
       "path": "core/bot/handlers.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19831,
+  "runtime_lines": 19841,
   "schema_version": 1
 }

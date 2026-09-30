@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import secrets
 import time
+import traceback
 from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -191,6 +192,9 @@ class BotMessagingMixin:
     async def on_error(self, update: object, context: ContextTypes.DEFAULT_TYPE):
         """Handle Telegram framework errors without noisy unstructured tracebacks."""
         err = context.error
+        config = getattr(self, "config", None)
+        known_values = vars(config) if config is not None else None
+        error_text = redact_text(str(err), known_values)
         session_id = "unknown"
         if isinstance(update, Update):
             session_id = self._session_id_from_update(update)
@@ -209,10 +213,15 @@ class BotMessagingMixin:
             log.warning(f"[{session_id}] Telegram rate limit: retry after {err.retry_after}s")
             return
         if isinstance(err, (TimedOut, NetworkError)):
-            log.warning(f"[{session_id}] Telegram network issue: {err}")
+            log.warning("[%s] Telegram network issue: %s", session_id, error_text)
             return
 
-        log.exception(f"[{session_id}] Unhandled Telegram error", exc_info=err)
+        trace = "".join(traceback.format_exception(type(err), err, err.__traceback__))
+        log.error(
+            "[%s] Unhandled Telegram error:\n%s",
+            session_id,
+            redact_text(trace, known_values),
+        )
 
     async def _try_send(self, send_fn, text: str) -> bool:
         """Use plain text only when Telegram rejects the HTML payload."""

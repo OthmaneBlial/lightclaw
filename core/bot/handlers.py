@@ -17,6 +17,7 @@ from skills import SkillError
 from ..logging_setup import log
 from ..markdown import _escape_html
 from ..personality import build_system_prompt
+from ..security import redact_text
 from ..voice import MAX_VOICE_FILE_BYTES, transcribe_voice
 
 VOICE_UNAVAILABLE = "Voice unavailable; nothing ran. Set GROQ_API_KEY or send text."
@@ -134,7 +135,7 @@ class BotHandlersMixin:
             if voice_requests.get(session_id) != request_id:
                 return
             voice_requests.pop(session_id, None)
-            log.error(f"Failed to download voice: {e}")
+            log.error("Failed to download voice: %s", redact_text(str(e), vars(self.config)))
             await self._reply_logged(update, "⚠️ Couldn't download voice message.")
             return
 

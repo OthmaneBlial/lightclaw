@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from html.parser import HTMLParser
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -33,6 +34,20 @@ async def test_escaped_content_is_not_truncated_after_html_conversion():
     html_chunk = placeholder.edit_text.await_args.args[0]
     assert len(html_chunk) > 4096
     assert html_chunk == "&lt;" * 1500
+
+
+@pytest.mark.asyncio
+async def test_network_error_log_redacts_telegram_bot_token(caplog):
+    token = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(telegram_bot_token=token)
+    caplog.set_level(logging.WARNING, logger="lightclaw")
+
+    await bot.on_error(object(), SimpleNamespace(error=NetworkError(f"request failed for {token}")))
+
+    assert token not in caplog.text
+    assert "request failed" in caplog.text
+    assert "[REDACTED]" in caplog.text
 
 
 @pytest.mark.asyncio

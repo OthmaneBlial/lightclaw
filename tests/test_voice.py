@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from telegram.error import NetworkError
 
 from core.bot import LightClawBot
 from core.voice import transcribe_voice
@@ -171,3 +172,31 @@ async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_ou
 
     assert bot._pending_voice_goal_by_session["456"]["transcription"] == "latest request"
     bot._reply_logged.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_voice_download_error_log_redacts_telegram_bot_token(caplog):
+    token = "123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture", telegram_bot_token=token)
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "456"
+    bot._pending_voice_goal_by_session = {}
+    bot._reply_logged = AsyncMock()
+    voice = SimpleNamespace(
+        file_size=None,
+        get_file=AsyncMock(side_effect=NetworkError(f"request failed for {token}")),
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=voice),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+    caplog.set_level(logging.ERROR, logger="lightclaw")
+
+    await bot.handle_voice(update, context)
+
+    assert token not in caplog.text
+    assert "request failed" in caplog.text
+    assert "[REDACTED]" in caplog.text
