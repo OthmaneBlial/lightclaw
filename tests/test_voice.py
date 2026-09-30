@@ -53,13 +53,18 @@ async def test_successful_transcription_uses_expected_request(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_non_200_response_returns_none_without_parsing(monkeypatch):
-    response = SimpleNamespace(status_code=401, json=Mock(side_effect=AssertionError))
+async def test_non_200_response_logs_status_and_returns_none_without_parsing(
+    monkeypatch, caplog
+):
+    response = SimpleNamespace(status_code=429, json=Mock(side_effect=AssertionError))
     client, _ = _mock_client(monkeypatch, response=response)
+    caplog.set_level(logging.WARNING, logger="lightclaw")
 
     assert await transcribe_voice(b"audio", FAKE_KEY) is None
     response.json.assert_not_called()
     client.post.assert_awaited_once()
+    assert "HTTP 429" in caplog.text
+    assert FAKE_KEY not in caplog.text
 
 
 @pytest.mark.asyncio

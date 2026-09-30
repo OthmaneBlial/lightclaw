@@ -649,6 +649,34 @@ async def test_voice_without_groq_key_is_rejected_before_download():
 
 
 @pytest.mark.asyncio
+async def test_transcription_failure_suggests_retry_not_missing_key(monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
+    bot._reply_logged = AsyncMock()
+    monkeypatch.setattr("core.bot.handlers.transcribe_voice", AsyncMock(return_value=None))
+    voice_file = SimpleNamespace(
+        download_as_bytearray=AsyncMock(return_value=bytearray(b"audio"))
+    )
+    voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=voice, caption=""),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+
+    await bot.handle_voice(update, context)
+
+    message = bot._reply_logged.await_args.args[1].lower()
+    assert "failed" in message
+    assert "retry" in message
+    assert "groq_api_key" not in message
+
+
+@pytest.mark.asyncio
 async def test_high_risk_callback_requires_ordered_second_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True

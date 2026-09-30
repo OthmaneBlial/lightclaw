@@ -21,6 +21,7 @@ from ..security import redact_text
 from ..voice import MAX_VOICE_FILE_BYTES, transcribe_voice
 
 VOICE_UNAVAILABLE = "Voice unavailable; nothing ran. Set GROQ_API_KEY or send text."
+VOICE_TRANSCRIPTION_FAILED = "Voice transcription failed; nothing ran. Retry or send text."
 VOICE_TOO_LARGE = "Voice message exceeds the 20 MB transcription limit; send a shorter recording."
 
 
@@ -188,7 +189,7 @@ class BotHandlersMixin:
                 reply_markup=self._inline_voice_keyboard(approval_id),
             )
             return
-        await self._reply_logged(update, VOICE_UNAVAILABLE)
+        await self._reply_logged(update, VOICE_TRANSCRIPTION_FAILED)
 
     # ── Photo Handler ─────────────────────────────────────────
 

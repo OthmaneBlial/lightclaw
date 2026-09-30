@@ -27,6 +27,9 @@ async def transcribe_voice(audio_bytes: bytes, groq_api_key: str) -> str | None:
                 payload = response.json()
                 text = payload.get("text") if isinstance(payload, dict) else None
                 return text if isinstance(text, str) else None
+            log.warning(
+                "Voice transcription provider returned HTTP %s", response.status_code
+            )
     except ImportError:
         log.warning("httpx not installed — voice transcription unavailable. pip install httpx")
     except Exception as e:
