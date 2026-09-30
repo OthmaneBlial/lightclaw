@@ -98,6 +98,30 @@ async def test_file_write_rejects_parent_swapped_to_symlink_before_write(
     assert not (outside / "file.txt").exists()
 
 
+@pytest.mark.asyncio
+async def test_file_edit_preserves_concurrent_user_change(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "notes.txt"
+    target.write_text("original", encoding="utf-8")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    write = file_ops._write_workspace_text
+
+    def user_edit_then_write(root, relative, content, **kwargs):
+        target.write_text("concurrent user change", encoding="utf-8")
+        return write(root, relative, content, **kwargs)
+
+    monkeypatch.setattr(file_ops, "_write_workspace_text", user_edit_then_write)
+
+    operations, _ = await bot._process_file_blocks(
+        f"```edit:notes.txt\n{_hunk('original', 'model change')}\n```"
+    )
+
+    assert operations[0].action == "error"
+    assert target.read_text(encoding="utf-8") == "concurrent user change"
+
+
 def test_response_compaction_keeps_plain_text_and_removes_markers_and_code():
     response = "[File updated: app.py]\nImplemented the fix.\n\n```python\nprint('hidden')\n```\n\nNext step."
     assert BotFileOpsMixin._compact_response_for_file_ops(response) == (

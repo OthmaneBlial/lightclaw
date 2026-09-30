@@ -28,7 +28,7 @@ Core input processing is serialized per session to preserve message order; separ
 | Authentication, capabilities, process environment | `core/security.py`, `core/bot/delegation/execution.py` | Security regression and threat-boundary note |
 | Telegram command behavior | `core/bot/commands/`, `core/bot/handlers.py` | Authorized and unauthorized handler tests |
 | Plans and worker contracts | `core/bot/delegation/planning.py`, `tasks.py` | Deterministic DAG/fixture test |
-| Jobs, receipts, files, workspaces | `core/jobs.py`, `core/receipts.py`, `core/fs.py`, `core/workspaces.py` | Restart, redaction, symlink-swap, no-overwrite create, or ownership test as applicable |
+| Jobs, receipts, files, workspaces | `core/jobs.py`, `core/receipts.py`, `core/fs.py`, `core/workspaces.py` | Restart, redaction, symlink-swap, stale-write, no-overwrite create, or ownership test as applicable |
 | Memory | `memory.py` | Namespace/retention test and evaluation when retrieval changes |
 | Skills | `skills.py` | Manifest, hash, provenance, and permission test |
 | Provider adapters | `core/llm/` | Recorded fixture plus shared contract test |

@@ -134,7 +134,9 @@ def test_workspace_text_io_rejects_symlinked_parent(tmp_path):
     with pytest.raises(OSError):
         read_text_bounded_at(workspace, "nested/value.txt", 100)
     with pytest.raises(OSError):
-        atomic_write_text_at(workspace, "nested/value.txt", "changed")
+        atomic_write_text_at(
+            workspace, "nested/value.txt", "changed", expected_content=None
+        )
 
     assert (outside / "value.txt").read_text(encoding="utf-8") == "safe"
 
@@ -162,7 +164,9 @@ def test_workspace_create_does_not_replace_file_that_appears_at_commit(tmp_path,
     monkeypatch.setattr("core.fs.os.link", create_user_file_before_link)
 
     with pytest.raises(FileExistsError):
-        atomic_write_text_at(workspace, "new.txt", "model content", create_only=True)
+        atomic_write_text_at(
+            workspace, "new.txt", "model content", expected_content=None
+        )
 
     assert destination.read_text(encoding="utf-8") == "user content"
     assert not list(workspace.glob(".new.txt.*.tmp"))

@@ -15,7 +15,7 @@
     },
     {
       "branch_points": 93,
-      "line": 243,
+      "line": 245,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
@@ -129,7 +129,7 @@
     },
     {
       "branch_points": 93,
-      "line": 243,
+      "line": 245,
       "lines": 459,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
@@ -237,7 +237,7 @@
       "path": "skills.py"
     },
     {
-      "lines": 1017,
+      "lines": 1019,
       "path": "core/bot/file_ops.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19841,
+  "runtime_lines": 19865,
   "schema_version": 1
 }

@@ -133,12 +133,47 @@ def read_text_bounded_at(
     return bytes(raw).decode(encoding)
 
 
+def _workspace_file_snapshot_at(
+    directory_fd: int, name: str, expected_content: str | None, encoding: str
+) -> tuple[int, tuple[int, int, int, int, int] | None]:
+    try:
+        file_fd = os.open(
+            name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd
+        )
+    except FileNotFoundError:
+        if expected_content is None:
+            return 0o600, None
+        raise OSError(errno.EAGAIN, "workspace file changed since it was read") from None
+
+    try:
+        current = os.fstat(file_fd)
+        if not stat.S_ISREG(current.st_mode):
+            raise OSError(errno.EINVAL, "workspace target is not a regular file")
+        if expected_content is None:
+            raise FileExistsError(errno.EEXIST, "workspace file appeared after it was read")
+        expected_bytes = expected_content.encode(encoding)
+        with os.fdopen(file_fd, "rb") as handle:
+            file_fd = None
+            if handle.read(len(expected_bytes) + 1) != expected_bytes:
+                raise OSError(errno.EAGAIN, "workspace file changed since it was read")
+        return current.st_mode & 0o777, (
+            current.st_dev,
+            current.st_ino,
+            current.st_size,
+            current.st_mtime_ns,
+            current.st_mode & 0o777,
+        )
+    finally:
+        if file_fd is not None:
+            os.close(file_fd)
+
+
 def atomic_write_text_at(
     root: str | Path,
     relative: str | Path,
     content: str,
     *,
-    create_only: bool = False,
+    expected_content: str | None,
     encoding: str = "utf-8",
 ) -> None:
     """Atomically write beneath a workspace using symlink-safe directory handles."""
@@ -148,18 +183,9 @@ def atomic_write_text_at(
     temp_name: str | None = None
     file_fd: int | None = None
     try:
-        try:
-            current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-        except FileNotFoundError:
-            mode = 0o600
-        else:
-            if create_only:
-                raise FileExistsError(errno.EEXIST, "workspace file appeared before creation")
-            if stat.S_ISLNK(current.st_mode):
-                raise OSError(errno.ELOOP, "refusing to replace a symlink")
-            if not stat.S_ISREG(current.st_mode):
-                raise OSError(errno.EINVAL, "workspace target is not a regular file")
-            mode = current.st_mode & 0o777
+        mode, initial_snapshot = _workspace_file_snapshot_at(
+            directory_fd, name, expected_content, encoding
+        )
 
         temp_name = f".{name}.{secrets.token_hex(8)}.tmp"
         file_fd = os.open(
@@ -175,7 +201,13 @@ def atomic_write_text_at(
             os.fchmod(handle.fileno(), mode)
             os.fsync(handle.fileno())
 
-        if create_only:
+        current_mode, current_snapshot = _workspace_file_snapshot_at(
+            directory_fd, name, expected_content, encoding
+        )
+        if current_snapshot != initial_snapshot or current_mode != mode:
+            raise OSError(errno.EAGAIN, "workspace file changed while the update was prepared")
+
+        if expected_content is None:
             os.link(
                 temp_name,
                 name,
@@ -185,16 +217,6 @@ def atomic_write_text_at(
             )
             os.unlink(temp_name, dir_fd=directory_fd)
         else:
-            try:
-                current = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
-            except FileNotFoundError:
-                pass
-            else:
-                if stat.S_ISLNK(current.st_mode):
-                    raise OSError(errno.ELOOP, "refusing to replace a symlink")
-                if not stat.S_ISREG(current.st_mode):
-                    raise OSError(errno.EINVAL, "workspace target is not a regular file")
-
             os.replace(
                 temp_name,
                 name,
