@@ -70,7 +70,8 @@ def _check_artifact_git_metadata(root_fd: int) -> None:
 
 def _git(workspace: Path, *args: str, timeout: int = 30, trusted_repository: bool = False) -> subprocess.CompletedProcess[str]:
     try:
-        with directory_command_at(workspace, (), "git", "--git-dir=.git", "--work-tree=.", "-C", ".", *args) as (command, pass_fds):
+        git_options = () if trusted_repository else ("-c", f"core.hooksPath={os.devnull}")
+        with directory_command_at(workspace, (), "git", *git_options, "--git-dir=.git", "--work-tree=.", "-C", ".", *args) as (command, pass_fds):
             if not trusted_repository:
                 try:
                     _check_artifact_git_metadata(pass_fds[0])

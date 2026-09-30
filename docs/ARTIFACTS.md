@@ -14,8 +14,12 @@ redirect inside a task's own `.git` directory are refused. Linked worktrees reta
 the referenced workspace directory must match the opened task directory. Absolute and relative
 worktree pointers are supported. The explicitly selected source repository for
 `create_isolated_worktree` remains trusted, including repositories with separate Git metadata.
-This check precedes native Git execution; it cannot prevent another host process from rewriting
-metadata after the final check, and it does not sandbox repository hooks or filters.
+Task artifact commands disable Git hooks using a per-command
+[`core.hooksPath` override](https://git-scm.com/docs/git-config), so checkpointing, acceptance,
+and publication do not execute scripts supplied in task metadata or inherited hook paths.
+Hook files and repository configuration are preserved. The explicitly selected source repository
+keeps its normal hooks when creating an optional worktree. These controls cannot prevent another
+host process from rewriting metadata after the final check and do not sandbox configured filters.
 
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 

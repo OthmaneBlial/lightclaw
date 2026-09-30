@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
 import stat
 import subprocess
 from pathlib import Path
@@ -179,6 +180,32 @@ def test_artifact_decision_handles_malformed_git_pointer(tmp_path, content):
         accept_artifact(tmp_path, "malformed")
     assert (tmp_path / ".git").read_bytes() == content
     assert (tmp_path / "result.txt").read_text() == "preserve result\n"
+
+
+@pytest.mark.parametrize("hook_name", ["pre-commit", "post-commit"])
+@pytest.mark.parametrize("configured_path", [False, True])
+def test_artifact_acceptance_does_not_execute_task_git_hooks(tmp_path, hook_name, configured_path):
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / "result.txt").write_text("checkpoint\n")
+    checkpoint = initialize_artifact_repository(task, "hook-test")
+    hooks = tmp_path / "configured-hooks" if configured_path else task / ".git" / "hooks"
+    hooks.mkdir(exist_ok=True)
+    marker = tmp_path / "outside-marker"
+    hook = hooks / hook_name
+    hook.write_text("#!/bin/sh\nprintf hook-ran > " + shlex.quote(str(marker)) + "\n")
+    hook.chmod(0o700)
+    if configured_path:
+        _git(task, "config", "core.hooksPath", str(hooks))
+    (task / "result.txt").write_text("approved result\n")
+
+    accepted = accept_artifact(task, "hook-test")
+
+    assert not marker.exists()
+    assert accepted["commit"] != checkpoint["base_commit"]
+    assert _git(task, "show", "HEAD:result.txt") == "approved result"
+    assert _git(task, "status", "--porcelain") == ""
+    assert hook.exists()
 
 
 @pytest.mark.parametrize("phase", ["before_open", "launch"])
@@ -1017,10 +1044,16 @@ def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path, layout):
 
     target = tmp_path / "worktree"
     source_head = _git(source, "rev-parse", "HEAD")
+    source_hook_marker = tmp_path / "source-hook-marker"
+    source_git_dir = Path(_git(source, "rev-parse", "--absolute-git-dir"))
+    source_hook = source_git_dir / "hooks" / "post-checkout"
+    source_hook.write_text("#!/bin/sh\nprintf source-hook-ran > " + shlex.quote(str(source_hook_marker)) + "\n")
+    source_hook.chmod(0o700)
     if layout == "relative":
         _git(source, "config", "worktree.useRelativePaths", "true")
     created = create_isolated_worktree(source, target, "real-task")
 
+    assert source_hook_marker.exists()
     assert created["branch"] == "lightclaw/real-task"
     assert _git(source, "branch", "--show-current") == "main"
     assert _git(target, "branch", "--show-current") == "lightclaw/real-task"
