@@ -7,6 +7,7 @@ import json
 import re
 
 from ...markdown import _escape_html
+from ...security import redact_text
 
 
 class DelegationMultiPlanningMixin:
@@ -1171,7 +1172,8 @@ class DelegationMultiPlanningMixin:
             )
             raw_payload = self._extract_json_object(planner_response)
         except Exception as e:
-            warnings.append(f"Planner call failed ({e}); using fallback template.")
+            error_text = redact_text(str(e), vars(self.config))
+            warnings.append(f"Planner call failed ({error_text}); using fallback template.")
             planner_mode = "fallback"
 
         normalized_payload, workers, normalize_warnings, fallback_used = self._normalize_multi_plan_payload(

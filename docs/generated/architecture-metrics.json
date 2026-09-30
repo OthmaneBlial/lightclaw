@@ -43,7 +43,7 @@
     },
     {
       "branch_points": 58,
-      "line": 862,
+      "line": 863,
       "lines": 209,
       "name": "_normalize_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
@@ -192,7 +192,7 @@
     },
     {
       "branch_points": 58,
-      "line": 862,
+      "line": 863,
       "lines": 209,
       "name": "_normalize_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1279,
+      "lines": 1281,
       "path": "core/bot/delegation/planning.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 21034,
+  "runtime_lines": 21036,
   "schema_version": 1
 }

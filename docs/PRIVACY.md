@@ -24,6 +24,9 @@ redacts known environment secrets and recognizable credential patterns before co
 handlers write records. Detection is heuristic. LightClaw rejects a symlink at the configured
 log file path.
 
+Provider errors included in planner fallback notes mask configured credentials
+and recognizable credential patterns before appearing in a Telegram review.
+
 Responses too large for inline Telegram messages, and responses that look like code dumps, are saved under the configured workspace's `.lightclaw-meta/messages/` directory before attachment. LightClaw does not automatically prune these files; delete old `response-*.md` files manually when no longer needed.
 
 During an edit requested in `/mode edit`, LightClaw may send bounded workspace file excerpts to the configured provider for a retry or repair pass. Common credential paths and file contents matching current secret-detection patterns are omitted; detection is heuristic.
