@@ -76,7 +76,8 @@ def test_plan_responsibilities_trigger_second_confirmation():
     assert pending["review"]["second_confirmation_required"] is True
 
 
-def test_plan_expected_outputs_are_visible_and_trigger_second_confirmation():
+@pytest.mark.parametrize(("field", "caption"), [("expected_inputs", "inputs"), ("expected_outputs", "outputs")])
+def test_plan_expected_inputs_and_outputs_are_visible_and_trigger_second_confirmation(field, caption):
     bot = LightClawBot.__new__(LightClawBot)
     pending = bot._decorate_pending_plan(
         {
@@ -87,7 +88,7 @@ def test_plan_expected_outputs_are_visible_and_trigger_second_confirmation():
                         "label": "writer",
                         "role": "documentation",
                         "responsibilities": ["Update API documentation"],
-                        "expected_outputs": ["Publish the production release"],
+                        field: ["Publish the production release"],
                         "owned_paths": ["docs/api.md"],
                     }
                 ]
@@ -103,7 +104,7 @@ def test_plan_expected_outputs_are_visible_and_trigger_second_confirmation():
     )
 
     assert pending["review"]["second_confirmation_required"] is True
-    assert "outputs: Publish the production release" in preview
+    assert f"{caption}: Publish the production release" in preview
 
 
 def test_plan_review_makes_directional_controls_visible_in_paths_and_commands():
@@ -135,6 +136,7 @@ def test_detailed_plan_preview_makes_untrusted_controls_visible(monkeypatch, ter
             "role": "role" + controls,
             "depends_on": ["dependency" + controls],
             "responsibilities": ["responsibility" + controls],
+            "expected_inputs": ["input" + controls],
             "expected_outputs": ["output" + controls],
             "owned_paths": ["path" + controls],
         }]},
@@ -143,7 +145,7 @@ def test_detailed_plan_preview_makes_untrusted_controls_visible(monkeypatch, ter
 
     assert "\u202e" not in rendered and "\x00" not in rendered and "\ud800" not in rendered
     assert "\x1b[31m" not in rendered
-    for field in ("builder", "codex", "role", "dependency", "responsibility", "output", "path", "warning"):
+    for field in ("builder", "codex", "role", "dependency", "responsibility", "input", "output", "path", "warning"):
         assert field + "����[31m" in rendered
     assert "goal &lt;unsafe&gt;����[31m" in rendered
     assert "<b>Worker Contracts:</b>\n" in rendered
@@ -259,6 +261,8 @@ def test_switching_git_branch_does_not_require_destructive_confirmation():
 def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     bot = LightClawBot.__new__(LightClawBot)
     responsibilities = ["Update the API", "Add regression coverage"]
+    expected_inputs = ["API contract & constraints", "Reviewer's handoff <notes>"]
+    expected_outputs = ["Updated API", "Regression test report"]
     owned_paths = ["api/routes.py", "api/models.py", "tests/test_api.py", "docs/api.md"]
 
     rendered = bot._render_multi_plan_preview(
@@ -271,6 +275,8 @@ def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
                     "role": "implementation",
                     "depends_on": [],
                     "responsibilities": responsibilities,
+                    "expected_inputs": expected_inputs,
+                    "expected_outputs": expected_outputs,
                     "owned_paths": owned_paths,
                 }
             ]
@@ -278,10 +284,13 @@ def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     )
 
     assert all(item in rendered for item in responsibilities + owned_paths)
+    assert "inputs: API contract &amp; constraints · Reviewer&#x27;s handoff &lt;notes&gt;" in rendered
+    assert all(item in rendered for item in expected_outputs)
 
 
 @pytest.mark.asyncio
-async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
+@pytest.mark.parametrize("field", ["goal", "expected_inputs"])
+async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk(field):
     bot = LightClawBot.__new__(LightClawBot)
     bot._reply_logged = AsyncMock()
     bot._session_id_from_update = lambda _update: "456"
@@ -290,7 +299,12 @@ async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
     bot._pending_multi_plan_by_session = {
         "456": {"approval_id": approval_id, "review_delivered": False}
     }
-    preview = bot._render_multi_plan_preview("x" * 3900, [], {})
+    review_text = "x" * 3900 + "end-of-scope"
+    preview = bot._render_multi_plan_preview(
+        review_text if field == "goal" else "Review worker inputs",
+        [("builder", "codex")],
+        {"workers": [{"label": "builder", "expected_inputs": [review_text] if field == "expected_inputs" else []}]},
+    )
     preview += "\n\n" + bot._render_plan_review({})
 
     await bot._reply_multi_plan_preview(update, preview, approval_id, False)
@@ -300,6 +314,7 @@ async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
     assert all(len(call.args[1]) < 4096 for call in calls)
     assert all(call.kwargs["reply_markup"] is None for call in calls[:-1])
     assert calls[-1].kwargs["reply_markup"] is not None
+    assert review_text in "".join(bot._strip_html_for_log(call.args[1]) for call in calls)
     assert bot._pending_multi_plan_by_session["456"]["review_delivered"]
 
 

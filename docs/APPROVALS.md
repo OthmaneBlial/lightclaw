@@ -44,7 +44,7 @@ Destructive language and commands, privileged or network commands, publishing/de
 
 The second confirmation becomes available only after its prompt is successfully sent. An initial prompt that is still sending, fails, or is canceled cannot authorize execution; use Approve again to retry delivery.
 
-The plan preview shows worker responsibilities, expected outputs, owned paths, and acceptance commands. The risk scan checks the goal, worker roles, responsibilities, expected inputs and outputs, owned paths, and commands. These text checks are heuristic; review the full plan before approving.
+The plan preview shows worker responsibilities, expected inputs and outputs, owned paths, and acceptance commands. The risk scan checks the goal, worker roles, responsibilities, expected inputs and outputs, owned paths, and commands. These text checks are heuristic; review the full plan before approving.
 
 ### Trusted host runs
 

@@ -1259,14 +1259,15 @@ class DelegationMultiPlanningMixin:
             )
             if first_resp:
                 lines.append(f"  task: {escape(first_resp)}")
-            expected_outputs = contract.get("expected_outputs")
-            output_text = (
-                " · ".join(str(item).strip() for item in expected_outputs if str(item).strip())
-                if isinstance(expected_outputs, list)
-                else ""
-            )
-            if output_text:
-                lines.append(f"  outputs: {escape(output_text)}")
+            for field, caption in (("expected_inputs", "inputs"), ("expected_outputs", "outputs")):
+                values = contract.get(field)
+                text = (
+                    " · ".join(str(item).strip() for item in values if str(item).strip())
+                    if isinstance(values, list)
+                    else ""
+                )
+                if text:
+                    lines.append(f"  {caption}: {escape(text)}")
             if owned_paths:
                 owned_text = ", ".join(owned_paths)
                 lines.append(f"  owns: <code>{escape(owned_text)}</code>")
