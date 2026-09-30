@@ -241,6 +241,30 @@ async def test_pending_plan_execution_refuses_hidden_commands():
 
 
 @pytest.mark.asyncio
+async def test_shared_execution_gate_requires_second_confirmation():
+    bot = LightClawBot.__new__(LightClawBot)
+    pending = {
+        "approval_id": "0123456789abcdef",
+        "review": {
+            "second_confirmation_required": True,
+            "second_confirmation_prompted": False,
+            "second_confirmed": False,
+        },
+    }
+    bot._get_pending_multi_plan = lambda _session: pending
+    bot._reply_logged = AsyncMock()
+    bot._execute_multi_agent_plan = AsyncMock()
+
+    await bot._execute_pending_multi_plan_impl(SimpleNamespace(), "456")
+
+    bot._execute_multi_agent_plan.assert_not_awaited()
+    assert pending["review"]["second_confirmation_prompted"] is True
+    keyboard = bot._reply_logged.await_args.kwargs["reply_markup"]
+    buttons = [button.callback_data for row in keyboard.inline_keyboard for button in row]
+    assert "lc:plan:confirm-risk:0123456789abcdef" in buttons
+
+
+@pytest.mark.asyncio
 async def test_text_confirmation_refuses_hidden_commands():
     bot = LightClawBot.__new__(LightClawBot)
     bot._session_id_from_update = lambda _update: "456"

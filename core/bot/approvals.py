@@ -231,6 +231,19 @@ class BotApprovalsMixin:
             )
         return "\n".join(lines)
 
+    async def _prompt_second_confirmation(self, update, pending: dict[str, object]) -> None:
+        review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
+        review["second_confirmation_prompted"] = True
+        pending["review"] = review
+        await self._reply_logged(
+            update,
+            "⚠️ <b>Second confirmation required.</b> Review the high-risk scope once more.",
+            parse_mode=ParseMode.HTML,
+            reply_markup=self._inline_plan_keyboard(
+                str(pending.get("approval_id") or ""), second_confirmation=True
+            ),
+        )
+
     @staticmethod
     def _callback_proxy(update: Update):
         query = update.callback_query
@@ -337,17 +350,7 @@ class BotApprovalsMixin:
                 await self._reply_logged(proxy, "Approval blocked; edit the plan to expose all commands.")
                 return
             if decision == "approve" and review.get("second_confirmation_required"):
-                review["second_confirmation_prompted"] = True
-                pending["review"] = review
-                await self._reply_logged(
-                    proxy,
-                    "⚠️ <b>Second confirmation required.</b> Review the high-risk scope once more.",
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=self._inline_plan_keyboard(
-                        callback_id,
-                        second_confirmation=True,
-                    ),
-                )
+                await self._prompt_second_confirmation(proxy, pending)
                 return
             if decision == "confirm-risk":
                 if not review.get("second_confirmation_prompted"):

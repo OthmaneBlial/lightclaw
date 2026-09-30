@@ -82,6 +82,9 @@ class CommandsAgentExecutionMixin:
                 "Approval blocked; edit the plan to expose all commands.",
             )
             return
+        if review.get("second_confirmation_required") and not review.get("second_confirmed"):
+            await self._prompt_second_confirmation(update, pending)
+            return
 
         goal = str(pending.get("goal") or "").strip()
         workers_obj = pending.get("workers")

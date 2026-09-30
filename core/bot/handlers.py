@@ -269,17 +269,7 @@ class BotHandlersMixin:
                     )
                     return
                 if review.get("second_confirmation_required") and not review.get("second_confirmed"):
-                    review["second_confirmation_prompted"] = True
-                    pending_multi["review"] = review
-                    await self._reply_logged(
-                        update,
-                        "⚠️ <b>Second confirmation required.</b> Use the high-risk confirmation button.",
-                        parse_mode=ParseMode.HTML,
-                        reply_markup=self._inline_plan_keyboard(
-                            str(pending_multi["approval_id"]),
-                            second_confirmation=True,
-                        ),
-                    )
+                    await self._prompt_second_confirmation(update, pending_multi)
                     return
                 await self._execute_pending_multi_plan(update, session_id)
                 return

@@ -8,7 +8,7 @@
   "highest_branch_functions": [
     {
       "branch_points": 98,
-      "line": 159,
+      "line": 162,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -37,7 +37,7 @@
     {
       "branch_points": 61,
       "line": 234,
-      "lines": 348,
+      "lines": 338,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -78,8 +78,8 @@
     },
     {
       "branch_points": 48,
-      "line": 255,
-      "lines": 189,
+      "line": 268,
+      "lines": 179,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -115,7 +115,7 @@
   "largest_functions": [
     {
       "branch_points": 98,
-      "line": 159,
+      "line": 162,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -144,7 +144,7 @@
     {
       "branch_points": 61,
       "line": 234,
-      "lines": 348,
+      "lines": 338,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -205,18 +205,18 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "branch_points": 48,
-      "line": 255,
-      "lines": 189,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
-    },
-    {
       "branch_points": 51,
       "line": 318,
       "lines": 187,
       "name": "_run_multi_acceptance_command",
       "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
+      "branch_points": 48,
+      "line": 268,
+      "lines": 179,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
     }
   ],
   "largest_modules": [
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 852,
+      "lines": 855,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -265,11 +265,11 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 583,
+      "lines": 573,
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 554,
+      "lines": 557,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 20243,
+  "runtime_lines": 20239,
   "schema_version": 1
 }
