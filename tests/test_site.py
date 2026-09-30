@@ -101,9 +101,9 @@ def test_readme_and_site_share_the_playful_brand_assets() -> None:
     css = (SITE / "styles.css").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert '<meta name="theme-color" content="#fff8eb"' in html
-    assert "--paper: #fff8eb" in css
-    assert "--coral: #ff6b4e" in css
+    assert '<meta name="theme-color" content="#fff2bd"' in html
+    assert "--paper: #fff2bd" in css
+    assert "--coral: #ff694f" in css
     assert "class=\"top-ribbon\"" in html
     assert "✨" in html and "🧪" in readme
     assert "assets/social-preview.png" in readme

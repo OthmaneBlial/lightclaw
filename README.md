@@ -1,7 +1,7 @@
 # 🐾 LightClaw
 
 <p align="center">
-  <strong>Give your local coding agents a mission from Telegram.<br />Keep the plan, tests, patch, and receipt.</strong>
+  <strong>🐾 Tiny missions for local coding buddies.<br />Approve the plan. Come back to the proof. 🧾</strong>
 </p>
 
 <p align="center">
@@ -27,9 +27,9 @@
 
 ## 🎯 The short version
 
-LightClaw is a self-hosted review desk for **Codex and Claude Code**. Send a goal from your phone, inspect the proposed scope, approve or edit it, then review the actual checks and patch when the work comes back.
+LightClaw is a self-hosted mission desk for **Codex and Claude Code**. Toss a goal over from Telegram, check the plan, approve or tweak it, then come back to real checks, a patch, and a private receipt.
 
-**The human approves the plan. The agent does the typing. The receipt keeps score.** 🧾
+**You hold the approval button. Your local agent does the typing. The receipt keeps score.** 🧾
 
 ## 🗺️ One mission, start to finish
 

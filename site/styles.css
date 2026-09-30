@@ -1,20 +1,20 @@
 :root {
   color-scheme: light;
-  --paper: #fff8eb;
-  --paper-deep: #ffefd0;
-  --ink: #172b3b;
-  --muted: #506374;
-  --line: #c7c9bc;
-  --coral: #ff6b4e;
-  --coral-ink: #b93520;
-  --mint: #75dfbf;
-  --mint-ink: #146451;
-  --blue: #5268e8;
-  --blue-ink: #344ac3;
-  --lemon: #ffe178;
-  --lime: #d4ef72;
-  --pink: #f6a6c7;
-  --white: #fffdf8;
+  --paper: #fff2bd;
+  --paper-deep: #ffd9ed;
+  --ink: #23113b;
+  --muted: #514260;
+  --line: #cdbfdb;
+  --coral: #ff694f;
+  --coral-ink: #a82d29;
+  --mint: #7af4c7;
+  --mint-ink: #08584c;
+  --blue: #52b9ff;
+  --blue-ink: #303dbb;
+  --lemon: #fff355;
+  --lime: #b0f55f;
+  --pink: #f271b3;
+  --white: #fffcf3;
   --display: "Anybody", "Trebuchet MS", sans-serif;
   --body: "Public Sans", "Avenir Next", sans-serif;
   --mono: "DM Mono", "SFMono-Regular", monospace;
@@ -94,6 +94,7 @@ a:hover {
 }
 
 .top-ribbon {
+  position: relative;
   display: flex;
   min-height: 34px;
   align-items: center;
@@ -106,6 +107,14 @@ a:hover {
   font-size: 0.68rem;
   letter-spacing: 0.015em;
   text-align: center;
+}
+
+.top-ribbon::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--coral), var(--lemon), var(--mint), var(--blue), var(--pink));
+  content: "";
 }
 
 .top-ribbon > span {

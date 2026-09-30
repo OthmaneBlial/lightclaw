@@ -22,13 +22,13 @@ or infer adoption from stars, traffic, forks, or private messages.
 
 ## Repository discovery contract
 
-Maintainer-controlled target, reverified on 2026-09-30:
+Maintainer-controlled target, updated on 2026-09-30:
 
 - homepage URL: `https://othmaneblial.github.io/lightclaw/`;
-- repository description: `Review-first Telegram missions for local Codex and Claude agents. Approve scope, then inspect checks, patches, and private receipts.`;
-- topics: `agent-orchestration`, `audit-trail`, `claude-code`, `code-review`, `codex`,
-  `coding-agent`, `developer-tools`, `human-in-the-loop`, `local-first`, `multi-agent`,
-  `python`, `remote-coding`, `self-hosted`, `telegram`, and `telegram-bot`;
+- repository description: `🐾 Phone-sized missions for local Codex and Claude Code. Approve the plan, then inspect tests, patches, and receipts.`;
+- topics: `agent-orchestration`, `ai-agents`, `audit-trail`, `claude-code`, `code-review`,
+  `codex`, `coding-agents`, `developer-tools`, `human-in-the-loop`, `local-first`, `multi-agent`,
+  `python`, `remote-development`, `self-hosted`, and `telegram-bot`;
 - community profile: 100%, backed by the actual README, MIT license, contribution guide,
   Code of Conduct, PR template, structured issue forms, security policy, and support routes;
 - Discussions and private vulnerability reporting: enabled.
