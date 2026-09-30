@@ -90,6 +90,47 @@ def test_local_skill_requires_hash_review_and_stale_approval_is_removed(tmp_path
     assert manager.list_active("chat") == []
 
 
+@pytest.mark.parametrize(
+    "broken_state",
+    [
+        "{broken",
+        '{"active_by_chat":[]}',
+        '{"active_by_chat":{"chat":[1]}}',
+        '{"approved_hashes_by_chat":{"chat":[]}}',
+    ],
+)
+def test_corrupt_skill_state_is_preserved_and_activation_fails_closed(
+    tmp_path, broken_state
+):
+    manager = _manager(tmp_path)
+    record = manager.create_local_skill("Review Helper", "Review evidence")
+    preview = manager.preview_activation(record.skill_id)
+    state_path = tmp_path / "runtime" / "skills_state.json"
+    state_path.write_text(broken_state, encoding="utf-8")
+
+    with pytest.raises(SkillError, match="skills state"):
+        manager.activate("chat", record.skill_id, str(preview["activation_token"]))
+
+    with pytest.raises(SkillError, match="skills state"):
+        manager.remove_skill(record.skill_id)
+
+    assert state_path.read_text(encoding="utf-8") == broken_state
+    assert record.directory.is_dir()
+
+
+def test_remove_active_skill_deactivates_it_before_deleting_files(tmp_path):
+    manager = _manager(tmp_path)
+    record = manager.create_local_skill("Review Helper", "Review evidence")
+    preview = manager.preview_activation(record.skill_id)
+    manager.activate("chat", record.skill_id, str(preview["activation_token"]))
+
+    removed = manager.remove_skill(record.skill_id)
+
+    assert removed.skill_id == record.skill_id
+    assert not record.directory.exists()
+    assert manager.list_active("chat") == []
+
+
 def test_manifest_change_invalidates_existing_approval(tmp_path):
     manager = _manager(tmp_path)
     record = manager.create_local_skill("Manifest Review", "Review permissions")

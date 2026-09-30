@@ -35,9 +35,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 60,
-      "line": 180,
-      "lines": 339,
+      "branch_points": 61,
+      "line": 186,
+      "lines": 348,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -63,18 +63,18 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
+      "branch_points": 49,
+      "line": 105,
+      "lines": 330,
+      "name": "cmd_skills",
+      "path": "core/bot/commands/skills.py"
+    },
+    {
       "branch_points": 48,
       "line": 252,
       "lines": 189,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
-    },
-    {
-      "branch_points": 47,
-      "line": 105,
-      "lines": 314,
-      "name": "cmd_skills",
-      "path": "core/bot/commands/skills.py"
     },
     {
       "branch_points": 47,
@@ -142,9 +142,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 60,
-      "line": 180,
-      "lines": 339,
+      "branch_points": 61,
+      "line": 186,
+      "lines": 348,
       "name": "_process_user_message",
       "path": "core/bot/handlers.py"
     },
@@ -156,9 +156,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 47,
+      "branch_points": 49,
       "line": 105,
-      "lines": 314,
+      "lines": 330,
       "name": "cmd_skills",
       "path": "core/bot/commands/skills.py"
     },
@@ -233,7 +233,7 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "lines": 1181,
+      "lines": 1194,
       "path": "skills.py"
     },
     {
@@ -265,12 +265,12 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 530,
-      "path": "core/bot/delegation/tasks.py"
+      "lines": 535,
+      "path": "core/bot/handlers.py"
     },
     {
-      "lines": 520,
-      "path": "core/bot/handlers.py"
+      "lines": 530,
+      "path": "core/bot/delegation/tasks.py"
     },
     {
       "lines": 514,
@@ -281,6 +281,6 @@
       "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 19261,
+  "runtime_lines": 19311,
   "schema_version": 1
 }

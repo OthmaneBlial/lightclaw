@@ -11,6 +11,8 @@ from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
+from skills import SkillError
+
 from ...fs import FileTooLargeError, read_text_bounded
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
@@ -148,7 +150,11 @@ class CommandsHeartbeatMixin:
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)
         summary = self._get_session_summary(session_id)
-        skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
+        try:
+            skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
+        except SkillError as exc:
+            log.error(f"[{session_id}] Heartbeat skipped: {exc}")
+            return
         system_prompt = build_system_prompt(
             self.config, self.personality, memories_text, summary, skills_text
         )

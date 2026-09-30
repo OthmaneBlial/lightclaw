@@ -123,7 +123,15 @@ class CommandsSkillsMixin:
             sub = "list"
 
         if sub == "list":
-            text = await asyncio.to_thread(self._render_skills_overview, session_id)
+            try:
+                text = await asyncio.to_thread(self._render_skills_overview, session_id)
+            except SkillError as exc:
+                await self._reply_logged(
+                    update,
+                    f"⚠️ {_escape_html(str(exc))}",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
             await self._reply_logged(update, text, parse_mode=ParseMode.HTML)
             return
 
@@ -288,7 +296,15 @@ class CommandsSkillsMixin:
                 )
                 return
 
-            await asyncio.to_thread(self.skills.deactivate, session_id, skill.skill_id)
+            try:
+                await asyncio.to_thread(self.skills.deactivate, session_id, skill.skill_id)
+            except SkillError as exc:
+                await self._reply_logged(
+                    update,
+                    f"⚠️ Deactivation refused: {_escape_html(str(exc))}",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
             await self._reply_logged(
                 update,
                 f"✅ Deactivated <code>{_escape_html(skill.skill_id)}</code> for this chat.",

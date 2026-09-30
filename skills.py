@@ -451,18 +451,30 @@ class SkillManager:
                 default={"active_by_chat": {}, "approved_hashes_by_chat": {}},
                 max_bytes=1024 * 1024,
             )
-            active = data.get("active_by_chat")
-            if not isinstance(active, dict):
-                active = {}
-            approved = data.get("approved_hashes_by_chat")
-            if not isinstance(approved, dict):
-                approved = {}
-            return {
-                "active_by_chat": active,
-                "approved_hashes_by_chat": approved,
-            }
-        except Exception:
-            return {"active_by_chat": {}, "approved_hashes_by_chat": {}}
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise SkillError(
+                "skills state is unreadable or invalid; no changes were made"
+            ) from exc
+
+        active = data.setdefault("active_by_chat", {})
+        approved = data.setdefault("approved_hashes_by_chat", {})
+        if not isinstance(active, dict) or not isinstance(approved, dict):
+            raise SkillError("skills state is invalid; no changes were made")
+        if any(
+            not isinstance(skill_ids, list)
+            or any(not isinstance(skill_id, str) for skill_id in skill_ids)
+            for skill_ids in active.values()
+        ):
+            raise SkillError("skills state is invalid; no changes were made")
+        if any(
+            not isinstance(hashes, dict)
+            or any(
+                not isinstance(content_hash, str) for content_hash in hashes.values()
+            )
+            for hashes in approved.values()
+        ):
+            raise SkillError("skills state is invalid; no changes were made")
+        return data
 
     def _write_state(self, state: dict[str, Any]):
         _atomic_write_json(self.state_path, state)
@@ -986,9 +998,10 @@ class SkillManager:
         if not rec:
             raise SkillError(f"skill not found: {ref}")
 
-        if rec.directory.exists():
-            shutil.rmtree(rec.directory)
-        self._deactivate_everywhere(rec.skill_id)
+        with self._lock:
+            self._deactivate_everywhere(rec.skill_id)
+            if rec.directory.exists():
+                shutil.rmtree(rec.directory)
         return rec
 
     def install_from_hub(self, target: str, version: str | None = None) -> tuple[SkillRecord, bool]:

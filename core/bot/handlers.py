@@ -10,6 +10,8 @@ from telegram import Update
 from telegram.constants import ChatAction, ParseMode
 from telegram.ext import ContextTypes
 
+from skills import SkillError
+
 from ..logging_setup import log
 from ..markdown import _escape_html
 from ..personality import build_system_prompt
@@ -34,8 +36,12 @@ class BotHandlersMixin:
 
         stats = self.memory.stats(session_id=session_id)
         summary_status = "✅" if session_id in self._session_summaries else "—"
-        active_skills = self.skills.active_records(session_id)
         installed_skills = self.skills.list_skills()
+        try:
+            active_skills = self.skills.active_records(session_id)
+            skills_status = f"{len(active_skills)} active / {len(installed_skills)} installed"
+        except SkillError:
+            skills_status = "unavailable; check skills_state.json"
         active_agent = self._agent_mode_by_session.get(session_id, "none")
         file_mode = self._get_file_mode(session_id)
         pending_multi = self._get_pending_multi_plan(session_id)
@@ -62,7 +68,7 @@ class BotHandlersMixin:
             f"<b>Uptime:</b> {hours}h {minutes}m {seconds}s\n"
             f"<b>Memory:</b> {stats['total_interactions']} interactions\n"
             f"<b>Session summary:</b> {summary_status}\n"
-            f"<b>Skills:</b> {len(active_skills)} active / {len(installed_skills)} installed\n"
+            f"<b>Skills:</b> {skills_status}\n"
             f"<b>Delegation:</b> {_escape_html(active_agent)}\n"
             f"<b>File mode:</b> {_escape_html(file_mode)}\n"
             f"<b>Delegation progress interval:</b> {self.config.local_agent_progress_interval_sec}s\n"
@@ -319,7 +325,16 @@ class BotHandlersMixin:
 
         # 4. Get session summary
         summary = self._get_session_summary(session_id)
-        skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
+        try:
+            skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
+        except SkillError:
+            await self._send_response(
+                placeholder,
+                update,
+                "⚠️ Skills state is unreadable or invalid. This request was not sent to an agent; "
+                "repair skills_state.json, then retry.",
+            )
+            return
         file_mode = self._get_file_mode(session_id)
 
         # 5. Build system prompt with personality

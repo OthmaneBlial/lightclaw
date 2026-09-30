@@ -64,6 +64,8 @@ Default paths:
 
 Configuration files are written with mode `0600`. An existing config is kept unless reset is explicitly requested; reset creates a timestamped private backup first. A legacy `~/.env` can be copied once for migration and is never deleted automatically.
 
+Malformed or unreadable skill state is preserved; LightClaw reports the problem and refuses skill changes until the JSON is repaired.
+
 At least one numeric `TELEGRAM_ALLOWED_USERS` ID is required. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and should still be isolated from sensitive host data.
 
 With an allowlist, LightClaw accepts commands and callbacks only in private chats. Group chats share conversation and approval state across members, so they are available only when the bot is intentionally public with `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and no user allowlist.
