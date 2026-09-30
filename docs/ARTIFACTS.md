@@ -36,22 +36,24 @@ lightclaw artifact apply <run-id> \
   --paths service.py tests/test_service.py
 ```
 
-Apply only after reviewing the JSON plan:
+Review the JSON plan and copy its `plan_sha256` value into the apply command:
 
 ```bash
 lightclaw artifact apply <run-id> \
   --target /path/to/your/repository \
   --paths service.py tests/test_service.py \
-  --apply
+  --apply \
+  --confirm-plan <plan_sha256>
 ```
 
 LightClaw rejects absolute paths, traversal, symlink sources, and symlinks anywhere in selected target
 or backup paths. During `--apply`, it opens selected files without following symlinks, copies relative
-to opened workspace directories, and verifies copied bytes against the source hash calculated
-during that apply operation's preflight. A concurrent source change aborts that file before
-replacement. Existing selected files are copied to private `.lightclaw-backups/<run-id>/` directories
-first; an existing
-backup is never overwritten. Unselected and unrelated files are never touched.
+to opened workspace directories, and requires the confirmed plan hash to match a fresh preview of
+the source and target hashes, paths, permissions, and operations. A stale plan is refused. A
+concurrent source change or target change while creating its backup aborts before replacement.
+New files are created without overwriting a target that appeared concurrently. Existing selected
+files are copied to private `.lightclaw-backups/<run-id>/` directories first; an existing backup is
+never overwritten. Unselected and unrelated files are never touched.
 
 ## Optional pull request
 

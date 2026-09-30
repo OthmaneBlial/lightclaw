@@ -381,6 +381,7 @@ def apply_selected_files(
     *,
     run_id: str,
     apply: bool = False,
+    confirm_plan: str | None = None,
 ) -> dict[str, object]:
     """Preview or atomically copy selected files, backing up only overwritten targets."""
     source_path = Path(source_workspace).expanduser()
@@ -401,13 +402,14 @@ def apply_selected_files(
     if "/" in backup_id:
         raise ArtifactError("run id must be a single safe path component")
     operations: list[dict[str, object]] = []
-    planned: list[tuple[str, Path, Path | None, str]] = []
+    planned: list[tuple[str, Path, Path | None, str, int, str | None, int | None]] = []
     for relative in paths:
         if PurePosixPath(relative).parts[0] == ".lightclaw-backups":
             raise ArtifactError("selected path uses the reserved backup directory")
         destination = target / relative
         _validate_workspace_path(source, relative, "selected source")
-        source_fd, _source_stat = _open_workspace_file(source, relative, "selected source")
+        source_fd, source_stat = _open_workspace_file(source, relative, "selected source")
+        source_mode = stat.S_IMODE(source_stat.st_mode)
         try:
             source_sha256 = _hash_fd(source_fd)
         finally:
@@ -417,7 +419,15 @@ def apply_selected_files(
         if destination_exists and not destination.is_file():
             raise ArtifactError(f"selected target is not a regular file: {relative}")
         backup: Path | None = None
+        target_sha256: str | None = None
+        target_mode: int | None = None
         if destination_exists:
+            target_fd, target_stat = _open_workspace_file(target, relative, "target path")
+            try:
+                target_sha256 = _hash_fd(target_fd)
+                target_mode = stat.S_IMODE(target_stat.st_mode)
+            finally:
+                os.close(target_fd)
             backup_relative = f".lightclaw-backups/{backup_id}/{relative}"
             _validate_workspace_path(target, backup_relative, "backup path")
             backup = target / backup_relative
@@ -427,13 +437,43 @@ def apply_selected_files(
             "path": relative,
             "change": "overwrite" if destination_exists else "create",
             "source_sha256": source_sha256,
+            "source_mode": f"{source_mode:04o}",
+            "target_sha256": target_sha256,
+            "target_mode": f"{target_mode:04o}" if target_mode is not None else None,
             "backup": backup.as_posix() if backup else None,
         }
         operations.append(operation)
-        planned.append((relative, destination, backup, source_sha256))
+        planned.append(
+            (relative, destination, backup, source_sha256, source_mode, target_sha256, target_mode)
+        )
+
+    plan_sha256 = hashlib.sha256(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "source": source.as_posix(),
+                "target": target.as_posix(),
+                "operations": operations,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    if apply and confirm_plan != plan_sha256:
+        raise ArtifactError(
+            "plan changed or confirmation is missing; preview again and confirm plan_sha256"
+        )
 
     if apply:
-        for relative, _destination, backup, _source_sha256 in planned:
+        for (
+            relative,
+            _destination,
+            backup,
+            _source_sha256,
+            _source_mode,
+            target_sha256,
+            target_mode,
+        ) in planned:
             if backup is None:
                 continue
             backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
@@ -448,9 +488,15 @@ def apply_selected_files(
             temp_name: str | None = None
             try:
                 target_fd, target_stat = _open_workspace_file(target, relative, "target path")
-                temp_name, _ = _copy_to_temp(
+                if stat.S_IMODE(target_stat.st_mode) != target_mode:
+                    raise ArtifactError(
+                        f"selected target permissions changed during apply: {relative}"
+                    )
+                temp_name, backup_sha256 = _copy_to_temp(
                     target_fd, backup_parent_fd, backup_parts[-1], target_stat
                 )
+                if backup_sha256 != target_sha256:
+                    raise ArtifactError(f"selected target changed during apply: {relative}")
                 try:
                     os.link(
                         temp_name,
@@ -470,7 +516,15 @@ def apply_selected_files(
                     _unlink_at(backup_parent_fd, temp_name)
                 os.close(backup_parent_fd)
 
-        for relative, _destination, _backup, expected_sha256 in planned:
+        for (
+            relative,
+            _destination,
+            _backup,
+            expected_sha256,
+            expected_mode,
+            target_sha256,
+            _target_mode,
+        ) in planned:
             source_fd, source_stat = _open_workspace_file(source, relative, "selected source")
             parent_fd: int | None = None
             temp_name: str | None = None
@@ -479,12 +533,31 @@ def apply_selected_files(
                 parent_fd = _open_workspace_directory(
                     target, parts[:-1], label="target path", create=True
                 )
+                if stat.S_IMODE(source_stat.st_mode) != expected_mode:
+                    raise ArtifactError(
+                        f"selected source permissions changed during apply: {relative}"
+                    )
                 temp_name, copied_sha256 = _copy_to_temp(
                     source_fd, parent_fd, parts[-1], source_stat
                 )
                 if copied_sha256 != expected_sha256:
                     raise ArtifactError(f"selected source changed during apply: {relative}")
-                os.rename(temp_name, parts[-1], src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                if target_sha256 is None:
+                    try:
+                        os.link(
+                            temp_name,
+                            parts[-1],
+                            src_dir_fd=parent_fd,
+                            dst_dir_fd=parent_fd,
+                            follow_symlinks=False,
+                        )
+                    except FileExistsError as exc:
+                        raise ArtifactError(
+                            f"selected target appeared during apply: {relative}"
+                        ) from exc
+                    _unlink_at(parent_fd, temp_name)
+                else:
+                    os.rename(temp_name, parts[-1], src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
                 temp_name = None
             finally:
                 os.close(source_fd)
@@ -497,6 +570,7 @@ def apply_selected_files(
         "source": source.as_posix(),
         "target": target.as_posix(),
         "applied": bool(apply),
+        "plan_sha256": plan_sha256,
         "operations": operations,
         "unrelated_paths_preserved": True,
     }

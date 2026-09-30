@@ -165,6 +165,10 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
         run_id="run-apply",
     )
     assert preview["applied"] is False
+    assert preview["operations"][0]["target_sha256"] == hashlib.sha256(b"old\n").hexdigest()
+    assert preview["operations"][0]["source_mode"] == "0751"
+    assert preview["operations"][0]["target_mode"] == "0640"
+    assert len(str(preview["plan_sha256"])) == 64
     assert (target / "src" / "chosen.py").read_text(encoding="utf-8") == "old\n"
     assert not (target / "created.txt").exists()
 
@@ -174,6 +178,7 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
         ["src/chosen.py", "created.txt"],
         run_id="run-apply",
         apply=True,
+        confirm_plan=preview["plan_sha256"],
     )
     assert applied["applied"] is True
     assert (target / "src" / "chosen.py").read_text(encoding="utf-8") == "new\n"
@@ -192,6 +197,148 @@ def test_selective_apply_previews_backs_up_and_preserves_unrelated_work(tmp_path
         apply_selected_files(source, target, ["linked.py"], run_id="bad")
 
 
+@pytest.mark.parametrize("changed", ["source", "target", "source_mode", "target_mode"])
+def test_selective_apply_rejects_a_plan_changed_after_preview(tmp_path, changed):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("approved source\n", encoding="utf-8")
+    (target / "selected.txt").write_text("approved target\n", encoding="utf-8")
+    (source / "selected.txt").chmod(0o644)
+    (target / "selected.txt").chmod(0o644)
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="run-stale")
+
+    if changed == "source":
+        (source / "selected.txt").write_text("changed after preview\n", encoding="utf-8")
+    elif changed == "target":
+        (target / "selected.txt").write_text("changed after preview\n", encoding="utf-8")
+    elif changed == "source_mode":
+        (source / "selected.txt").chmod(0o755)
+    else:
+        (target / "selected.txt").chmod(0o600)
+
+    with pytest.raises(ArtifactError, match="plan changed"):
+        apply_selected_files(
+            source,
+            target,
+            ["selected.txt"],
+            run_id="run-stale",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
+
+    expected_target = "changed after preview\n" if changed == "target" else "approved target\n"
+    assert (target / "selected.txt").read_text(encoding="utf-8") == expected_target
+    assert not (target / ".lightclaw-backups" / "run-stale" / "selected.txt").exists()
+
+
+def test_selective_apply_requires_the_preview_plan_hash(tmp_path):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("new\n", encoding="utf-8")
+
+    with pytest.raises(ArtifactError, match="confirmation is missing"):
+        apply_selected_files(source, target, ["selected.txt"], run_id="run-confirm", apply=True)
+
+    assert not (target / "selected.txt").exists()
+
+
+def test_selective_apply_does_not_overwrite_a_target_created_during_apply(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("approved\n", encoding="utf-8")
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="run-create-race")
+    link = artifact_module.os.link
+
+    def create_then_link(src, dst, **kwargs):
+        (target / "selected.txt").write_text("concurrent user file\n", encoding="utf-8")
+        return link(src, dst, **kwargs)
+
+    monkeypatch.setattr("core.artifacts.os.link", create_then_link)
+    with pytest.raises(ArtifactError, match="target appeared during apply"):
+        apply_selected_files(
+            source,
+            target,
+            ["selected.txt"],
+            run_id="run-create-race",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
+
+    assert (target / "selected.txt").read_text(encoding="utf-8") == "concurrent user file\n"
+
+
+def test_selective_apply_rejects_target_mutation_during_backup(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("approved source\n", encoding="utf-8")
+    target_file = target / "selected.txt"
+    target_file.write_text("approved target\n", encoding="utf-8")
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="run-backup-race")
+    copy_to_temp = artifact_module._copy_to_temp
+
+    def mutate_target(source_fd, directory_fd, name, source_stat):
+        target_file.write_text("concurrent target edit\n", encoding="utf-8")
+        return copy_to_temp(source_fd, directory_fd, name, source_stat)
+
+    monkeypatch.setattr("core.artifacts._copy_to_temp", mutate_target)
+    with pytest.raises(ArtifactError, match="target changed during apply"):
+        apply_selected_files(
+            source,
+            target,
+            ["selected.txt"],
+            run_id="run-backup-race",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
+
+    assert target_file.read_text(encoding="utf-8") == "concurrent target edit\n"
+    assert not (target / ".lightclaw-backups" / "run-backup-race" / "selected.txt").exists()
+
+
+def test_selective_apply_rejects_target_permission_change_during_backup(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("approved source\n", encoding="utf-8")
+    target_file = target / "selected.txt"
+    target_file.write_text("approved target\n", encoding="utf-8")
+    target_file.chmod(0o640)
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="run-mode-race")
+    open_file = artifact_module._open_workspace_file
+    target_opens = 0
+
+    def change_target_mode(root, relative, label):
+        nonlocal target_opens
+        if label == "target path":
+            target_opens += 1
+            if target_opens == 2:
+                target_file.chmod(0o600)
+        return open_file(root, relative, label)
+
+    monkeypatch.setattr("core.artifacts._open_workspace_file", change_target_mode)
+    with pytest.raises(ArtifactError, match="target permissions changed during apply"):
+        apply_selected_files(
+            source,
+            target,
+            ["selected.txt"],
+            run_id="run-mode-race",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
+
+    assert target_file.read_text(encoding="utf-8") == "approved target\n"
+    assert not (target / ".lightclaw-backups" / "run-mode-race" / "selected.txt").exists()
+
+
 def test_selective_apply_rejects_source_symlink_replaced_after_validation(
     tmp_path, monkeypatch
 ):
@@ -201,6 +348,7 @@ def test_selective_apply_rejects_source_symlink_replaced_after_validation(
     target.mkdir()
     source_file = source / "selected.txt"
     source_file.write_text("approved\n", encoding="utf-8")
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="run-race")
     outside = tmp_path / "outside.txt"
     outside.write_text("outside secret\n", encoding="utf-8")
     validate = artifact_module._validate_workspace_path
@@ -216,7 +364,14 @@ def test_selective_apply_rejects_source_symlink_replaced_after_validation(
 
     monkeypatch.setattr("core.artifacts._validate_workspace_path", validate_then_swap)
     with pytest.raises(ArtifactError, match="symlink"):
-        apply_selected_files(source, target, ["selected.txt"], run_id="run-race", apply=True)
+        apply_selected_files(
+            source,
+            target,
+            ["selected.txt"],
+            run_id="run-race",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
 
     assert not (target / "selected.txt").exists()
     assert outside.read_text(encoding="utf-8") == "outside secret\n"
@@ -234,6 +389,9 @@ def test_selective_apply_rejects_target_parent_symlink_replaced_after_validation
     (source / "nested").mkdir()
     (target / "nested").mkdir()
     (source / "nested" / "selected.txt").write_text("new\n", encoding="utf-8")
+    preview = apply_selected_files(
+        source, target, ["nested/selected.txt"], run_id="run-race"
+    )
     validate = artifact_module._validate_workspace_path
     swapped = False
 
@@ -253,18 +411,24 @@ def test_selective_apply_rejects_target_parent_symlink_replaced_after_validation
             ["nested/selected.txt"],
             run_id="run-race",
             apply=True,
+            confirm_plan=preview["plan_sha256"],
         )
 
     assert not (outside / "selected.txt").exists()
 
 
-def test_selective_apply_rejects_source_changed_after_preflight(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [("content", "changed during apply"), ("mode", "permissions changed during apply")],
+)
+def test_selective_apply_rejects_source_changed_after_preflight(tmp_path, monkeypatch, change, error):
     source = tmp_path / "source"
     target = tmp_path / "target"
     source.mkdir()
     target.mkdir()
     source_file = source / "selected.txt"
     source_file.write_text("reviewed\n", encoding="utf-8")
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="run-race")
     open_file = artifact_module._open_workspace_file
     selected_opens = 0
 
@@ -273,21 +437,26 @@ def test_selective_apply_rejects_source_changed_after_preflight(tmp_path, monkey
         if label == "selected source":
             selected_opens += 1
             if selected_opens == 2:
-                source_file.write_text("changed after preview\n", encoding="utf-8")
+                if change == "content":
+                    source_file.write_text("changed after preview\n", encoding="utf-8")
+                else:
+                    source_file.chmod(0o755)
         return open_file(root, relative, label)
 
     monkeypatch.setattr("core.artifacts._open_workspace_file", change_before_copy)
-    with pytest.raises(ArtifactError, match="changed during apply"):
+    with pytest.raises(ArtifactError, match=error):
         apply_selected_files(
             source,
             target,
             ["selected.txt"],
             run_id="run-race",
             apply=True,
+            confirm_plan=preview["plan_sha256"],
         )
 
     assert not (target / "selected.txt").exists()
-    assert source_file.read_text(encoding="utf-8") == "changed after preview\n"
+    if change == "content":
+        assert source_file.read_text(encoding="utf-8") == "changed after preview\n"
 
 
 def test_selective_apply_preflights_all_backup_paths_before_mutating(tmp_path):
@@ -355,6 +524,7 @@ def test_selective_apply_cleans_up_a_failed_backup_link(tmp_path, monkeypatch):
     (source / "file.txt").write_text("new\n", encoding="utf-8")
     (target / "file.txt").write_text("original target\n", encoding="utf-8")
     backup_parent = target / ".lightclaw-backups" / "run-failure"
+    preview = apply_selected_files(source, target, ["file.txt"], run_id="run-failure")
 
     def fail_backup_link(*_args, **_kwargs):
         raise OSError("simulated backup link failure")
@@ -367,6 +537,7 @@ def test_selective_apply_cleans_up_a_failed_backup_link(tmp_path, monkeypatch):
             ["file.txt"],
             run_id="run-failure",
             apply=True,
+            confirm_plan=preview["plan_sha256"],
         )
 
     assert (target / "file.txt").read_text(encoding="utf-8") == "original target\n"
@@ -532,7 +703,59 @@ def test_artifact_cli_defaults_to_preview_and_exposes_publish_confirmation():
     assert parsed.run_id == "run-123"
     assert parsed.base == "develop"
     assert parsed.confirm_publish == "run-123"
+    assert parsed.confirm_plan is None
     assert parsed.apply is False
+
+
+def test_artifact_cli_passes_the_confirmed_plan_to_selected_apply(tmp_path, monkeypatch, capsys):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = tmp_path / "target"
+    config = SimpleNamespace(
+        memory_db_path=str(tmp_path / "memory.db"), workspace_path=str(workspace)
+    )
+
+    class JobStoreStub:
+        def __init__(self, _path):
+            pass
+
+        def get_job(self, _run_id):
+            return {"workspace": str(workspace)}
+
+        def close(self):
+            pass
+
+    apply = Mock(return_value={"applied": True, "plan_sha256": "a" * 64})
+    monkeypatch.setenv("LIGHTCLAW_HOME", "")
+    monkeypatch.setenv("LIGHTCLAW_CONFIG", "")
+    monkeypatch.setattr("config.load_config", lambda: config)
+    monkeypatch.setattr("core.jobs.JobStore", JobStoreStub)
+    monkeypatch.setattr("core.artifacts.apply_selected_files", apply)
+    args = build_parser().parse_args(
+        [
+            "artifact",
+            "apply",
+            "run-123",
+            "--target",
+            str(target),
+            "--paths",
+            "service.py",
+            "--apply",
+            "--confirm-plan",
+            "a" * 64,
+        ]
+    )
+
+    assert cmd_artifact(args) == 0
+    assert '"applied": true' in capsys.readouterr().out
+    apply.assert_called_once_with(
+        workspace,
+        str(target),
+        ["service.py"],
+        run_id="run-123",
+        apply=True,
+        confirm_plan="a" * 64,
+    )
 
 
 @pytest.mark.parametrize("apply", [False, True])

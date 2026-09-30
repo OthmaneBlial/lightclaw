@@ -8,6 +8,8 @@ Automatic edit retries omit common credential paths and file contents with detec
 
 Delegated CLI output has per-line and per-stream limits. LightClaw marks truncated output for review.
 
+Selective local artifact apply requires a confirmed SHA-256 plan bound to source and target contents and permissions. Existing targets are backed up; a new target that appears during apply is not overwritten.
+
 Canonical site: https://othmaneblial.github.io/lightclaw/
 Source: https://github.com/OthmaneBlial/lightclaw
 License: MIT

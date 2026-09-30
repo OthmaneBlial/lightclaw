@@ -1586,6 +1586,7 @@ def cmd_artifact(args: argparse.Namespace) -> int:
                 args.paths,
                 run_id=args.run_id,
                 apply=bool(args.apply),
+                confirm_plan=args.confirm_plan,
             )
         elif action == "pr":
             if job["status"] != "accepted":
@@ -1817,11 +1818,15 @@ def build_parser() -> argparse.ArgumentParser:
     artifact.add_argument(
         "--apply",
         action="store_true",
-        help="Apply the displayed local action; PR also requires --confirm-publish",
+        help="Apply the reviewed action; selected files need --confirm-plan and PR needs --confirm-publish",
     )
     artifact.add_argument(
         "--confirm-publish",
         help="Exact run id required before push and PR creation",
+    )
+    artifact.add_argument(
+        "--confirm-plan",
+        help="Exact plan SHA-256 from the preview required before selected-file apply",
     )
     artifact.set_defaults(func=cmd_artifact)
 

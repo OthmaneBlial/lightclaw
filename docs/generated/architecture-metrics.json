@@ -105,11 +105,11 @@
       "path": "core/bot/delegation/agents.py"
     },
     {
-      "branch_points": 33,
-      "line": 459,
-      "lines": 153,
-      "name": "_configure_env_interactive",
-      "path": "lightclaw_cli.py"
+      "branch_points": 34,
+      "line": 377,
+      "lines": 200,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
     }
   ],
   "largest_functions": [
@@ -171,8 +171,8 @@
     },
     {
       "branch_points": 0,
-      "line": 1650,
-      "lines": 245,
+      "line": 1651,
+      "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
     },
@@ -189,6 +189,13 @@
       "lines": 209,
       "name": "_normalize_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
+    },
+    {
+      "branch_points": 34,
+      "line": 377,
+      "lines": 200,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
     },
     {
       "branch_points": 48,
@@ -210,18 +217,11 @@
       "lines": 169,
       "name": "_build_fallback_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
-    },
-    {
-      "branch_points": 7,
-      "line": 284,
-      "lines": 169,
-      "name": "_build_agents_plan_payload",
-      "path": "core/bot/delegation/tasks.py"
     }
   ],
   "largest_modules": [
     {
-      "lines": 1904,
+      "lines": 1909,
       "path": "lightclaw_cli.py"
     },
     {
@@ -253,12 +253,12 @@
       "path": "memory.py"
     },
     {
-      "lines": 648,
-      "path": "core/bot/commands/agent_acceptance.py"
+      "lines": 717,
+      "path": "core/artifacts.py"
     },
     {
-      "lines": 643,
-      "path": "core/artifacts.py"
+      "lines": 648,
+      "path": "core/bot/commands/agent_acceptance.py"
     },
     {
       "lines": 585,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19466,
+  "runtime_lines": 19545,
   "schema_version": 1
 }
