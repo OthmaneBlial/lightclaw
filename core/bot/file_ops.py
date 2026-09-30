@@ -40,8 +40,8 @@ class BotFileOpsMixin:
     def _resolve_workspace_path(self, raw_path: str) -> tuple[Path | None, str | None, str | None]:
         """Resolve a user-provided path inside workspace, blocking traversal."""
         path_text = raw_path.strip().strip("`").strip()
-        if not path_text:
-            return None, None, "empty path"
+        if not path_text or "\x00" in path_text:
+            return None, None, "empty path" if not path_text else "path contains NUL byte"
         if os.path.isabs(path_text):
             return None, None, "absolute paths are not allowed"
 
@@ -289,7 +289,7 @@ class BotFileOpsMixin:
 
         def write_workspace_file(raw_path: str, content: str, auto_generated: bool = False) -> str:
             target, rel_path, path_err = self._resolve_workspace_path(raw_path)
-            display_path = rel_path or raw_path.strip() or "unknown"
+            display_path = rel_path or raw_path.strip().replace("\x00", "?") or "unknown"
             if path_err or target is None or rel_path is None:
                 operations.append(FileOperationResult("error", display_path, path_err or "invalid path"))
                 return f"[Save failed: {display_path}]"
@@ -485,7 +485,7 @@ class BotFileOpsMixin:
             edit_body = match.group("body").strip("\n")
 
             target, rel_path, path_err = self._resolve_workspace_path(raw_path)
-            display_path = rel_path or raw_path or "unknown"
+            display_path = rel_path or raw_path.replace("\x00", "?") or "unknown"
             if path_err or target is None or rel_path is None:
                 operations.append(FileOperationResult("error", display_path, path_err or "invalid path"))
                 return f"[Edit failed: {display_path}]"
@@ -620,7 +620,7 @@ class BotFileOpsMixin:
                         marker = write_workspace_file(raw_path, completed_content)
                     else:
                         _, rel_path, _ = self._resolve_workspace_path(raw_path)
-                        display_path = rel_path or raw_path or "unknown"
+                        display_path = rel_path or raw_path.replace("\x00", "?") or "unknown"
                         operations.append(
                             FileOperationResult(
                                 "error",

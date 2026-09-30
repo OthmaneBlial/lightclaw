@@ -48,6 +48,22 @@ def test_diff_stats_ignore_file_headers():
     assert BotFileOpsMixin._diff_line_stats(diff) == (2, 1)
 
 
+@pytest.mark.asyncio
+async def test_edit_with_nul_path_is_rejected_without_crashing(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+
+    operations, response = await bot._process_file_blocks(
+        f"```edit:bad\x00name\n{_hunk('before', 'after')}```"
+    )
+
+    assert len(operations) == 1
+    assert operations[0].action == "error"
+    assert operations[0].detail == "path contains NUL byte"
+    assert "bad?name" in response
+    assert not list(tmp_path.iterdir())
+
+
 def test_response_compaction_keeps_plain_text_and_removes_markers_and_code():
     response = "[File updated: app.py]\nImplemented the fix.\n\n```python\nprint('hidden')\n```\n\nNext step."
     assert BotFileOpsMixin._compact_response_for_file_ops(response) == (
