@@ -459,6 +459,43 @@ def test_selective_apply_rejects_source_changed_after_preflight(tmp_path, monkey
         assert source_file.read_text(encoding="utf-8") == "changed after preview\n"
 
 
+def test_selective_apply_validates_all_sources_before_replacing_any_target(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    for name in ("first.txt", "second.txt"):
+        (source / name).write_text(f"approved {name}\n", encoding="utf-8")
+        (target / name).write_text(f"original {name}\n", encoding="utf-8")
+    selected = ["first.txt", "second.txt"]
+    preview = apply_selected_files(source, target, selected, run_id="run-multi-race")
+    open_file = artifact_module._open_workspace_file
+    selected_opens = 0
+
+    def change_second_before_stage(root, relative, label):
+        nonlocal selected_opens
+        if label == "selected source":
+            selected_opens += 1
+            if selected_opens == 4:
+                (source / "second.txt").write_text("changed during apply\n", encoding="utf-8")
+        return open_file(root, relative, label)
+
+    monkeypatch.setattr("core.artifacts._open_workspace_file", change_second_before_stage)
+    with pytest.raises(ArtifactError, match="changed during apply"):
+        apply_selected_files(
+            source,
+            target,
+            selected,
+            run_id="run-multi-race",
+            apply=True,
+            confirm_plan=preview["plan_sha256"],
+        )
+
+    assert (target / "first.txt").read_text(encoding="utf-8") == "original first.txt\n"
+    assert (target / "second.txt").read_text(encoding="utf-8") == "original second.txt\n"
+    assert not (target / ".lightclaw-backups" / "run-multi-race").exists()
+
+
 def test_selective_apply_preflights_all_backup_paths_before_mutating(tmp_path):
     source = tmp_path / "source"
     target = tmp_path / "target"

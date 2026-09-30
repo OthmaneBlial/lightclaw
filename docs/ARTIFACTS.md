@@ -49,11 +49,12 @@ lightclaw artifact apply <run-id> \
 LightClaw rejects absolute paths, traversal, symlink sources, and symlinks anywhere in selected target
 or backup paths. During `--apply`, it opens selected files without following symlinks, copies relative
 to opened workspace directories, and requires the confirmed plan hash to match a fresh preview of
-the source and target hashes, paths, permissions, and operations. A stale plan is refused. A
-concurrent source change or target change while creating its backup aborts before replacement.
-New files are created without overwriting a target that appeared concurrently. Existing selected
-files are copied to private `.lightclaw-backups/<run-id>/` directories first; an existing backup is
-never overwritten. Unselected and unrelated files are never touched.
+the source and target hashes, paths, permissions, and operations. A stale plan is refused. A source
+change while staging, or a target change while creating its backup, aborts before any selected file
+is replaced. All selected sources are staged and verified before target backups begin. New files
+are created without overwriting a target that appeared concurrently. Existing selected files are
+copied to private `.lightclaw-backups/<run-id>/` directories first; an existing
+backup is never overwritten. Unselected and unrelated files are never touched.
 
 ## Optional pull request
 

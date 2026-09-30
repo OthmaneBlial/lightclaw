@@ -383,7 +383,7 @@ def apply_selected_files(
     apply: bool = False,
     confirm_plan: str | None = None,
 ) -> dict[str, object]:
-    """Preview or atomically copy selected files, backing up only overwritten targets."""
+    """Preview or apply selected files with per-file atomic replacement and backups."""
     source_path = Path(source_workspace).expanduser()
     target_path = Path(target_workspace).expanduser()
     if (
@@ -465,106 +465,155 @@ def apply_selected_files(
         )
 
     if apply:
-        for (
-            relative,
-            _destination,
-            backup,
-            _source_sha256,
-            _source_mode,
-            target_sha256,
-            target_mode,
-        ) in planned:
-            if backup is None:
-                continue
-            backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
-            backup_parent_fd = _open_workspace_directory(
-                target,
-                backup_parts[:-1],
-                label="backup path",
-                create=True,
-                private=True,
+        with tempfile.TemporaryDirectory(prefix="lightclaw-apply-") as staging_dir:
+            staging_root = Path(staging_dir)
+            staging_fd = os.open(
+                staging_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
             )
-            target_fd: int | None = None
-            temp_name: str | None = None
+            staged: list[tuple[str, str, str, int, str | None]] = []
             try:
-                target_fd, target_stat = _open_workspace_file(target, relative, "target path")
-                if stat.S_IMODE(target_stat.st_mode) != target_mode:
-                    raise ArtifactError(
-                        f"selected target permissions changed during apply: {relative}"
+                for index, (
+                    relative,
+                    _destination,
+                    _backup,
+                    expected_sha256,
+                    expected_mode,
+                    target_sha256,
+                    _target_mode,
+                ) in enumerate(planned):
+                    source_fd, source_stat = _open_workspace_file(
+                        source, relative, "selected source"
                     )
-                temp_name, backup_sha256 = _copy_to_temp(
-                    target_fd, backup_parent_fd, backup_parts[-1], target_stat
-                )
-                if backup_sha256 != target_sha256:
-                    raise ArtifactError(f"selected target changed during apply: {relative}")
-                try:
-                    os.link(
-                        temp_name,
-                        backup_parts[-1],
-                        src_dir_fd=backup_parent_fd,
-                        dst_dir_fd=backup_parent_fd,
-                        follow_symlinks=False,
-                    )
-                except FileExistsError as exc:
-                    raise ArtifactError(
-                        f"backup already exists; refusing to overwrite it: {relative}"
-                    ) from exc
-            finally:
-                if target_fd is not None:
-                    os.close(target_fd)
-                if temp_name is not None:
-                    _unlink_at(backup_parent_fd, temp_name)
-                os.close(backup_parent_fd)
-
-        for (
-            relative,
-            _destination,
-            _backup,
-            expected_sha256,
-            expected_mode,
-            target_sha256,
-            _target_mode,
-        ) in planned:
-            source_fd, source_stat = _open_workspace_file(source, relative, "selected source")
-            parent_fd: int | None = None
-            temp_name: str | None = None
-            try:
-                parts = PurePosixPath(relative).parts
-                parent_fd = _open_workspace_directory(
-                    target, parts[:-1], label="target path", create=True
-                )
-                if stat.S_IMODE(source_stat.st_mode) != expected_mode:
-                    raise ArtifactError(
-                        f"selected source permissions changed during apply: {relative}"
-                    )
-                temp_name, copied_sha256 = _copy_to_temp(
-                    source_fd, parent_fd, parts[-1], source_stat
-                )
-                if copied_sha256 != expected_sha256:
-                    raise ArtifactError(f"selected source changed during apply: {relative}")
-                if target_sha256 is None:
+                    temp_name: str | None = None
+                    stage_name = f"{index}.stage"
                     try:
-                        os.link(
-                            temp_name,
-                            parts[-1],
-                            src_dir_fd=parent_fd,
-                            dst_dir_fd=parent_fd,
-                            follow_symlinks=False,
+                        if stat.S_IMODE(source_stat.st_mode) != expected_mode:
+                            raise ArtifactError(
+                                f"selected source permissions changed during apply: {relative}"
+                            )
+                        temp_name, copied_sha256 = _copy_to_temp(
+                            source_fd, staging_fd, stage_name, source_stat
                         )
-                    except FileExistsError as exc:
-                        raise ArtifactError(
-                            f"selected target appeared during apply: {relative}"
-                        ) from exc
-                    _unlink_at(parent_fd, temp_name)
-                else:
-                    os.rename(temp_name, parts[-1], src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
-                temp_name = None
+                        if copied_sha256 != expected_sha256:
+                            raise ArtifactError(f"selected source changed during apply: {relative}")
+                        os.rename(
+                            temp_name,
+                            stage_name,
+                            src_dir_fd=staging_fd,
+                            dst_dir_fd=staging_fd,
+                        )
+                        temp_name = None
+                        staged.append(
+                            (relative, stage_name, expected_sha256, expected_mode, target_sha256)
+                        )
+                    finally:
+                        os.close(source_fd)
+                        if temp_name is not None:
+                            _unlink_at(staging_fd, temp_name)
+
+                for (
+                    relative,
+                    _destination,
+                    backup,
+                    _source_sha256,
+                    _source_mode,
+                    target_sha256,
+                    target_mode,
+                ) in planned:
+                    if backup is None:
+                        continue
+                    backup_parts = PurePosixPath(backup.relative_to(target).as_posix()).parts
+                    backup_parent_fd = _open_workspace_directory(
+                        target,
+                        backup_parts[:-1],
+                        label="backup path",
+                        create=True,
+                        private=True,
+                    )
+                    target_fd: int | None = None
+                    temp_name = None
+                    try:
+                        target_fd, target_stat = _open_workspace_file(
+                            target, relative, "target path"
+                        )
+                        if stat.S_IMODE(target_stat.st_mode) != target_mode:
+                            raise ArtifactError(
+                                f"selected target permissions changed during apply: {relative}"
+                            )
+                        temp_name, backup_sha256 = _copy_to_temp(
+                            target_fd, backup_parent_fd, backup_parts[-1], target_stat
+                        )
+                        if backup_sha256 != target_sha256:
+                            raise ArtifactError(f"selected target changed during apply: {relative}")
+                        try:
+                            os.link(
+                                temp_name,
+                                backup_parts[-1],
+                                src_dir_fd=backup_parent_fd,
+                                dst_dir_fd=backup_parent_fd,
+                                follow_symlinks=False,
+                            )
+                        except FileExistsError as exc:
+                            raise ArtifactError(
+                                f"backup already exists; refusing to overwrite it: {relative}"
+                            ) from exc
+                    finally:
+                        if target_fd is not None:
+                            os.close(target_fd)
+                        if temp_name is not None:
+                            _unlink_at(backup_parent_fd, temp_name)
+                        os.close(backup_parent_fd)
+
+                for relative, stage_name, expected_sha256, expected_mode, target_sha256 in staged:
+                    source_fd, source_stat = _open_workspace_file(
+                        staging_root, stage_name, "staged selected source"
+                    )
+                    parent_fd: int | None = None
+                    temp_name = None
+                    try:
+                        parts = PurePosixPath(relative).parts
+                        parent_fd = _open_workspace_directory(
+                            target, parts[:-1], label="target path", create=True
+                        )
+                        if stat.S_IMODE(source_stat.st_mode) != expected_mode:
+                            raise ArtifactError(
+                                f"staged source permissions changed during apply: {relative}"
+                            )
+                        temp_name, copied_sha256 = _copy_to_temp(
+                            source_fd, parent_fd, parts[-1], source_stat
+                        )
+                        if copied_sha256 != expected_sha256:
+                            raise ArtifactError(f"staged source changed during apply: {relative}")
+                        if target_sha256 is None:
+                            try:
+                                os.link(
+                                    temp_name,
+                                    parts[-1],
+                                    src_dir_fd=parent_fd,
+                                    dst_dir_fd=parent_fd,
+                                    follow_symlinks=False,
+                                )
+                            except FileExistsError as exc:
+                                raise ArtifactError(
+                                    f"selected target appeared during apply: {relative}"
+                                ) from exc
+                            _unlink_at(parent_fd, temp_name)
+                        else:
+                            os.rename(
+                                temp_name,
+                                parts[-1],
+                                src_dir_fd=parent_fd,
+                                dst_dir_fd=parent_fd,
+                            )
+                        temp_name = None
+                    finally:
+                        os.close(source_fd)
+                        if parent_fd is not None:
+                            if temp_name is not None:
+                                _unlink_at(parent_fd, temp_name)
+                            os.close(parent_fd)
             finally:
-                os.close(source_fd)
-                if parent_fd is not None:
-                    if temp_name is not None:
-                        _unlink_at(parent_fd, temp_name)
-                    os.close(parent_fd)
+                os.close(staging_fd)
     return {
         "run_id": run_id,
         "source": source.as_posix(),

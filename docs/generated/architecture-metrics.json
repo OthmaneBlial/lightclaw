@@ -98,18 +98,18 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
+      "branch_points": 40,
+      "line": 377,
+      "lines": 249,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
+    },
+    {
       "branch_points": 38,
       "line": 155,
       "lines": 149,
       "name": "_parse_multi_agent_args",
       "path": "core/bot/delegation/agents.py"
-    },
-    {
-      "branch_points": 34,
-      "line": 377,
-      "lines": 200,
-      "name": "apply_selected_files",
-      "path": "core/artifacts.py"
     }
   ],
   "largest_functions": [
@@ -170,6 +170,13 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
+      "branch_points": 40,
+      "line": 377,
+      "lines": 249,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
+    },
+    {
       "branch_points": 0,
       "line": 1651,
       "lines": 249,
@@ -189,13 +196,6 @@
       "lines": 209,
       "name": "_normalize_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
-    },
-    {
-      "branch_points": 34,
-      "line": 377,
-      "lines": 200,
-      "name": "apply_selected_files",
-      "path": "core/artifacts.py"
     },
     {
       "branch_points": 48,
@@ -253,7 +253,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 717,
+      "lines": 766,
       "path": "core/artifacts.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19545,
+  "runtime_lines": 19594,
   "schema_version": 1
 }
