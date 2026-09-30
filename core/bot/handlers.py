@@ -111,85 +111,86 @@ class BotHandlersMixin:
             )
             return
         session_id = self._session_id_from_update(update)
-        voice_requests = getattr(self, "_voice_request_ids_by_session", None)
-        if voice_requests is None:
-            voice_requests = self._voice_request_ids_by_session = {}
-        request_id = secrets.token_hex(8)
-        voice_requests[session_id] = request_id
-        self._pending_voice_goal_by_session.pop(session_id, None)
-        chat_id = update.effective_chat.id if update.effective_chat else 0
-
-        if update.effective_chat:
+        async with self._memory_request_guard(session_id):
+            voice_requests = getattr(self, "_voice_request_ids_by_session", None)
+            if voice_requests is None:
+                voice_requests = self._voice_request_ids_by_session = {}
+            request_id = secrets.token_hex(8)
+            voice_requests[session_id] = request_id
+            self._pending_voice_goal_by_session.pop(session_id, None)
             try:
-                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
-            except TelegramError:
-                log.debug("Could not send voice typing indicator")
+                chat_id = update.effective_chat.id if update.effective_chat else 0
 
-        if voice_requests.get(session_id) != request_id:
-            return
-        try:
-            voice_file = await voice.get_file()
-            if voice_requests.get(session_id) != request_id:
-                return
-            file_size = getattr(voice_file, "file_size", None)
-            if file_size is not None and file_size > MAX_VOICE_FILE_BYTES:
-                voice_requests.pop(session_id, None)
-                await self._reply_logged(update, VOICE_TOO_LARGE)
-                return
-            voice_bytes = await voice_file.download_as_bytearray()
-        except Exception as e:
-            if voice_requests.get(session_id) != request_id:
-                return
-            voice_requests.pop(session_id, None)
-            log.error("Failed to download voice: %s", redact_text(str(e), vars(self.config)))
-            await self._reply_logged(update, "⚠️ Couldn't download voice message.")
-            return
+                if update.effective_chat:
+                    try:
+                        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+                    except TelegramError:
+                        log.debug("Could not send voice typing indicator")
 
-        if voice_requests.get(session_id) != request_id:
-            return
-        if len(voice_bytes) > MAX_VOICE_FILE_BYTES:
-            voice_requests.pop(session_id, None)
-            await self._reply_logged(update, VOICE_TOO_LARGE)
-            return
+                if voice_requests.get(session_id) != request_id:
+                    return
+                try:
+                    voice_file = await voice.get_file()
+                    if voice_requests.get(session_id) != request_id:
+                        return
+                    file_size = getattr(voice_file, "file_size", None)
+                    if file_size is not None and file_size > MAX_VOICE_FILE_BYTES:
+                        await self._reply_logged(update, VOICE_TOO_LARGE)
+                        return
+                    voice_bytes = await voice_file.download_as_bytearray()
+                except Exception as e:
+                    if voice_requests.get(session_id) != request_id:
+                        return
+                    log.error("Failed to download voice: %s", redact_text(str(e), vars(self.config)))
+                    await self._reply_logged(update, "⚠️ Couldn't download voice message.")
+                    return
 
-        text = await transcribe_voice(bytes(voice_bytes), self.config.groq_api_key)
-        if voice_requests.get(session_id) != request_id:
-            return
-        voice_requests.pop(session_id, None)
+                if voice_requests.get(session_id) != request_id:
+                    return
+                if len(voice_bytes) > MAX_VOICE_FILE_BYTES:
+                    await self._reply_logged(update, VOICE_TOO_LARGE)
+                    return
 
-        if text:
-            caption = self._visible_review_text(update.message.caption or "").strip()
-            text = self._visible_review_text(text)
-            user_text = (f"{caption}\n" if caption else "") + f"[voice transcription: {text}]"
-            preview = (
-                "🎙 <b>Voice request — not executed</b>\n\n"
-                + (f"<b>Caption</b>\n{_escape_html(caption)}\n\n" if caption else "")
-                + f"<b>Transcription</b>\n{_escape_html(text)}\n\nReview the complete request, then explicitly approve or discard it."
-            )
-            if len(preview.encode("utf-16-le")) // 2 > 4096:
-                await self._reply_logged(
-                    update,
-                    "⚠️ Voice request too long to review; send shorter audio. Nothing is pending.",
-                )
-                return
-            log.info("Voice message transcribed and awaiting approval")
-            approval_id = secrets.token_hex(8)
-            now = time.time()
-            self._pending_voice_goal_by_session[session_id] = {
-                "text": user_text,
-                "transcription": text,
-                "approval_id": approval_id,
-                "expires_at": now + 10 * 60,
-                "expires_monotonic": time.monotonic() + 10 * 60,
-            }
-            await self._reply_logged(
-                update,
-                preview,
-                parse_mode=ParseMode.HTML,
-                reply_markup=self._inline_voice_keyboard(approval_id),
-            )
-            return
-        await self._reply_logged(update, VOICE_TRANSCRIPTION_FAILED)
+                text = await transcribe_voice(bytes(voice_bytes), self.config.groq_api_key)
+                if voice_requests.get(session_id) != request_id:
+                    return
+
+                if text:
+                    caption = self._visible_review_text(update.message.caption or "").strip()
+                    text = self._visible_review_text(text)
+                    user_text = (f"{caption}\n" if caption else "") + f"[voice transcription: {text}]"
+                    preview = (
+                        "🎙 <b>Voice request — not executed</b>\n\n"
+                        + (f"<b>Caption</b>\n{_escape_html(caption)}\n\n" if caption else "")
+                        + f"<b>Transcription</b>\n{_escape_html(text)}\n\nReview the complete request, then explicitly approve or discard it."
+                    )
+                    if len(preview.encode("utf-16-le")) // 2 > 4096:
+                        await self._reply_logged(
+                            update,
+                            "⚠️ Voice request too long to review; send shorter audio. Nothing is pending.",
+                        )
+                        return
+                    log.info("Voice message transcribed and awaiting approval")
+                    approval_id = secrets.token_hex(8)
+                    now = time.time()
+                    self._pending_voice_goal_by_session[session_id] = {
+                        "text": user_text,
+                        "transcription": text,
+                        "approval_id": approval_id,
+                        "expires_at": now + 10 * 60,
+                        "expires_monotonic": time.monotonic() + 10 * 60,
+                    }
+                    await self._reply_logged(
+                        update,
+                        preview,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=self._inline_voice_keyboard(approval_id),
+                    )
+                    return
+                await self._reply_logged(update, VOICE_TRANSCRIPTION_FAILED)
+            finally:
+                if voice_requests.get(session_id) == request_id:
+                    voice_requests.pop(session_id, None)
 
     # ── Photo Handler ─────────────────────────────────────────
 

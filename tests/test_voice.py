@@ -7,11 +7,85 @@ import httpx
 import pytest
 from telegram.error import NetworkError
 
+from config import Config
 from core.bot import LightClawBot
 from core.voice import transcribe_voice
 
 FAKE_KEY = "groq-test-key-123456789"
 TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stage", ["typing", "file", "download", "transcription", "review"])
+async def test_shutdown_drains_voice_request_before_closing_resources(tmp_path, monkeypatch, stage):
+    events = []
+    llm = SimpleNamespace(close=Mock(side_effect=lambda: events.append("provider closed")))
+    monkeypatch.setattr("core.bot.base.LLMClient", lambda _config: llm)
+    bot = LightClawBot(Config(
+        telegram_allowed_users=["123"], groq_api_key=FAKE_KEY,
+        workspace_path=str(tmp_path / "workspace"), memory_db_path=str(tmp_path / "memory.db"),
+        skills_state_path=str(tmp_path / "skills.json"),
+    ))
+    started = asyncio.Event()
+
+    async def block_if_stage(name):
+        if stage == name:
+            started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                bot.memory.db.execute("SELECT 1")
+                events.append("voice drained")
+
+    async def download():
+        await block_if_stage("download")
+        return bytearray(b"audio")
+
+    voice_file = SimpleNamespace(file_size=5, download_as_bytearray=download)
+
+    async def get_file():
+        await block_if_stage("file")
+        return voice_file
+
+    async def typing(**_kwargs):
+        await block_if_stage("typing")
+
+    async def reply_text(*_args, **_kwargs):
+        await block_if_stage("review")
+
+    response = SimpleNamespace(status_code=200, json=lambda: {"text": "review this task"})
+    client, factory = _mock_client(monkeypatch, response=response)
+
+    async def post(*_args, **_kwargs):
+        await block_if_stage("transcription")
+        return response
+
+    client.post.side_effect = post
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123), effective_chat=SimpleNamespace(id=123, type="private"),
+        message=SimpleNamespace(voice=SimpleNamespace(file_size=5, get_file=get_file), caption="", reply_text=reply_text),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=typing))
+    task = asyncio.create_task(bot.handle_voice(update, context))
+    shutdown = None
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        shutdown = asyncio.create_task(bot.shutdown())
+        await asyncio.wait_for(shutdown, timeout=1)
+        assert task.cancelled()
+        assert not bot._voice_request_ids_by_session
+        assert not bot._active_message_clear_events_by_session
+        assert events == ["voice drained", "provider closed"]
+        if stage in {"transcription", "review"}:
+            client.__aexit__.assert_awaited_once()
+        else:
+            factory.assert_not_called()
+    finally:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, *([shutdown] if shutdown else []), return_exceptions=True)
+        bot.memory.db.close()
+        bot.jobs.close()
 
 
 def _mock_client(monkeypatch, *, response=None, error=None):
@@ -133,8 +207,9 @@ async def test_oversized_voice_is_rejected_before_transcription(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("cancel_older", [False, True])
 async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_out_of_order(
-    monkeypatch,
+    monkeypatch, cancel_older,
 ):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
@@ -145,12 +220,16 @@ async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_ou
     bot._reply_logged = AsyncMock()
     old_transcription_started = asyncio.Event()
     release_old_transcription = asyncio.Event()
+    new_transcription_started = asyncio.Event()
+    release_new_transcription = asyncio.Event()
 
     async def transcribe(audio, _key):
         if audio == b"old":
             old_transcription_started.set()
             await release_old_transcription.wait()
             return "older request"
+        new_transcription_started.set()
+        await release_new_transcription.wait()
         return "latest request"
 
     monkeypatch.setattr("core.bot.handlers.transcribe_voice", transcribe)
@@ -172,12 +251,32 @@ async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_ou
 
     context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
     older = asyncio.create_task(bot.handle_voice(make_update(b"old"), context))
-    await old_transcription_started.wait()
-    await bot.handle_voice(make_update(b"new"), context)
-    release_old_transcription.set()
-    await older
+    newer = None
+    try:
+        await asyncio.wait_for(old_transcription_started.wait(), timeout=1)
+        newer = asyncio.create_task(bot.handle_voice(make_update(b"new"), context))
+        await asyncio.wait_for(new_transcription_started.wait(), timeout=1)
+        latest_id = bot._voice_request_ids_by_session["456"]
+        if cancel_older:
+            older.cancel()
+            await asyncio.gather(older, return_exceptions=True)
+            assert older.cancelled()
+            assert bot._voice_request_ids_by_session["456"] == latest_id
+        release_new_transcription.set()
+        await asyncio.wait_for(newer, timeout=1)
+        release_old_transcription.set()
+        if not cancel_older:
+            await asyncio.wait_for(older, timeout=1)
+    finally:
+        tasks = [older] + ([newer] if newer else [])
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     assert bot._pending_voice_goal_by_session["456"]["transcription"] == "latest request"
+    assert not bot._voice_request_ids_by_session
+    assert not bot._active_message_clear_events_by_session
     bot._reply_logged.assert_awaited_once()
 
 
