@@ -73,3 +73,18 @@ async def test_uncertain_edit_failure_does_not_trigger_a_second_message():
 
     placeholder.edit_text.assert_awaited_once()
     message.reply_text.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_oversized_long_response_is_kept_local(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.bot.messaging.TELEGRAM_BOT_API_MAX_FILE_BYTES", 8)
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
+    message = SimpleNamespace(reply_document=AsyncMock(), reply_text=AsyncMock())
+
+    await bot._send_response(None, SimpleNamespace(message=message), "x" * 6001)
+
+    message.reply_document.assert_not_awaited()
+    message.reply_text.assert_awaited_once()
+    assert "too large" in message.reply_text.await_args.args[0]
+    assert "saved locally" in message.reply_text.await_args.args[0]

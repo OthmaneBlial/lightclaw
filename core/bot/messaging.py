@@ -10,11 +10,12 @@ import time
 from html import unescape
 from pathlib import Path
 
-from telegram import Update
+from telegram import InputFile, Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, Conflict, NetworkError, RetryAfter, TimedOut
 from telegram.ext import ContextTypes
 
+from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
@@ -84,10 +85,28 @@ class BotMessagingMixin:
                 await self._try_send(placeholder.edit_text, summary)
             if update.message:
                 try:
+                    artifact_size = artifact.stat().st_size
+                except OSError:
+                    artifact_size = None
+                if artifact_size is None or artifact_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
+                    failure = (
+                        "Telegram cannot attach this result because it is too large "
+                        "or its size could not be checked. It remains saved locally as "
+                        f"`{artifact.name}` under `.lightclaw-meta/messages/`."
+                    )
+                    if placeholder:
+                        await self._try_send(placeholder.edit_text, failure)
+                    else:
+                        await self._try_send(update.message.reply_text, failure)
+                    return
+                try:
                     with artifact.open("rb") as handle:
                         await update.message.reply_document(
-                            document=handle,
-                            filename=artifact.name,
+                            document=InputFile(
+                                handle,
+                                filename=artifact.name,
+                                read_file_handle=False,
+                            ),
                             caption="LightClaw result artifact — review before sharing.",
                         )
                     return

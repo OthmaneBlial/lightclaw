@@ -6,6 +6,7 @@ from pathlib import Path
 
 # Project root for resolving runtime-relative paths reliably.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+TELEGRAM_BOT_API_MAX_FILE_BYTES = 50_000_000
 
 # Optional strict-mode safety denylist for delegated local-agent tasks.
 STRICT_LOCAL_AGENT_DENY_PATTERNS = (

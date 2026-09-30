@@ -15,11 +15,10 @@ from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from ..artifacts import ArtifactError, accept_artifact, reject_artifact
+from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
 from ..jobs import JobStateError
 from ..markdown import _escape_html
 from ..receipts import read_receipt
-
-MAX_TELEGRAM_DOCUMENT_BYTES = 50_000_000
 
 
 class BotApprovalsMixin:
@@ -460,7 +459,7 @@ class BotApprovalsMixin:
             except OSError:
                 pass
 
-        if patch_path and patch_size is not None and patch_size > MAX_TELEGRAM_DOCUMENT_BYTES:
+        if patch_path and patch_size is not None and patch_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
             review_lines.append(
                 f"Full patch is too large to attach through Telegram; review it locally: `{patch_path}`"
             )

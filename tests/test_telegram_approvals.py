@@ -505,7 +505,7 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
 
 @pytest.mark.asyncio
 async def test_view_diff_skips_patch_larger_than_telegram_upload_limit(tmp_path, monkeypatch):
-    monkeypatch.setattr("core.bot.approvals.MAX_TELEGRAM_DOCUMENT_BYTES", 8)
+    monkeypatch.setattr("core.bot.approvals.TELEGRAM_BOT_API_MAX_FILE_BYTES", 8)
     patch_path = tmp_path / "changes.patch"
     patch_path.write_bytes(b"x" * 9)
     receipt_path = tmp_path / "receipt.json"
@@ -554,7 +554,16 @@ async def test_view_diff_handles_oversized_receipt(tmp_path, monkeypatch):
 async def test_long_result_is_private_file_artifact_not_chat_wall(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
-    message = SimpleNamespace(reply_document=AsyncMock(), reply_text=AsyncMock())
+
+    async def send_artifact(**kwargs):
+        document = kwargs["document"]
+        assert isinstance(document, InputFile)
+        assert not document.input_file_content.closed
+        assert not isinstance(document.input_file_content, bytes)
+
+    message = SimpleNamespace(
+        reply_document=AsyncMock(side_effect=send_artifact), reply_text=AsyncMock()
+    )
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=456, type="private"),
         message=message,
