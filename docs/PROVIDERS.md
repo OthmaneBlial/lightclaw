@@ -41,6 +41,8 @@ PROVIDER_MAX_RETRIES=2
 
 The retry value is retries after the first attempt. SDK clients are closed explicitly during LightClaw shutdown.
 
+Closing a client prevents another retry after backoff and rejects queued SDK/HTTP work that has not started yet. It does not forcibly stop an operation already running in a synchronous SDK thread; that work still depends on the transport timeout.
+
 Custom Anthropic-compatible endpoints set with `ANTHROPIC_BASE_URL` receive direct
 requests. Redirects are rejected so the API key cannot be forwarded to another host.
 

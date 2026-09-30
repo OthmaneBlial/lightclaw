@@ -24,6 +24,11 @@ class _ClosableAdapter:
     def __init__(self) -> None:
         self._closed = False
 
+    def _call(self, operation, **kwargs):
+        if self._closed:
+            raise RuntimeError("provider adapter is closed")
+        return operation(**kwargs)
+
     def close(self) -> None:
         if self._closed:
             return
@@ -49,6 +54,7 @@ class OpenAICompatibleAdapter(_ClosableAdapter):
         messages.extend(dict(message) for message in request.messages)
         started = time.perf_counter()
         response = await asyncio.to_thread(
+            self._call,
             self.client.chat.completions.create,
             model=self.model,
             messages=messages,
@@ -121,7 +127,7 @@ class AnthropicAdapter(_ClosableAdapter):
         if request.system_prompt:
             kwargs["system"] = request.system_prompt
         started = time.perf_counter()
-        response = await asyncio.to_thread(self.client.messages.create, **kwargs)
+        response = await asyncio.to_thread(self._call, self.client.messages.create, **kwargs)
         text = "\n".join(
             str(block.text)
             for block in (getattr(response, "content", None) or [])
@@ -195,7 +201,7 @@ class AnthropicAdapter(_ClosableAdapter):
             return response.status_code, response.text
 
         started = time.perf_counter()
-        status_code, body_text = await asyncio.to_thread(_post)
+        status_code, body_text = await asyncio.to_thread(self._call, _post)
         if not 200 <= status_code < 300:
             detail = body_text.strip().replace("\n", " ")[:240]
             error = RuntimeError(
@@ -295,6 +301,7 @@ class GeminiAdapter(_ClosableAdapter):
         )
         started = time.perf_counter()
         response = await asyncio.to_thread(
+            self._call,
             self.client.models.generate_content,
             model=self.model,
             contents=contents,

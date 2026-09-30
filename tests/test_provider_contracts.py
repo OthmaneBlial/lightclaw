@@ -5,6 +5,7 @@ import json
 import threading
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -390,6 +391,52 @@ async def test_retry_policy_is_shared_and_reports_attempt_count(monkeypatch):
     assert result.text == "recovered"
     assert result.attempts == 3
     assert adapter.calls == 3
+
+
+async def test_close_during_retry_delay_prevents_another_provider_attempt(monkeypatch):
+    adapter = _PolicyAdapter(failures=[_StatusError(429, "rate limit")])
+    client = LLMClient(
+        Config(llm_provider="openai", llm_model="fixture-model", provider_max_retries=1),
+        adapter=adapter,
+    )
+
+    async def close_during_delay(_seconds):
+        client.close()
+
+    monkeypatch.setattr("core.llm.client.asyncio.sleep", close_during_delay)
+    with pytest.raises(RuntimeError, match="provider client is closed"):
+        await client.complete([{"role": "user", "content": "hello"}])
+    assert adapter.calls == 1
+    assert adapter.closed == 1
+    assert client.last_response is None
+
+
+@pytest.mark.parametrize("route", ["openai", "claude", "gemini", "claude-compat"])
+async def test_adapter_rejects_sdk_work_queued_before_close(monkeypatch, route):
+    provider = "claude" if route == "claude-compat" else route
+    fixture = json.loads((FIXTURE_ROOT / PROVIDER_SPECS[provider].fixture).read_text())
+    adapter, raw_client = _recorded_adapter(provider, _namespace(fixture["response"]))
+    if route == "claude-compat":
+        adapter.custom_base_url = "https://example.invalid"
+        adapter.api_key = "fixture-key"
+        factory = Mock(side_effect=AssertionError("closed adapter must not open a transport"))
+        monkeypatch.setattr("httpx.Client", factory)
+
+    async def close_before_worker_starts(function, *args, **kwargs):
+        adapter.close()
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr("core.llm.adapters.asyncio.to_thread", close_before_worker_starts)
+    with pytest.raises(RuntimeError, match="provider adapter is closed"):
+        await adapter.complete(ProviderRequest(messages=({"role": "user", "content": "hello"},)))
+    completions = (
+        raw_client.chat.completions if provider == "openai"
+        else raw_client.messages if provider == "claude" else raw_client.models
+    )
+    assert completions.calls == []
+    assert raw_client.closed == 1
+    if route == "claude-compat":
+        factory.assert_not_called()
 
 
 async def test_timeout_and_non_retryable_errors_are_normalized():

@@ -375,6 +375,8 @@ class LLMClient:
 
         last_error: ProviderError | None = None
         for attempt in range(1, self.retry_policy.max_attempts + 1):
+            if self._closed:
+                raise RuntimeError("provider client is closed")
             adapter_task = asyncio.create_task(self._adapter.complete(request))
             try:
                 response = await asyncio.wait_for(
