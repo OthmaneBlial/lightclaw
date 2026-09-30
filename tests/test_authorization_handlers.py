@@ -134,3 +134,20 @@ async def test_text_rate_limit_rejects_before_model_processing():
     bot._privileged_rate_limited.assert_called_once_with(123, "message", limit=20)
     assert "Too many text messages" in bot._reply_logged.await_args.args[1]
     bot._process_user_message.assert_not_awaited()
+
+
+async def test_text_request_under_limit_reaches_model_processing():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = Mock(return_value=False)
+    bot._process_user_message = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        message=SimpleNamespace(text="hello"),
+    )
+    context = SimpleNamespace()
+
+    await bot.handle_message(update, context)
+
+    bot._privileged_rate_limited.assert_called_once_with(123, "message", limit=20)
+    bot._process_user_message.assert_awaited_once_with(update, context, "hello")
