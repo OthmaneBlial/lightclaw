@@ -56,18 +56,18 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 55,
-      "line": 566,
-      "lines": 182,
-      "name": "_evaluate_multi_worker_acceptance",
-      "path": "core/bot/commands/agent_acceptance.py"
-    },
-    {
       "branch_points": 54,
       "line": 320,
       "lines": 194,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
+    },
+    {
+      "branch_points": 52,
+      "line": 586,
+      "lines": 177,
+      "name": "_evaluate_multi_worker_acceptance",
+      "path": "core/bot/commands/agent_acceptance.py"
     },
     {
       "branch_points": 51,
@@ -212,9 +212,9 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "branch_points": 55,
-      "line": 566,
-      "lines": 182,
+      "branch_points": 52,
+      "line": 586,
+      "lines": 177,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
     }
@@ -253,12 +253,12 @@
       "path": "core/jobs.py"
     },
     {
-      "lines": 777,
-      "path": "core/artifacts.py"
+      "lines": 789,
+      "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 774,
-      "path": "core/bot/commands/agent_acceptance.py"
+      "lines": 777,
+      "path": "core/artifacts.py"
     },
     {
       "lines": 680,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21151,
+  "runtime_lines": 21166,
   "schema_version": 1
 }

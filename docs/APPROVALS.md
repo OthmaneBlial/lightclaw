@@ -38,6 +38,8 @@ Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or sy
 
 Handoff JSON is read relative to the task workspace. Symlinks in the file or its relative parent directories are rejected, including replacements made during path validation.
 
+Required-file, glob, reported-file, and deliverable existence checks inspect metadata relative to an opened workspace directory. A file or parent swapped to an outside symlink cannot satisfy these checks. Existing aliases to paths inside the workspace remain supported; reported paths and deliverables may name directories, while required-file and glob checks require regular files.
+
 Control and directional formatting characters throughout detailed plans and approval summaries are shown as replacement marks to reduce filename and command spoofing; attached patch bytes remain unchanged.
 
 ## High-risk confirmation

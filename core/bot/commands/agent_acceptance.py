@@ -7,12 +7,13 @@ import os
 import re
 import shlex
 import signal
+import stat
 import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from ...fs import FileTooLargeError, read_json_object
+from ...fs import FileTooLargeError, open_directory_at, read_json_object
 from ...logging_setup import log
 from ...security import delegated_process_env
 from ..delegation.streams import BoundedStreamCapture
@@ -302,8 +303,7 @@ class CommandsAgentAcceptanceMixin:
                     or "." in Path(normalized).name
                     or normalized.lower().startswith("readme")
                 )
-                path = self._resolve_multi_workspace_path(workspace, normalized)
-                if looks_like_path and (path is None or not path.exists()):
+                if looks_like_path and not self._multi_workspace_path_exists(workspace, normalized):
                     findings.append(f"`{label}` deliverable does not exist in workspace: `{normalized}`")
 
         deduped: list[str] = []
@@ -550,6 +550,26 @@ class CommandsAgentAcceptanceMixin:
         except (OSError, ValueError) as exc:
             return {}, f"invalid handoff JSON `{display_path}`: {exc}"
 
+    def _multi_workspace_path_exists(
+        self, workspace: Path, relative: str, *, file_only: bool = False
+    ) -> bool:
+        try:
+            root = workspace.resolve(strict=True)
+            path = self._resolve_multi_workspace_path(root, relative)
+            if path is None:
+                return False
+            parts = path.relative_to(root).parts
+            directory_fd = open_directory_at(root, parts[:-1])
+            try:
+                mode = os.stat(
+                    parts[-1] if parts else ".", dir_fd=directory_fd, follow_symlinks=False
+                ).st_mode
+            finally:
+                os.close(directory_fd)
+            return not stat.S_ISLNK(mode) and (not file_only or stat.S_ISREG(mode))
+        except (OSError, RuntimeError, ValueError):
+            return False
+
     def _reported_multi_handoff_files(self, handoff_data: dict[str, Any]) -> list[str]:
         changed_files_obj = handoff_data.get("changed_files")
         changed_files = changed_files_obj if isinstance(changed_files_obj, list) else []
@@ -615,8 +635,7 @@ class CommandsAgentAcceptanceMixin:
 
             if kind == "file_exists":
                 rel_path = self._normalize_multi_contract_path(str(check.get("path") or ""))
-                path = self._resolve_multi_workspace_path(workspace, rel_path) if rel_path else None
-                if path is None or not path.is_file():
+                if not rel_path or not self._multi_workspace_path_exists(workspace, rel_path, file_only=True):
                     failures.append(f"missing required file `{rel_path or '(invalid path)'}`")
                 continue
 
@@ -644,14 +663,11 @@ class CommandsAgentAcceptanceMixin:
                     failures.append("invalid glob_nonempty pattern")
                     continue
                 try:
-                    matches = [
-                        path
-                        for item in workspace.glob(pattern)
-                        if (path := self._resolve_multi_workspace_path(
-                            workspace, item.relative_to(workspace).as_posix()
-                        )) is not None
-                        and path.is_file()
-                    ]
+                    matches = any(
+                        self._multi_workspace_path_exists(
+                            workspace, item.relative_to(workspace).as_posix(), file_only=True
+                        ) for item in workspace.glob(pattern)
+                    )
                 except Exception as e:
                     failures.append(f"invalid glob pattern `{pattern}`: {e}")
                     continue
@@ -695,8 +711,7 @@ class CommandsAgentAcceptanceMixin:
                     continue
                 missing = []
                 for reported_path in reported:
-                    path = self._resolve_multi_workspace_path(workspace, reported_path)
-                    if path is None or not path.exists():
+                    if not self._multi_workspace_path_exists(workspace, reported_path):
                         missing.append(reported_path)
                 if missing:
                     failures.append(

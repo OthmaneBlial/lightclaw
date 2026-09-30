@@ -360,6 +360,74 @@ def test_acceptance_checks_reject_paths_through_external_symlink(tmp_path, check
     assert failures
 
 
+@pytest.mark.parametrize("kind", ["file_exists", "glob_nonempty", "reported_files_exist", "deliverable"])
+@pytest.mark.parametrize("swap", ["leaf", "parent"])
+def test_acceptance_existence_rejects_symlink_swap(tmp_path, monkeypatch, kind, swap):
+    workspace = tmp_path / "workspace"
+    parent = workspace / "result"
+    parent.mkdir(parents=True)
+    target = parent / "proof.txt"
+    target.write_text("workspace proof")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / target.name).write_text("outside proof")
+    handoff = workspace / "handoff" / "builder.json"
+    handoff.parent.mkdir()
+    handoff.write_text(json.dumps({
+        "lane": "builder", "summary": "done", "changed_files": ["result/proof.txt"],
+        "outputs": {"deliverables": ["result/proof.txt"]},
+    }))
+    bot = LightClawBot.__new__(LightClawBot)
+    original = bot._resolve_multi_workspace_path
+
+    def swapped_after_validation(root, relative):
+        path = original(root, relative)
+        if relative == "result/proof.txt":
+            if swap == "parent":
+                parent.rename(workspace / "original")
+                parent.symlink_to(outside, target_is_directory=True)
+            else:
+                target.unlink()
+                target.symlink_to(outside / target.name)
+        return path
+
+    monkeypatch.setattr(bot, "_resolve_multi_workspace_path", swapped_after_validation)
+    if kind == "deliverable":
+        audited, failures = bot._audit_multi_lane_deliverables(
+            workspace, {"builder": {"role": "authoring"}}
+        )
+        assert audited
+    else:
+        check = {"type": kind}
+        if kind == "file_exists":
+            check["path"] = "result/proof.txt"
+        elif kind == "glob_nonempty":
+            check["pattern"] = "result/*.txt"
+        passed, failures, _ = bot._evaluate_multi_worker_acceptance(
+            workspace, "builder", {"acceptance_checks": [check]}
+        )
+        assert not passed
+    assert failures
+
+
+def test_acceptance_existence_preserves_internal_aliases_and_metadata_only_checks(tmp_path):
+    directory = tmp_path / "actual"
+    directory.mkdir()
+    target = directory / "proof.txt"
+    target.write_text("proof")
+    target.chmod(0)
+    (directory / "alias.txt").symlink_to(target)
+    (tmp_path / "alias").symlink_to(directory, target_is_directory=True)
+    bot = LightClawBot.__new__(LightClawBot)
+    try:
+        assert bot._multi_workspace_path_exists(tmp_path, "alias/alias.txt", file_only=True)
+        assert bot._multi_workspace_path_exists(tmp_path, "alias")
+        assert not bot._multi_workspace_path_exists(tmp_path, "alias", file_only=True)
+        assert not bot._multi_workspace_path_exists(tmp_path, "missing")
+    finally:
+        target.chmod(0o600)
+
+
 def test_reported_files_reject_paths_through_external_symlink(tmp_path):
     workspace = tmp_path / "workspace"
     (workspace / "handoff").mkdir(parents=True)
