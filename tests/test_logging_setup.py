@@ -93,13 +93,31 @@ def test_jsonl_redacts_environment_secrets_from_messages_and_tracebacks(
         raise RuntimeError(f"provider rejected {secret}")
     except RuntimeError:
         isolated_lightclaw_logger.exception("Provider request failed with %s", secret)
+    logging.getLogger("lightclaw.providers").warning("Provider detail: %s", secret)
 
     text = path.read_text(encoding="utf-8")
-    entry = json.loads(text.splitlines()[-1])
+    entries = [json.loads(line) for line in text.splitlines()]
+    entry = entries[-2]
+    provider_entry = entries[-1]
     assert secret not in text
     assert secret not in caplog.text
     assert "[REDACTED]" in entry["message"]
     assert "[REDACTED]" in entry["exception"]
+    assert provider_entry["message"] == "Provider detail: [REDACTED]"
+
+
+def test_console_redacts_child_logger_secrets_without_json_file(
+    monkeypatch, caplog
+):
+    _clear_logging_environment(monkeypatch)
+    secret = "fixture-provider-secret"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    caplog.set_level(logging.INFO, logger="lightclaw")
+
+    logging.getLogger("lightclaw.providers").warning("Provider detail: %s", secret)
+
+    assert secret not in caplog.text
+    assert "Provider detail: [REDACTED]" in caplog.text
 
 
 def test_jsonl_logging_secures_existing_file_and_rejects_symlinks(

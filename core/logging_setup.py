@@ -54,7 +54,8 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("lightclaw")
-log.addFilter(_SecretRedactionFilter())
+for handler in logging.getLogger().handlers:
+    handler.addFilter(_SecretRedactionFilter())
 
 # Reduce noisy transport logs by default (can be re-enabled with LIGHTCLAW_VERBOSE_HTTP=1).
 if os.getenv("LIGHTCLAW_VERBOSE_HTTP", "").strip().lower() not in {"1", "true", "yes"}:
@@ -173,6 +174,7 @@ def configure_optional_json_logging(runtime_root: str | Path | None = None) -> P
     )
     file_handler.setLevel(logging.INFO)
     file_handler.setFormatter(_JsonLogFormatter())
+    file_handler.addFilter(_SecretRedactionFilter())
     logger.addHandler(file_handler)
     logger.info(f"Structured JSON logging enabled: {path.as_posix()}")
     return path
