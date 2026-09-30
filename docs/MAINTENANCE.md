@@ -12,15 +12,17 @@ LightClaw uses evidence channels that remain useful after launch:
 - [CHANGELOG.md](../CHANGELOG.md) for unreleased repository changes;
 - [launch/status.json](../launch/status.json) for stages that must not be inferred.
 
-The intended cadence is monthly or explicitly paused. A pause is posted with its reason,
-current security/support status, and next review date. An update should contain shipped
+The intended cadence is monthly or explicitly paused. At each review, recheck the README,
+GitHub Pages copy and metadata, repository description and topics, and workflow status against
+current product and release evidence. A pause is posted with its reason, current security/support
+status, and next review date. An update should contain shipped
 commits/releases, actual fixes, raw benchmark changes, consented workflows, current
 limitations, and response metrics with a denominator. It should not repeat an announcement
 or infer adoption from stars, traffic, forks, or private messages.
 
 ## Repository discovery contract
 
-Maintainer-controlled target, reverified on 2026-09-29 before publication:
+Maintainer-controlled target, reverified on 2026-09-30:
 
 - homepage URL: `https://othmaneblial.github.io/lightclaw/`;
 - topics: `agent-orchestration`, `audit-trail`, `claude-code`, `code-review`, `codex`,
