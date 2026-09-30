@@ -10,12 +10,31 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .security import redact_text
+
+
+class _SecretRedactionFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        known_values = os.environ
+        record.msg = redact_text(record.getMessage(), known_values)
+        record.args = ()
+        if record.exc_info:
+            record.exc_text = redact_text(
+                logging.Formatter().formatException(record.exc_info), known_values
+            )
+            record.exc_info = None
+        elif record.exc_text:
+            record.exc_text = redact_text(record.exc_text, known_values)
+        return True
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger("lightclaw")
+log.addFilter(_SecretRedactionFilter())
 
 # Reduce noisy transport logs by default (can be re-enabled with LIGHTCLAW_VERBOSE_HTTP=1).
 if os.getenv("LIGHTCLAW_VERBOSE_HTTP", "").strip().lower() not in {"1", "true", "yes"}:
@@ -85,8 +104,8 @@ class _JsonLogFormatter(logging.Formatter):
             "channel": _infer_channel(session_id),
             "operation": _infer_operation(body),
         }
-        if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+        if record.exc_info or record.exc_text:
+            payload["exception"] = record.exc_text or self.formatException(record.exc_info)
 
         return json.dumps(payload, ensure_ascii=False)
 

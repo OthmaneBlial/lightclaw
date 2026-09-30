@@ -38,6 +38,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- LightClaw console and JSONL logs now redact environment secrets from messages and exception traces.
 - Telegram `/show` now limits durable-job counts to the current chat.
 - Refreshed the README and Pages site with a brighter, playful visual identity while keeping
   alpha status, approval boundaries, and fixture limits explicit.

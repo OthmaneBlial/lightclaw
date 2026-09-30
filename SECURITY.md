@@ -30,7 +30,7 @@ Useful reports include the affected commit/version, the configured capability pr
 - Coding tasks run inside per-task directories recorded as LightClaw-owned.
 - Skills install inactive. Activation requires review of source, provenance, permissions, and a hash that binds `SKILL.md` to `skill.json`; only prompt-guidance skills enter the core prompt.
 - `lightclaw undo` and `lightclaw uninstall` are dry runs unless explicitly applied.
-- Logs and provider errors pass through credential redaction, but users must still avoid placing secrets in prompts or source files.
+- LightClaw log messages and exception traces redact values from secret-named environment variables and common credential formats before console or JSONL output. Detection is heuristic; avoid placing secrets in prompts or source files.
 
 ## Host boundary
 

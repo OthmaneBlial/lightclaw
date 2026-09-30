@@ -70,3 +70,29 @@ def test_jsonl_schema_channel_inference_and_idempotent_setup(
         ("terminal", "cli", "assistant_message"),
         (None, "system", "heartbeat"),
     ]
+
+
+def test_jsonl_redacts_environment_secrets_from_messages_and_tracebacks(
+    tmp_path, monkeypatch, isolated_lightclaw_logger, caplog
+):
+    _clear_logging_environment(monkeypatch)
+    secret = "fixture-provider-secret"
+    monkeypatch.setenv("OPENAI_API_KEY", secret)
+    path = tmp_path / "events.jsonl"
+    monkeypatch.setenv("JSON_LOG_ENABLED", "1")
+    monkeypatch.setenv("JSON_LOG_PATH", str(path))
+    isolated_lightclaw_logger.setLevel(logging.INFO)
+    caplog.set_level(logging.INFO, logger="lightclaw")
+    configure_optional_json_logging(tmp_path)
+
+    try:
+        raise RuntimeError(f"provider rejected {secret}")
+    except RuntimeError:
+        isolated_lightclaw_logger.exception("Provider request failed with %s", secret)
+
+    text = path.read_text(encoding="utf-8")
+    entry = json.loads(text.splitlines()[-1])
+    assert secret not in text
+    assert secret not in caplog.text
+    assert "[REDACTED]" in entry["message"]
+    assert "[REDACTED]" in entry["exception"]
