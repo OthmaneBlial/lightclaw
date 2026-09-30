@@ -248,7 +248,7 @@ class DelegationMultiPlanningMixin:
     @staticmethod
     def _normalize_multi_contract_path(raw: str) -> str:
         value = str(raw or "").strip().replace("\\", "/")
-        if not value:
+        if not value or "\x00" in value:
             return ""
         value = re.sub(r"/{2,}", "/", value)
         if value.startswith("./"):

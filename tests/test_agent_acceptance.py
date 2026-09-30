@@ -24,6 +24,11 @@ def _acceptance(bot: LightClawBot, workspace):
     )
 
 
+def test_contract_path_normalization_rejects_nul_bytes():
+    bot = LightClawBot.__new__(LightClawBot)
+    assert bot._normalize_multi_contract_path("handoff/bad\x00.json") == ""
+
+
 def test_handoff_acceptance_rejects_json_over_one_mib(tmp_path):
     handoff = tmp_path / "handoff" / "builder.json"
     handoff.parent.mkdir()
