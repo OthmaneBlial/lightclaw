@@ -28,6 +28,12 @@ if a previously active monitor left cached index entries. An empty value also di
 Git versions interpreting `false` as an executable pathname. Stored monitor configuration is
 preserved; the explicitly selected source repository keeps its existing monitor behavior.
 
+LightClaw-generated checkpoint and acceptance commits are unsigned. A per-command
+[`commit.gpgSign=false` override](https://git-scm.com/docs/git-config) prevents inherited signing
+settings from launching a signer, requesting host keys or passphrases, or failing an automatic
+local commit. Signing configuration is preserved for deliberate signing with the user's Git CLI
+after review; existing signed commits are not rewritten by acceptance.
+
 Review artifacts support up to 500 changed paths. Larger runs fail review-artifact generation so the manifest never silently omits changed files; reduce the run scope before retrying.
 
 Neither finishing a run nor generating these files contacts a remote. Accepting a result creates only a local commit.

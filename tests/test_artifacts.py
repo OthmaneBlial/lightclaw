@@ -244,6 +244,37 @@ def test_task_artifacts_ignore_configured_monitor_and_stale_index(tmp_path, acti
     assert monitor.exists()
 
 
+@pytest.mark.parametrize("phase", ["checkpoint", "accept"])
+def test_task_commits_do_not_invoke_configured_signing_program(tmp_path, phase):
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / "result.txt").write_text("checkpoint\n")
+    if phase == "accept":
+        initialize_artifact_repository(task, "signing-test")
+    else:
+        _git(task, "init", "-b", "main")
+    signer = tmp_path / "signer-script"
+    marker = tmp_path / "outside-marker"
+    signer.write_text("#!/bin/sh\nprintf signer-ran > " + shlex.quote(str(marker)) + "\nexit 1\n")
+    signer.chmod(0o700)
+    _git(task, "config", "commit.gpgSign", "true")
+    _git(task, "config", "gpg.program", str(signer))
+    _git(task, "config", "user.signingKey", "fixture-key")
+    (task / "result.txt").write_text("approved result\n")
+
+    if phase == "accept":
+        accept_artifact(task, "signing-test")
+    else:
+        initialize_artifact_repository(task, "signing-test")
+
+    assert not marker.exists()
+    assert _git(task, "show", "HEAD:result.txt") == "approved result"
+    assert "gpgsig " not in _git(task, "cat-file", "commit", "HEAD")
+    assert _git(task, "config", "--get", "commit.gpgSign") == "true"
+    assert _git(task, "config", "--get", "gpg.program") == str(signer)
+    assert signer.exists()
+
+
 @pytest.mark.parametrize("phase", ["before_open", "launch"])
 def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeypatch, phase):
     workspace = tmp_path / "workspace"
