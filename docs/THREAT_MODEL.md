@@ -51,6 +51,8 @@ External agent CLIs remain separate security products. Their own version, authen
 - Provider credentials and Telegram tokens are not copied into delegated process environments.
 - In-memory approvals expire against wall and monotonic deadlines, so clock rollback cannot extend them and suspend time still consumes their lifetime.
 - A task rollback never targets a directory without a matching LightClaw ownership record.
+- Ownership registration preserves the requested task directory for its symlink check. A task
+  symlink cannot register its target as LightClaw-owned or grant undo permission over that target.
 - Existing configuration is backed up before a reset.
 - Global Python and generic `~/.env` are not modified by the supported installer.
 - Deterministic quality fixtures require no paid API key and no Telegram account.

@@ -36,8 +36,42 @@ def test_git_checkpoint_uses_secret_free_environment(
     assert child_env["LIGHTCLAW_DELEGATED"] == "1"
 
 
-def test_owned_task_undo_is_dry_run_by_default_and_scoped(tmp_path: Path):
+@pytest.mark.parametrize("parent_alias", [False, True])
+def test_task_registration_cannot_claim_a_symlink_target_for_undo(tmp_path: Path, parent_alias):
+    actual = tmp_path / "actual"
+    actual.mkdir()
+    parent = tmp_path / "alias" if parent_alias else actual
+    if parent_alias:
+        parent.symlink_to(actual, target_is_directory=True)
+    root = parent / "workspace"
+    root.mkdir()
+    user_project = root / "user-project"
+    user_project.mkdir()
+    user_file = user_project / "keep.txt"
+    user_file.write_text("pre-existing user data")
+    candidate = root / "20261001_120000_new-task"
+    candidate.symlink_to(user_project, target_is_directory=True)
+
+    with pytest.raises(WorkspaceSafetyError, match="real directory"):
+        register_task_workspace(root, candidate, "fresh task")
+
+    assert not (root / ".lightclaw-meta" / f"{user_project.name}.json").exists()
+    assert not (root / ".lightclaw-meta" / f"{candidate.name}.json").exists()
+    with pytest.raises(WorkspaceSafetyError, match="no LightClaw ownership record"):
+        undo_owned_task(root, user_project.name, apply=True)
+    assert user_file.read_text() == "pre-existing user data"
+    assert candidate.is_symlink()
+
+
+@pytest.mark.parametrize("parent_alias", [False, True])
+def test_owned_task_undo_is_dry_run_by_default_and_scoped(tmp_path: Path, parent_alias):
     root = tmp_path / "workspace"
+    if parent_alias:
+        actual = tmp_path / "actual"
+        actual.mkdir()
+        alias = tmp_path / "alias"
+        alias.symlink_to(actual, target_is_directory=True)
+        root = alias / "workspace"
     root.mkdir()
     owned = root / "20260823_120000_safe-task"
     owned.mkdir()

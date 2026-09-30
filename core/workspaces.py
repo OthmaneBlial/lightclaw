@@ -107,7 +107,7 @@ def capture_git_checkpoint(workspace: Path) -> dict[str, object]:
 def register_task_workspace(root: Path, workspace: Path, goal: str) -> dict[str, object]:
     """Record proof that a freshly created task directory belongs to LightClaw."""
     root = validate_workspace_root(root)
-    workspace = workspace.resolve()
+    workspace = workspace.parent.resolve() / workspace.name
     try:
         relative = workspace.relative_to(root)
     except ValueError as exc:
