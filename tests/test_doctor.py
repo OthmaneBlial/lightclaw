@@ -9,6 +9,7 @@ from lightclaw_cli import cmd_doctor
 
 
 def test_doctor_report_is_secret_safe_and_shows_access_policy(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.doctor.sys", SimpleNamespace(version_info=(3, 14)))
     config_file = tmp_path / "config.env"
     config_file.write_text("OPENAI_API_KEY=super-secret-value\n", encoding="utf-8")
     config_file.chmod(0o600)
@@ -26,6 +27,7 @@ def test_doctor_report_is_secret_safe_and_shows_access_policy(tmp_path, monkeypa
     serialized = json.dumps(report)
 
     assert report["overall"] in {"ok", "warning"}
+    assert report["lightclaw"]["python_supported"] is True
     assert report["lightclaw"]["access_policy"] == (
         "restricted (1 allowed user(s); private chats only)"
     )

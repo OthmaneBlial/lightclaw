@@ -112,7 +112,7 @@ def build_doctor_report(config: Config) -> dict[str, object]:
         "overall": overall,
         "lightclaw": {
             "python": platform.python_version(),
-            "python_supported": (3, 10) <= sys.version_info[:2] <= (3, 13),
+            "python_supported": (3, 10) <= sys.version_info[:2] <= (3, 14),
             "capability_profile": config.local_agent_capability_profile,
             "access_policy": policy,
         },
