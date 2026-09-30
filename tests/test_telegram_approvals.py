@@ -454,6 +454,7 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
     bot.config = SimpleNamespace(groq_api_key="fixture")
     bot.is_update_allowed = lambda _update: True
     bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
     bot._reply_logged = AsyncMock()
     bot._process_user_message = AsyncMock()
     monkeypatch.setattr("core.bot.handlers.transcribe_voice", AsyncMock(return_value="Build the fixture"))

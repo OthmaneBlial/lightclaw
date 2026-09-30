@@ -106,6 +106,7 @@ async def test_oversized_voice_is_rejected_before_transcription(
     bot.config = SimpleNamespace(groq_api_key="fixture")
     bot.is_update_allowed = lambda _update: True
     bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
     bot._reply_logged = AsyncMock()
     voice = SimpleNamespace(file_size=message_size, get_file=get_file)
     update = SimpleNamespace(
@@ -135,6 +136,7 @@ async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_ou
     bot.is_update_allowed = lambda _update: True
     bot._session_id_from_update = lambda update: str(update.effective_chat.id)
     bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
     bot._reply_logged = AsyncMock()
     old_transcription_started = asyncio.Event()
     release_old_transcription = asyncio.Event()
@@ -248,6 +250,7 @@ async def test_voice_download_error_log_redacts_telegram_bot_token(caplog):
     bot.is_update_allowed = lambda _update: True
     bot._session_id_from_update = lambda _update: "456"
     bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
     bot._reply_logged = AsyncMock()
     voice = SimpleNamespace(
         file_size=None,
@@ -266,3 +269,27 @@ async def test_voice_download_error_log_redacts_telegram_bot_token(caplog):
     assert token not in caplog.text
     assert "request failed" in caplog.text
     assert "[REDACTED]" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_voice_rate_limit_rejects_before_telegram_file_download(monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = Mock(return_value=True)
+    bot._reply_logged = AsyncMock()
+    get_file = AsyncMock()
+    send_chat_action = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(voice=SimpleNamespace(file_size=100, get_file=get_file)),
+    )
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=send_chat_action))
+
+    await bot.handle_voice(update, context)
+
+    bot._privileged_rate_limited.assert_called_once_with(123, "voice", limit=6)
+    get_file.assert_not_awaited()
+    send_chat_action.assert_not_awaited()
+    assert "one minute" in bot._reply_logged.await_args.args[1]

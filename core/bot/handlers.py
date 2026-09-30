@@ -104,6 +104,11 @@ class BotHandlersMixin:
         if voice_size is not None and voice_size > MAX_VOICE_FILE_BYTES:
             await self._reply_logged(update, VOICE_TOO_LARGE)
             return
+        if self._privileged_rate_limited(update.effective_user.id, "voice", limit=6):
+            await self._reply_logged(
+                update, "⚠️ Too many voice transcriptions. Retry in about one minute."
+            )
+            return
         session_id = self._session_id_from_update(update)
         voice_requests = getattr(self, "_voice_request_ids_by_session", None)
         if voice_requests is None:
