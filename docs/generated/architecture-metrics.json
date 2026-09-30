@@ -8,7 +8,7 @@
   "highest_branch_functions": [
     {
       "branch_points": 98,
-      "line": 157,
+      "line": 159,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 74,
-      "line": 903,
+      "line": 915,
       "lines": 380,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -115,7 +115,7 @@
   "largest_functions": [
     {
       "branch_points": 98,
-      "line": 157,
+      "line": 159,
       "lines": 694,
       "name": "_execute_multi_agent_plan",
       "path": "core/bot/commands/agent_execution.py"
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 74,
-      "line": 903,
+      "line": 915,
       "lines": 380,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1282,
+      "lines": 1294,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 850,
+      "lines": 852,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 20184,
+  "runtime_lines": 20239,
   "schema_version": 1
 }

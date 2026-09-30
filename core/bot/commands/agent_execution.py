@@ -40,6 +40,8 @@ class CommandsAgentExecutionMixin:
             raise
 
     async def _execute_pending_multi_plan(self, update: Update, session_id: str):
+        if getattr(self, "_shutting_down", False):
+            return
         locks = getattr(self, "_session_run_locks", None)
         if locks is None:
             locks = self._session_run_locks = {}

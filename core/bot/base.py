@@ -88,6 +88,7 @@ class BotBaseMixin:
         self._pending_voice_goal_by_session: dict[str, dict[str, object]] = {}
         self._voice_request_ids_by_session: dict[str, str] = {}
         self._active_run_tasks_by_session: dict[str, asyncio.Task[object]] = {}
+        self._shutting_down = False
         self._active_run_ids_by_session: dict[str, str] = {}
         self._session_run_locks: dict[str, asyncio.Lock] = {}
         self._active_worker_tasks_by_run: dict[
@@ -129,6 +130,9 @@ class BotBaseMixin:
 
     async def shutdown(self) -> None:
         """Stop bot-owned background tasks before closing their dependencies."""
+        active_runs = self._request_active_run_cancellation()
+        if active_runs:
+            await asyncio.gather(*active_runs, return_exceptions=True)
         self._heartbeat_enabled = False
         tasks = set(self._background_tasks)
         tasks.update(
@@ -145,6 +149,17 @@ class BotBaseMixin:
             await asyncio.gather(*tasks, return_exceptions=True)
         self.close()
 
+    def _request_active_run_cancellation(self) -> set[asyncio.Task[object]]:
+        self._shutting_down = True
+        tasks = {
+            task
+            for task in getattr(self, "_active_run_tasks_by_session", {}).values()
+            if not task.done()
+        }
+        for task in tasks:
+            task.cancel()
+        return tasks
+
     def is_allowed(self, user_id: int) -> bool:
         """Fail closed unless an allowlist or explicit public override exists."""
         if self.config.telegram_allowed_users:
@@ -153,7 +168,12 @@ class BotBaseMixin:
 
     def is_update_allowed(self, update: Update | None) -> bool:
         """Keep allowlisted sessions private; public mode explicitly permits groups."""
-        if not update or not update.effective_user or not update.effective_chat:
+        if (
+            getattr(self, "_shutting_down", False)
+            or not update
+            or not update.effective_user
+            or not update.effective_chat
+        ):
             return False
         if not self.is_allowed(update.effective_user.id):
             return False

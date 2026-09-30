@@ -12,6 +12,7 @@ from core.bot import LightClawBot
 async def test_agent_runs_serialize_per_chat_but_not_across_chats():
     bot = LightClawBot.__new__(LightClawBot)
     bot._session_run_locks = {}
+    bot._active_run_tasks_by_session = {}
     started: dict[str, asyncio.Event] = {
         "chat-a": asyncio.Event(),
         "chat-b": asyncio.Event(),
@@ -31,6 +32,7 @@ async def test_agent_runs_serialize_per_chat_but_not_across_chats():
         bot._run_local_agent_task("chat-a", "codex", "first task")
     )
     await started["chat-a"].wait()
+    assert bot._active_run_tasks_by_session["chat-a"] is first
 
     rejected = await bot._run_local_agent_task("chat-a", "claude", "second task")
     assert "already active" in rejected
@@ -45,6 +47,7 @@ async def test_agent_runs_serialize_per_chat_but_not_across_chats():
     release.set()
     assert await asyncio.gather(first, other_chat) == ["complete", "complete"]
     assert bot._session_run_locks == {}
+    assert bot._active_run_tasks_by_session == {}
 
 
 @pytest.mark.asyncio

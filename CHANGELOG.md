@@ -70,6 +70,7 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 - Delegation progress updates now redact credential-like output before sending it to Telegram.
 - Shared memory reads now wait for scope clears to finish, avoiding partial state on the
   SQLite connection.
+- Ctrl+C and termination signals now cancel tracked agent runs before Telegram drains updates.
 
 ## [0.1.0] - Unreleased
 

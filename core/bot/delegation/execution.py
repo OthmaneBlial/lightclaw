@@ -858,6 +858,8 @@ class DelegationExecutionMixin:
         initialize_artifact: bool = True,
         process_owner_run_id: str | None = None,
     ) -> str:
+        if getattr(self, "_shutting_down", False):
+            return "⏹ LightClaw is shutting down; no agent work was started."
         if not manage_job:
             return await self._run_local_agent_task_impl(
                 session_id=session_id,
@@ -882,20 +884,30 @@ class DelegationExecutionMixin:
             return "⏳ An agent run is already active in this chat. Wait for it or cancel it before starting another."
         try:
             async with lock:
-                return await self._run_local_agent_task_impl(
-                    session_id=session_id,
-                    agent=agent,
-                    task=task,
-                    progress_cb=progress_cb,
-                    include_workspace_delta=include_workspace_delta,
-                    workspace_dir=workspace_dir,
-                    capability_profile=capability_profile,
-                    emit_receipt=emit_receipt,
-                    evidence_sink=evidence_sink,
-                    manage_job=True,
-                    initialize_artifact=initialize_artifact,
-                    process_owner_run_id=process_owner_run_id,
-                )
+                current = asyncio.current_task()
+                active = getattr(self, "_active_run_tasks_by_session", None)
+                if active is None:
+                    active = self._active_run_tasks_by_session = {}
+                if current:
+                    active[session_id] = current
+                try:
+                    return await self._run_local_agent_task_impl(
+                        session_id=session_id,
+                        agent=agent,
+                        task=task,
+                        progress_cb=progress_cb,
+                        include_workspace_delta=include_workspace_delta,
+                        workspace_dir=workspace_dir,
+                        capability_profile=capability_profile,
+                        emit_receipt=emit_receipt,
+                        evidence_sink=evidence_sink,
+                        manage_job=True,
+                        initialize_artifact=initialize_artifact,
+                        process_owner_run_id=process_owner_run_id,
+                    )
+                finally:
+                    if current and active.get(session_id) is current:
+                        active.pop(session_id, None)
         finally:
             if locks.get(session_id) is lock and not lock.locked():
                 locks.pop(session_id, None)

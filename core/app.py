@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import signal
 from pathlib import Path
 
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
@@ -16,6 +18,24 @@ from .personality import (
     runtime_root_from_workspace,
 )
 from .security import access_policy_label
+
+
+def _install_shutdown_signal_handlers(application: Application, bot: LightClawBot, *, loop=None):
+    """Cancel supervised agents before python-telegram-bot drains active updates."""
+    loop = asyncio.get_running_loop() if loop is None else loop
+
+    def request_stop():
+        if bot._shutting_down:
+            return
+        bot._request_active_run_cancellation()
+        application.stop_running()
+
+    for stop_signal in (signal.SIGINT, signal.SIGTERM, signal.SIGABRT):
+        try:
+            loop.add_signal_handler(stop_signal, request_stop)
+        except NotImplementedError:
+            log.warning("Graceful agent cancellation is unavailable for %s", stop_signal.name)
+    return request_stop
 
 
 def main():
@@ -119,6 +139,7 @@ def main():
         log.info("   Personality: built-in default")
 
     async def _post_init(application: Application):
+        _install_shutdown_signal_handlers(application, bot)
         await bot._ensure_cron_task(application.bot)
 
     async def _post_shutdown(application: Application):

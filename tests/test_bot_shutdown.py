@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import signal
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
+from core.app import _install_shutdown_signal_handlers
 from core.bot import LightClawBot
 
 
@@ -32,7 +34,7 @@ async def test_shutdown_stops_background_tasks_before_closing_resources():
     async def wait_forever(name: str):
         nonlocal started_count
         started_count += 1
-        if started_count == 2:
+        if started_count == 3:
             started.set()
         try:
             await asyncio.Future()
@@ -46,6 +48,9 @@ async def test_shutdown_stops_background_tasks_before_closing_resources():
     bot._background_tasks = set()
     heartbeat_task = bot._create_background_task(wait_forever("heartbeat"))
     cron_task = bot._create_background_task(wait_forever("cron"))
+    active_run_task = asyncio.create_task(wait_forever("agent run"))
+    bot._active_run_tasks_by_session = {"chat": active_run_task}
+    bot._shutting_down = False
     bot._heartbeat_task = heartbeat_task
     bot._cron_task = cron_task
     bot.close = Mock(side_effect=lambda: events.append("closed"))
@@ -55,8 +60,56 @@ async def test_shutdown_stops_background_tasks_before_closing_resources():
 
     assert heartbeat_task.done()
     assert cron_task.done()
-    assert set(events[:-1]) == {"heartbeat", "cron"}
+    assert active_run_task.done()
+    assert set(events[:-1]) == {"heartbeat", "cron", "agent run"}
     assert events[-1] == "closed"
     assert bot._heartbeat_task is None
     assert bot._cron_task is None
     assert not bot._background_tasks
+
+
+@pytest.mark.asyncio
+async def test_shutdown_signal_cancels_agents_before_stopping_application():
+    started = asyncio.Event()
+    events: list[str] = []
+
+    async def active_run():
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            events.append("agent canceled")
+
+    class FakeLoop:
+        def __init__(self):
+            self.handlers = {}
+
+        def add_signal_handler(self, stop_signal, callback):
+            self.handlers[stop_signal] = callback
+
+        @staticmethod
+        def create_task(coroutine):
+            return asyncio.create_task(coroutine)
+
+    class FakeApplication:
+        def stop_running(self):
+            assert task.cancelling()
+            events.append("application stop requested")
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._shutting_down = False
+    task = asyncio.create_task(active_run())
+    bot._active_run_tasks_by_session = {"chat": task}
+    loop = FakeLoop()
+    request_stop = _install_shutdown_signal_handlers(FakeApplication(), bot, loop=loop)
+    await started.wait()
+
+    request_stop()
+    assert bot._shutting_down is True
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert task.cancelled()
+    assert events == ["application stop requested", "agent canceled"]
+    assert set(loop.handlers) == {signal.SIGINT, signal.SIGTERM, signal.SIGABRT}
+    assert request_stop() is None
