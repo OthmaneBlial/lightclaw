@@ -502,46 +502,13 @@ class CommandsAgentRouterMixin:
                     parse_mode=ParseMode.HTML,
                 )
                 return
-            progress = await self._reply_logged(
+            await self._execute_one_shot_delegation(
                 update,
-                f"🤖 Delegating to <code>{_escape_html(direct_agent)}</code>...",
-                parse_mode=ParseMode.HTML,
-            )
-
-            async def _delegation_progress_update(text: str):
-                try:
-                    run_id = self._active_run_ids_by_session.get(session_id)
-                    await progress.edit_text(
-                        text,
-                        reply_markup=(
-                            self._inline_cancel_keyboard(run_id) if run_id else None
-                        ),
-                    )
-                except Exception:
-                    pass
-
-            result_text = await self._run_local_agent_task(
-                session_id,
-                direct_agent,
-                task,
-                progress_cb=_delegation_progress_update,
-            )
-            request_entry = (
-                "[delegation-request]\n"
-                "mode: single\n"
-                f"agent: {direct_agent}\n"
-                f"task: {task}"
-            )
-            self.memory.ingest("user", request_entry, session_id)
-            memory_entry = self._build_single_delegation_memory_entry(
+                session_id=session_id,
                 agent=direct_agent,
                 task=task,
-                result_text=result_text,
+                capability_profile=self.config.local_agent_capability_profile,
             )
-            self.memory.ingest("assistant", memory_entry, session_id)
-            if not self._llm_backoff_active():
-                self._create_background_task(self.maybe_summarize(session_id))
-            await self._send_response(progress, update, result_text)
             return
 
         if sub == "run":
@@ -578,9 +545,35 @@ class CommandsAgentRouterMixin:
                 )
                 return
 
+            await self._execute_one_shot_delegation(
+                update,
+                session_id=session_id,
+                agent=agent,
+                task=task,
+                capability_profile=self.config.local_agent_capability_profile,
+            )
+            return
+
+        await self._reply_logged(
+            update,
+            "Unknown /agent subcommand.\n\n" + self._agent_usage_text(),
+            parse_mode=ParseMode.HTML,
+        )
+
+    async def _execute_one_shot_delegation(
+        self,
+        update: Update,
+        *,
+        session_id: str,
+        agent: str,
+        task: str,
+        capability_profile: str,
+    ) -> None:
+        async with self._memory_request_guard(session_id) as clear_event:
             progress = await self._reply_logged(
                 update,
-                f"🤖 Delegating to <code>{_escape_html(agent)}</code>...",
+                f"🤖 Delegating to <code>{_escape_html(agent)}</code> "
+                f"with <code>{_escape_html(capability_profile)}</code> capability...",
                 parse_mode=ParseMode.HTML,
             )
 
@@ -601,80 +594,23 @@ class CommandsAgentRouterMixin:
                 agent,
                 task,
                 progress_cb=_delegation_progress_update,
+                capability_profile=capability_profile,
             )
-            request_entry = (
-                "[delegation-request]\n"
-                "mode: single\n"
-                f"agent: {agent}\n"
-                f"task: {task}"
-            )
-            self.memory.ingest("user", request_entry, session_id)
-            memory_entry = self._build_single_delegation_memory_entry(
-                agent=agent,
-                task=task,
-                result_text=result_text,
-            )
-            self.memory.ingest("assistant", memory_entry, session_id)
-            if not self._llm_backoff_active():
-                self._create_background_task(self.maybe_summarize(session_id))
-            await self._send_response(progress, update, result_text)
-            return
-
-        await self._reply_logged(
-            update,
-            "Unknown /agent subcommand.\n\n" + self._agent_usage_text(),
-            parse_mode=ParseMode.HTML,
-        )
-
-    async def _execute_one_shot_delegation(
-        self,
-        update: Update,
-        *,
-        session_id: str,
-        agent: str,
-        task: str,
-        capability_profile: str,
-    ) -> None:
-        progress = await self._reply_logged(
-            update,
-            f"🤖 Delegating to <code>{_escape_html(agent)}</code> "
-            f"with <code>{_escape_html(capability_profile)}</code> capability...",
-            parse_mode=ParseMode.HTML,
-        )
-
-        async def _delegation_progress_update(text: str):
-            try:
-                run_id = self._active_run_ids_by_session.get(session_id)
-                await progress.edit_text(
-                    text,
-                    reply_markup=(
-                        self._inline_cancel_keyboard(run_id) if run_id else None
-                    ),
+            if not clear_event.is_set():
+                request_entry = (
+                    "[delegation-request]\n"
+                    "mode: single\n"
+                    f"capability: {capability_profile}\n"
+                    f"agent: {agent}\n"
+                    f"task: {task}"
                 )
-            except Exception:
-                pass
-
-        result_text = await self._run_local_agent_task(
-            session_id,
-            agent,
-            task,
-            progress_cb=_delegation_progress_update,
-            capability_profile=capability_profile,
-        )
-        request_entry = (
-            "[delegation-request]\n"
-            "mode: single\n"
-            f"capability: {capability_profile}\n"
-            f"agent: {agent}\n"
-            f"task: {task}"
-        )
-        self.memory.ingest("user", request_entry, session_id)
-        memory_entry = self._build_single_delegation_memory_entry(
-            agent=agent,
-            task=task,
-            result_text=result_text,
-        )
-        self.memory.ingest("assistant", memory_entry, session_id)
-        if not self._llm_backoff_active():
-            self._create_background_task(self.maybe_summarize(session_id))
-        await self._send_response(progress, update, result_text)
+                self.memory.ingest("user", request_entry, session_id)
+                memory_entry = self._build_single_delegation_memory_entry(
+                    agent=agent,
+                    task=task,
+                    result_text=result_text,
+                )
+                self.memory.ingest("assistant", memory_entry, session_id)
+                if not self._llm_backoff_active():
+                    self._create_background_task(self.maybe_summarize(session_id))
+            await self._send_response(progress, update, result_text)

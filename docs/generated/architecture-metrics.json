@@ -8,17 +8,17 @@
   "highest_branch_functions": [
     {
       "branch_points": 99,
-      "line": 67,
-      "lines": 561,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
+      "line": 237,
+      "lines": 698,
+      "name": "_execute_multi_agent_plan_impl",
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 98,
-      "line": 223,
-      "lines": 696,
-      "name": "_execute_multi_agent_plan",
-      "path": "core/bot/commands/agent_execution.py"
+      "branch_points": 93,
+      "line": 67,
+      "lines": 495,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 93,
@@ -114,16 +114,16 @@
   ],
   "largest_functions": [
     {
-      "branch_points": 98,
-      "line": 223,
-      "lines": 696,
-      "name": "_execute_multi_agent_plan",
+      "branch_points": 99,
+      "line": 237,
+      "lines": 698,
+      "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 99,
+      "branch_points": 93,
       "line": 67,
-      "lines": 561,
+      "lines": 495,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -241,7 +241,7 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 918,
+      "lines": 934,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -261,10 +261,6 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 680,
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
       "lines": 658,
       "path": "core/bot/approvals.py"
     },
@@ -273,7 +269,11 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 587,
+      "lines": 616,
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
+      "lines": 588,
       "path": "core/bot/base.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21222,
+  "runtime_lines": 21175,
   "schema_version": 1
 }

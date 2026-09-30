@@ -229,6 +229,21 @@ class CommandsAgentExecutionMixin:
         plan_payload: dict[str, object],
         run_id: str,
     ):
+        async with self._memory_request_guard(session_id) as clear_event:
+            return await self._execute_multi_agent_plan_impl(
+                update, session_id, goal, workers, plan_payload, run_id, clear_event
+            )
+
+    async def _execute_multi_agent_plan_impl(
+        self,
+        update: Update,
+        session_id: str,
+        goal: str,
+        workers: list[tuple[str, str]],
+        plan_payload: dict[str, object],
+        run_id: str,
+        clear_event: asyncio.Event,
+    ):
         run_started_clock = time.monotonic()
         run_started_at = self._utc_now()
         multi_workspace = await self._create_task_workspace_safely(goal)
@@ -899,16 +914,17 @@ class CommandsAgentExecutionMixin:
             f"goal: {goal}\n"
             f"workers: {', '.join(f'{label}={agent}' for label, agent in workers)}"
         )
-        self.memory.ingest("user", request_entry, session_id)
         memory_entry = self._build_multi_delegation_memory_entry(
             goal=goal,
             workspace_label=multi_workspace_label,
             workers=workers,
             results_by_label=results_by_label,
         )
-        self.memory.ingest("assistant", memory_entry, session_id)
-        if not self._llm_backoff_active():
-            self._create_background_task(self.maybe_summarize(session_id))
+        if not clear_event.is_set():
+            self.memory.ingest("user", request_entry, session_id)
+            self.memory.ingest("assistant", memory_entry, session_id)
+            if not self._llm_backoff_active():
+                self._create_background_task(self.maybe_summarize(session_id))
 
         await self._send_response(None, update, "\n".join(final_lines).strip())
         await self._reply_logged(

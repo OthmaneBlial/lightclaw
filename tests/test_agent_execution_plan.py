@@ -13,7 +13,8 @@ from core.jobs import JobStateError, JobStore
 
 
 @pytest.mark.asyncio
-async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path):
+@pytest.mark.parametrize("clear_kind", [None, "session", "global"])
+async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path, clear_kind):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(
         workspace_path=str(tmp_path),
@@ -42,6 +43,8 @@ async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path):
             invocations.append(lane["attempt"])
             if len(invocations) == 1:
                 return "⚠️ Worker failed: fixture failure"
+        elif clear_kind:
+            bot._invalidate_active_message_requests("fixture-session" if clear_kind == "session" else None)
         return "✅ Finished in 0.1s."
 
     bot._run_local_agent_task = worker
@@ -61,6 +64,8 @@ async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path):
         assert [lane["attempt"] for lane in job["lanes"]] == [2, 1]
         receipt = json.loads(Path(bot._last_run_receipts_by_session["fixture-session"]).read_text())
         assert receipt["retries"] == 1
+        assert bot.memory.ingest.call_count == (0 if clear_kind else 2)
+        assert not bot._active_message_clear_events_by_session
     finally:
         tasks = list(bot._active_run_heartbeats_by_run.values())
         for task in tasks:

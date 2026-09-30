@@ -7,7 +7,79 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from config import Config
 from core.bot import LightClawBot
+from memory import MemoryStore
+
+
+@pytest.mark.asyncio
+async def test_nested_memory_guards_share_invalidation_and_keep_outer_registration():
+    bot = LightClawBot.__new__(LightClawBot)
+    current = asyncio.current_task()
+    async with bot._memory_request_guard("chat") as outer:
+        async with bot._memory_request_guard("chat") as inner:
+            assert inner is outer
+            bot._invalidate_active_message_requests("chat")
+            assert outer.is_set()
+        assert bot._active_message_clear_events_by_session["chat"][current] is outer
+    assert not bot._active_message_clear_events_by_session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("route", ["direct", "run", "observe"])
+@pytest.mark.parametrize("clear_kind", ["session", "global"])
+async def test_agent_commands_do_not_restore_cleared_memory(tmp_path, route, clear_kind):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"], workspace_path=str(tmp_path))
+    bot.memory = MemoryStore(str(tmp_path / "memory.db"))
+    bot._privileged_rate_limited = Mock(return_value=False)
+    bot._session_summaries = {}
+    bot._summary_generation_by_session = {}
+    bot._summarizing = set()
+    bot._pending_wipe_confirm = {}
+    for name in (
+        "_pending_multi_plan_by_session", "_pending_trusted_agent_run_by_session",
+        "_pending_voice_goal_by_session", "_voice_request_ids_by_session",
+    ):
+        setattr(bot, name, {})
+    bot._reply_logged = AsyncMock(return_value=SimpleNamespace(edit_text=AsyncMock()))
+    bot._send_response = AsyncMock()
+    bot._llm_backoff_active = Mock(return_value=False)
+    bot.maybe_summarize = Mock()
+    bot._create_background_task = Mock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(),
+    )
+    bot._session_id_from_update(update)
+    bot.memory.ingest("user", "old private goal", "456")
+    bot.memory.ingest("user", "other chat history", "other-chat")
+    if clear_kind == "global":
+        await bot.cmd_wipe_memory(update, SimpleNamespace(args=[]))
+
+    async def clear_during_run(*_args, **_kwargs):
+        if clear_kind == "session":
+            await bot.cmd_clear(update, SimpleNamespace())
+        else:
+            await bot.cmd_wipe_memory(update, SimpleNamespace(args=["confirm"]))
+        return "✅ Finished in 0.1s."
+
+    bot._run_local_agent_task = clear_during_run
+    args = {
+        "direct": ["codex", "old private goal"],
+        "run": ["run", "codex", "old private goal"],
+        "observe": ["observe", "codex", "old private goal"],
+    }[route]
+    try:
+        await bot.cmd_agent(update, SimpleNamespace(args=args))
+        assert bot.memory.get_recent(session_id="456") == []
+        assert len(bot.memory.get_recent(session_id="other-chat")) == (clear_kind == "session")
+        bot._send_response.assert_awaited_once()
+        bot._create_background_task.assert_not_called()
+        assert not getattr(bot, "_active_message_clear_events_by_session", {})
+    finally:
+        bot.memory.db.close()
 
 
 @pytest.mark.asyncio

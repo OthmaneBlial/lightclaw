@@ -146,6 +146,7 @@ class BotBaseMixin:
     async def _memory_request_guard(self, session_id: str):
         current = asyncio.current_task()
         clear_event = asyncio.Event()
+        registered_event = clear_event
         async with self._get_memory_wipe_lock():
             if getattr(self, "_shutting_down", False):
                 raise asyncio.CancelledError
@@ -154,11 +155,11 @@ class BotBaseMixin:
                 active_messages = self._active_message_clear_events_by_session = {}
             session_messages = active_messages.setdefault(session_id, {})
             if current:
-                session_messages[current] = clear_event
+                clear_event = session_messages.setdefault(current, clear_event)
         try:
             yield clear_event
         finally:
-            if current:
+            if current and clear_event is registered_event:
                 session_messages.pop(current, None)
             if not session_messages:
                 active_messages.pop(session_id, None)
