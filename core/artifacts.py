@@ -278,7 +278,7 @@ def _open_workspace_directory(
         raise ArtifactError(f"{label} could not be opened safely") from exc
 
 
-def _open_workspace_file(root: Path, relative: str, label: str) -> tuple[int, os.stat_result]:
+def _open_workspace_file(root: Path | int, relative: str, label: str) -> tuple[int, os.stat_result]:
     try:
         return open_regular_file_at(root, relative)
     except OSError as exc:
@@ -438,7 +438,7 @@ def apply_selected_files(
             staging_fd = os.open(
                 staging_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
             )
-            staged: list[tuple[str, str, str, int, str | None]] = []
+            staged: list[tuple[str, str, str, int, str | None, int | None]] = []
             try:
                 for index, (
                     relative,
@@ -447,7 +447,7 @@ def apply_selected_files(
                     expected_sha256,
                     expected_mode,
                     target_sha256,
-                    _target_mode,
+                    target_mode,
                 ) in enumerate(planned):
                     source_fd, source_stat = _open_workspace_file(
                         source, relative, "selected source"
@@ -472,7 +472,7 @@ def apply_selected_files(
                         )
                         temp_name = None
                         staged.append(
-                            (relative, stage_name, expected_sha256, expected_mode, target_sha256)
+                            (relative, stage_name, expected_sha256, expected_mode, target_sha256, target_mode)
                         )
                     finally:
                         os.close(source_fd)
@@ -577,7 +577,7 @@ def apply_selected_files(
                                 + "; ".join(cleanup_failures)
                             )
 
-                for relative, stage_name, expected_sha256, expected_mode, target_sha256 in staged:
+                for relative, stage_name, expected_sha256, expected_mode, target_sha256, target_mode in staged:
                     source_fd, source_stat = _open_workspace_file(
                         staging_root, stage_name, "staged selected source"
                     )
@@ -612,6 +612,22 @@ def apply_selected_files(
                                 ) from exc
                             _unlink_at(parent_fd, temp_name)
                         else:
+                            target_fd, target_stat = _open_workspace_file(
+                                parent_fd, parts[-1], "target path"
+                            )
+                            try:
+                                current_sha256 = _hash_fd(target_fd)
+                                current = os.stat(parts[-1], dir_fd=parent_fd, follow_symlinks=False)
+                                if (
+                                    current_sha256 != target_sha256
+                                    or stat.S_IMODE(current.st_mode) != target_mode
+                                    or not os.path.samestat(target_stat, current)
+                                    or current.st_mtime_ns != target_stat.st_mtime_ns
+                                    or current.st_size != target_stat.st_size
+                                ):
+                                    raise ArtifactError(f"selected target changed during apply: {relative}")
+                            finally:
+                                os.close(target_fd)
                             os.rename(
                                 temp_name,
                                 parts[-1],

@@ -431,6 +431,96 @@ def test_selective_apply_rejects_target_mutation_during_backup(tmp_path, monkeyp
     assert not (target / ".lightclaw-backups" / "run-backup-race" / "selected.txt").exists()
 
 
+@pytest.mark.parametrize("change", ["content", "mode", "replacement", "symlink"])
+def test_selective_apply_preserves_target_changed_after_backup(tmp_path, monkeypatch, change):
+    source, target = tmp_path / "source", tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("approved agent result\n")
+    selected = target / "selected.txt"
+    selected.write_text("original human file\n")
+    selected.chmod(0o640)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside private file\n")
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="late-edit")
+    copy_to_temp = artifact_module._copy_to_temp
+    selected_copies = 0
+
+    def change_after_final_copy(source_fd, directory_fd, name, source_stat):
+        nonlocal selected_copies
+        result = copy_to_temp(source_fd, directory_fd, name, source_stat)
+        if name == "selected.txt":
+            selected_copies += 1
+            if selected_copies == 2:
+                if change == "content":
+                    selected.write_text("concurrent human edit\n")
+                elif change == "mode":
+                    selected.chmod(0o600)
+                elif change == "replacement":
+                    replacement = target / "editor-save.txt"
+                    replacement.write_text("concurrent human edit\n")
+                    replacement.replace(selected)
+                else:
+                    selected.unlink()
+                    selected.symlink_to(outside)
+        return result
+
+    monkeypatch.setattr(artifact_module, "_copy_to_temp", change_after_final_copy)
+    with pytest.raises(ArtifactError, match="target.*(changed|symlink)"):
+        apply_selected_files(
+            source, target, ["selected.txt"], run_id="late-edit",
+            apply=True, confirm_plan=preview["plan_sha256"],
+        )
+    assert selected_copies == 2
+    assert (target / ".lightclaw-backups" / "late-edit" / "selected.txt").read_text() == "original human file\n"
+    assert not list(target.glob(".selected.txt.*.tmp"))
+    assert outside.read_text() == "outside private file\n"
+    if change == "symlink":
+        assert selected.is_symlink()
+    elif change == "mode":
+        assert stat.S_IMODE(selected.stat().st_mode) == 0o600
+        assert selected.read_text() == "original human file\n"
+    else:
+        assert selected.read_text() == "concurrent human edit\n"
+
+
+def test_selective_apply_preserves_target_replaced_while_final_hash_is_read(tmp_path, monkeypatch):
+    source, target = tmp_path / "source", tmp_path / "target"
+    source.mkdir()
+    target.mkdir()
+    (source / "selected.txt").write_text("agent result\n")
+    selected = target / "selected.txt"
+    selected.write_text("original human file\n")
+    preview = apply_selected_files(source, target, ["selected.txt"], run_id="hash-race")
+    open_file, hash_fd = artifact_module._open_workspace_file, artifact_module._hash_fd
+    final_target_fd = None
+
+    def track_final_target(root, relative, label):
+        nonlocal final_target_fd
+        opened = open_file(root, relative, label)
+        if isinstance(root, int) and label == "target path":
+            final_target_fd = opened[0]
+        return opened
+
+    def replace_after_hash(file_fd):
+        digest = hash_fd(file_fd)
+        if file_fd == final_target_fd:
+            replacement = target / "editor-save.txt"
+            replacement.write_text("concurrent human edit\n")
+            replacement.replace(selected)
+        return digest
+
+    monkeypatch.setattr(artifact_module, "_open_workspace_file", track_final_target)
+    monkeypatch.setattr(artifact_module, "_hash_fd", replace_after_hash)
+    with pytest.raises(ArtifactError, match="target changed during apply"):
+        apply_selected_files(
+            source, target, ["selected.txt"], run_id="hash-race",
+            apply=True, confirm_plan=preview["plan_sha256"],
+        )
+    assert selected.read_text() == "concurrent human edit\n"
+    assert not list(target.glob(".selected.txt.*.tmp"))
+
+
 def test_selective_apply_rejects_target_permission_change_during_backup(tmp_path, monkeypatch):
     source = tmp_path / "source"
     target = tmp_path / "target"

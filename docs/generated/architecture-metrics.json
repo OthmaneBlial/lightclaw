@@ -77,18 +77,18 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
+      "branch_points": 50,
+      "line": 345,
+      "lines": 310,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
+    },
+    {
       "branch_points": 49,
       "line": 105,
       "lines": 330,
       "name": "cmd_skills",
       "path": "core/bot/commands/skills.py"
-    },
-    {
-      "branch_points": 47,
-      "line": 345,
-      "lines": 294,
-      "name": "apply_selected_files",
-      "path": "core/artifacts.py"
     },
     {
       "branch_points": 47,
@@ -163,18 +163,18 @@
       "path": "core/bot/commands/skills.py"
     },
     {
+      "branch_points": 50,
+      "line": 345,
+      "lines": 310,
+      "name": "apply_selected_files",
+      "path": "core/artifacts.py"
+    },
+    {
       "branch_points": 45,
       "line": 496,
       "lines": 298,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
-    },
-    {
-      "branch_points": 47,
-      "line": 345,
-      "lines": 294,
-      "name": "apply_selected_files",
-      "path": "core/artifacts.py"
     },
     {
       "branch_points": 0,
@@ -253,12 +253,12 @@
       "path": "core/jobs.py"
     },
     {
-      "lines": 790,
-      "path": "core/bot/commands/agent_acceptance.py"
+      "lines": 796,
+      "path": "core/artifacts.py"
     },
     {
-      "lines": 780,
-      "path": "core/artifacts.py"
+      "lines": 790,
+      "path": "core/bot/commands/agent_acceptance.py"
     },
     {
       "lines": 658,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21178,
+  "runtime_lines": 21194,
   "schema_version": 1
 }
