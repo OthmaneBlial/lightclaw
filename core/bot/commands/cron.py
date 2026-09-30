@@ -22,6 +22,10 @@ from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import runtime_root_from_workspace
 
 
+class CronStoreReadError(RuntimeError):
+    """Cron state cannot be read safely."""
+
+
 class CommandsCronMixin:
     @staticmethod
     def _cron_usage_text() -> str:
@@ -72,12 +76,11 @@ class CommandsCronMixin:
         try:
             data = read_json_object(path, default={"jobs": []}, max_bytes=1024 * 1024)
         except Exception as e:
-            log.warning(f"Failed to read cron jobs store, resetting to empty: {e}")
-            return {"jobs": []}
+            raise CronStoreReadError(f"Failed to read cron jobs store: {e}") from e
 
-        raw_jobs = data.get("jobs") if isinstance(data, dict) else []
+        raw_jobs = data.get("jobs")
         if not isinstance(raw_jobs, list):
-            return {"jobs": []}
+            raise CronStoreReadError("Cron jobs store must contain a jobs list")
 
         jobs: list[dict[str, Any]] = []
         for raw in raw_jobs:
@@ -133,6 +136,14 @@ class CommandsCronMixin:
     def _write_cron_store(self, store: dict[str, Any]) -> None:
         payload = {"jobs": store.get("jobs", []) if isinstance(store, dict) else []}
         _atomic_write_json(self._cron_jobs_path(), payload)
+
+
+    async def _reply_cron_store_read_error(self, update: Update, error: CronStoreReadError) -> None:
+        log.warning(str(error))
+        await self._reply_logged(
+            update,
+            "Cron jobs are unavailable because storage is unreadable. No changes made.",
+        )
 
 
     async def _ensure_cron_task(self, bot):
@@ -286,6 +297,13 @@ class CommandsCronMixin:
 
 
     async def cmd_cron(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            await self._cmd_cron(update, context)
+        except CronStoreReadError as e:
+            await self._reply_cron_store_read_error(update, e)
+
+
+    async def _cmd_cron(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
         if not self.is_update_allowed(update):

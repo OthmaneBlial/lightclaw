@@ -124,3 +124,32 @@ async def test_cron_interval_outside_localtime_range_is_rejected():
 
     bot._write_cron_store.assert_not_called()
     assert "too far in the future" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "args",
+    [["list"], ["add", "every", "5", "new job"], ["remove", "existing"]],
+)
+@pytest.mark.parametrize("content", ['{"jobs":', '{"jobs":{}}'])
+async def test_cron_command_preserves_unreadable_store(tmp_path, args, content):
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = lambda *_args: None
+    bot._reply_logged = AsyncMock()
+    bot._write_cron_store = Mock()
+    store_path = tmp_path / "jobs.json"
+    store_path.write_text(content, encoding="utf-8")
+    original = store_path.read_bytes()
+    bot._cron_jobs_path = lambda: store_path
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
+    context = SimpleNamespace(args=args, bot=SimpleNamespace())
+
+    await bot.cmd_cron(update, context)
+
+    bot._write_cron_store.assert_not_called()
+    assert store_path.read_bytes() == original
+    assert "unreadable" in bot._reply_logged.await_args.args[1].lower()
