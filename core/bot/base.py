@@ -81,6 +81,10 @@ class BotBaseMixin:
         self._cron_task = None
         self._cron_lock = asyncio.Lock()
         self._cron_iteration_lock = asyncio.Lock()
+        # Track live/queued requests so /clear can invalidate their later memory writes.
+        self._active_message_clear_events_by_session: dict[
+            str, dict[asyncio.Task, asyncio.Event]
+        ] = {}
         # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
         self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
         self._pending_multi_plan_ttl_sec: int = 15 * 60

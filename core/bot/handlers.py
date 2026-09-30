@@ -239,15 +239,38 @@ class BotHandlersMixin:
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str
     ):
         session_id = self._session_id_from_update(update)
+        current = asyncio.current_task()
+        clear_event = asyncio.Event()
+        active_messages = getattr(
+            self, "_active_message_clear_events_by_session", None
+        )
+        if active_messages is None:
+            active_messages = self._active_message_clear_events_by_session = {}
+        session_messages = active_messages.setdefault(session_id, {})
+        if current:
+            session_messages[current] = clear_event
         locks = getattr(self, "_session_message_locks", None)
         if locks is None:
             locks = self._session_message_locks = WeakValueDictionary()
         lock = locks.setdefault(session_id, asyncio.Lock())
-        async with lock:
-            await self._process_user_message_serialized(update, context, user_text)
+        try:
+            async with lock:
+                if not clear_event.is_set():
+                    await self._process_user_message_serialized(
+                        update, context, user_text, clear_event
+                    )
+        finally:
+            if current:
+                session_messages.pop(current, None)
+            if not session_messages:
+                active_messages.pop(session_id, None)
 
     async def _process_user_message_serialized(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        user_text: str,
+        clear_event: asyncio.Event,
     ):
         """
         Core agent loop:
@@ -308,6 +331,12 @@ class BotHandlersMixin:
             placeholder = await update.message.reply_text("Thinking... 💭")
         except Exception:
             pass
+        if clear_event.is_set():
+            if placeholder:
+                await self._send_response(
+                    placeholder, update, "🗑️ Request cleared before model processing."
+                )
+            return
 
         # Optional delegation mode: route normal messages to local coding agent.
         active_agent = self._agent_mode_by_session.get(session_id)
@@ -337,15 +366,16 @@ class BotHandlersMixin:
                 task=user_text,
                 progress_cb=_delegation_progress_update,
             )
-            self.memory.ingest("assistant", delegated_response, session_id)
-            delegation_context = self._build_single_delegation_memory_entry(
-                agent=active_agent,
-                task=user_text,
-                result_text=delegated_response,
-            )
-            self.memory.ingest("assistant", delegation_context, session_id)
+            if not clear_event.is_set():
+                self.memory.ingest("assistant", delegated_response, session_id)
+                delegation_context = self._build_single_delegation_memory_entry(
+                    agent=active_agent,
+                    task=user_text,
+                    result_text=delegated_response,
+                )
+                self.memory.ingest("assistant", delegation_context, session_id)
             await self._send_response(placeholder, update, delegated_response)
-            if not self._llm_backoff_active():
+            if not clear_event.is_set() and not self._llm_backoff_active():
                 self._create_background_task(self.maybe_summarize(session_id))
             return
 
@@ -386,6 +416,11 @@ class BotHandlersMixin:
                 update,
                 "⚠️ Skills state is unreadable or invalid. This request was not sent to an agent; "
                 "repair skills_state.json, then retry.",
+            )
+            return
+        if clear_event.is_set():
+            await self._send_response(
+                placeholder, update, "🗑️ Request cleared before model processing."
             )
             return
         file_mode = self._get_file_mode(session_id)
@@ -442,7 +477,8 @@ class BotHandlersMixin:
         log.info(f"[{session_id}] LLM response ({elapsed:.1f}s)")
 
         # 8. Ingest into memory
-        self.memory.ingest("user", user_text, session_id)
+        if not clear_event.is_set():
+            self.memory.ingest("user", user_text, session_id)
 
         # 9. Apply file operations (create/edit) and clean the response
         requested_file_intent = self._is_file_intent(user_text)
@@ -576,13 +612,14 @@ class BotHandlersMixin:
                 )
             )
         memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
-        self.memory.ingest("assistant", memory_response, session_id)
+        if not clear_event.is_set():
+            self.memory.ingest("assistant", memory_response, session_id)
 
         # 11. Edit placeholder with final response
         await self._send_response(placeholder, update, final_markdown_response)
 
         # 12. Async summarization check
-        if not provider_error_response:
+        if not clear_event.is_set() and not provider_error_response:
             self._create_background_task(self.maybe_summarize(session_id))
 
     # ── Message Chunking (Telegram 4096 char limit) ─────────

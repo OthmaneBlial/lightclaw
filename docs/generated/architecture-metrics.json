@@ -35,9 +35,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 61,
-      "line": 249,
-      "lines": 338,
+      "branch_points": 69,
+      "line": 268,
+      "lines": 356,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -142,9 +142,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 61,
-      "line": 249,
-      "lines": 338,
+      "branch_points": 69,
+      "line": 268,
+      "lines": 356,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -265,7 +265,7 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 588,
+      "lines": 625,
       "path": "core/bot/handlers.py"
     },
     {
@@ -273,7 +273,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 531,
+      "lines": 535,
       "path": "core/bot/base.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/delegation/tasks.py"
     }
   ],
-  "runtime_lines": 20845,
+  "runtime_lines": 20893,
   "schema_version": 1
 }

@@ -87,6 +87,12 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/clear")
+        for clear_event in getattr(
+            self, "_active_message_clear_events_by_session", {}
+        ).get(
+            session_id, {}
+        ).values():
+            clear_event.set()
         self._clear_pending_actions(session_id)
         self._invalidate_session_summary(session_id)
         self.memory.clear_session(session_id)
@@ -94,7 +100,8 @@ class CommandsBasicMixin:
         await self._reply_logged(
             update,
             "🗑️ Conversation cleared. Pending approvals and confirmations were discarded.\n"
-            "Active runs continue; use their Cancel run button to stop them. "
+            "Active runs continue; in-flight chat replies may finish but won't be saved. "
+            "Use a run's Cancel button to stop it. "
             "Memories from other chats are preserved."
         )
 
