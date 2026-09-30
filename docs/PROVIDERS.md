@@ -50,6 +50,10 @@ latency, cost, or model quality.
 
 xAI, DeepSeek, and Z.AI use their own provider identity and endpoint through an OpenAI-compatible transport. They are not represented as OpenAI-operated or OpenAI-certified services.
 
+DeepSeek's current Chat Completions model IDs are `deepseek-flash` and `deepseek-v4-pro`.
+LightClaw uses `deepseek-flash` for new defaults and maps retired `deepseek-chat` and
+`deepseek-reasoner` settings to that ID. See the [official model list](https://api-docs.deepseek.com/api/create-chat-completion/).
+
 ## Adding a provider
 
 A new provider is accepted only when the same change includes:

@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19162,
+  "runtime_lines": 19167,
   "schema_version": 1
 }

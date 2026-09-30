@@ -15,7 +15,7 @@ LATEST_MODEL_DEFAULTS = {
     "xai": "grok-4-latest",
     "claude": "claude-opus-4-5",
     "gemini": "gemini-3-flash-preview",
-    "deepseek": "deepseek-chat",
+    "deepseek": "deepseek-flash",
     "zai": "glm-5",
 }
 
@@ -200,6 +200,11 @@ def _resolve_model(provider: str, model: str) -> str:
     requested = _strip_inline_comment(model or "")
     if requested.lower() in _MODEL_DEFAULT_SENTINELS:
         return LATEST_MODEL_DEFAULTS.get(provider_name, LATEST_MODEL_DEFAULTS["openai"])
+    if provider_name == "deepseek" and requested.lower() in {
+        "deepseek-chat",
+        "deepseek-reasoner",
+    }:
+        return LATEST_MODEL_DEFAULTS["deepseek"]
     return requested
 
 

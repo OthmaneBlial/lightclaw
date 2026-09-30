@@ -38,6 +38,8 @@ All notable LightClaw changes are documented here. The format follows [Keep a Ch
 
 ### Changed
 
+- DeepSeek defaults and onboarding now use supported model IDs; retired `deepseek-chat` and
+  `deepseek-reasoner` settings resolve to `deepseek-flash`.
 - Verified Python 3.14 support and aligned package metadata, documentation, and alpha evidence
   validation with the Python 3.10–3.14 range.
 - Added universal hash locks for CI, release, showcase, and container dependencies;

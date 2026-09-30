@@ -47,7 +47,7 @@ RUN_PROVIDER_MODELS = {
     "xai": ["grok-4-latest", "grok-4-fast-non-reasoning"],
     "claude": ["claude-opus-4-5", "claude-sonnet-4-5"],
     "gemini": ["gemini-3-flash-preview", "gemini-2.5-flash"],
-    "deepseek": ["deepseek-chat", "deepseek-reasoner"],
+    "deepseek": ["deepseek-flash", "deepseek-v4-pro"],
     "zai": ["glm-5", "glm-4.7"],
 }
 DANGER_ACK_ENV = "LIGHTCLAW_DANGER_ACK"
@@ -475,7 +475,7 @@ def _configure_env_interactive(
         ("xai", "xAI", "grok-4-latest"),
         ("claude", "Anthropic", "claude-opus-4-5"),
         ("gemini", "Google", "gemini-3-flash-preview"),
-        ("deepseek", "DeepSeek", "deepseek-chat"),
+        ("deepseek", "DeepSeek", "deepseek-flash"),
         ("zai", "Z-AI", "glm-5"),
     ]
 

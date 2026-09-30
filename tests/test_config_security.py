@@ -47,6 +47,25 @@ def test_invalid_integer_setting_names_the_configuration_key(monkeypatch, name):
     assert "not-an-integer" not in str(exc.value)
 
 
+def test_deepseek_default_and_cli_choices_use_current_api_ids(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "fixture-key")
+
+    cfg = load_config()
+    from lightclaw_cli import RUN_PROVIDER_MODELS
+
+    assert cfg.llm_provider == "deepseek"
+    assert cfg.llm_model == "deepseek-flash"
+    assert RUN_PROVIDER_MODELS["deepseek"] == ["deepseek-flash", "deepseek-v4-pro"]
+
+
+@pytest.mark.parametrize("retired_model", ["deepseek-chat", "deepseek-reasoner"])
+def test_retired_deepseek_model_names_migrate_to_current_id(monkeypatch, retired_model):
+    monkeypatch.setenv("LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("LLM_MODEL", retired_model)
+
+    assert load_config().llm_model == "deepseek-flash"
+
+
 def test_bot_authorization_fails_closed_and_honors_allowlist():
     bot = BotBaseMixin.__new__(BotBaseMixin)
     bot.config = Config()
