@@ -737,7 +737,7 @@ class DelegationExecutionMixin:
         )
 
         timed_out = False
-        stream_failed = False
+        io_failed = False
         deadline = time.monotonic() + timeout_sec
         streams_task = asyncio.gather(
             read_stream(proc.stdout, stdout_capture),
@@ -754,8 +754,9 @@ class DelegationExecutionMixin:
                     )
                 except asyncio.TimeoutError:
                     raise
-                except Exception:
-                    pass
+                except Exception as exc:
+                    io_failed = True
+                    stderr_capture.append_line(f"Prompt stdin failed ({type(exc).__name__})")
                 finally:
                     try:
                         proc.stdin.close()
@@ -783,7 +784,7 @@ class DelegationExecutionMixin:
             await asyncio.gather(streams_task, return_exceptions=True)
             raise
         except Exception as exc:
-            stream_failed = True
+            io_failed = True
             await terminate_process_tree()
             await asyncio.gather(streams_task, return_exceptions=True)
             stderr_capture.append_line(f"Agent output stream failed: {exc}")
@@ -809,7 +810,7 @@ class DelegationExecutionMixin:
 
         elapsed = time.monotonic() - started
         exit_code = 124 if timed_out else int(proc.returncode if proc.returncode is not None else 1)
-        if stream_failed:
+        if io_failed:
             exit_code = 1
         stdout = redact_text(stdout_capture.text())
         stderr = redact_text(stderr_capture.text())

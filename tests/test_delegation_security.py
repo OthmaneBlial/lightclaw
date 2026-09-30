@@ -159,6 +159,22 @@ async def test_streaming_timeout_also_covers_prompt_stdin_write(tmp_path: Path):
     assert result["exit_code"] == 124
 
 
+async def test_prompt_stdin_failure_is_not_reported_as_success(tmp_path: Path):
+    harness = TimeoutHarness()
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [sys.executable, "-c", "pass"],
+        "x" * (4 * 1024 * 1024),
+    )
+
+    result = await harness._invoke_local_agent_streaming(
+        "codex", "task", workspace=tmp_path
+    )
+
+    assert result["ok"] is False
+    assert result["exit_code"] == 1
+    assert "Prompt stdin failed" in result["stderr"]
+
+
 async def test_stream_read_failure_terminates_worker_process(tmp_path: Path, monkeypatch):
     harness = TimeoutHarness()
     harness.config.local_agent_timeout_sec = 5
