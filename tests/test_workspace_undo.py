@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from unittest.mock import Mock
@@ -45,6 +47,9 @@ def test_owned_task_undo_is_dry_run_by_default_and_scoped(tmp_path: Path):
     user_file = sibling / "keep.txt"
     user_file.write_text("pre-existing", encoding="utf-8")
     register_task_workspace(root, owned, "safe task")
+    metadata_dir = root / ".lightclaw-meta"
+    assert metadata_dir.stat().st_mode & 0o777 == 0o700
+    assert (metadata_dir / f"{owned.name}.json").stat().st_mode & 0o777 == 0o600
 
     preview = undo_owned_task(root, owned.name)
     assert preview["applied"] is False
@@ -71,6 +76,40 @@ def test_undo_refuses_unregistered_symlink_and_traversal(tmp_path: Path):
     with pytest.raises(WorkspaceSafetyError, match="ownership record"):
         undo_owned_task(root, link.name, apply=True)
     assert (outside / "keep.txt").is_file()
+
+
+def test_undo_does_not_follow_root_symlink_swap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    owned = root / "20260930_120000_safe-task"
+    owned.mkdir()
+    register_task_workspace(root, owned, "safe task")
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    outside_task = outside / owned.name
+    outside_task.mkdir()
+    keep = outside_task / "keep.txt"
+    keep.write_text("user data", encoding="utf-8")
+    moved_root = tmp_path / "workspace-original"
+    remove_tree = shutil.rmtree
+
+    def swap_root_then_remove(path, *args, **kwargs):
+        if path == owned.name and kwargs.get("dir_fd") is not None:
+            root.rename(moved_root)
+            root.symlink_to(outside, target_is_directory=True)
+        return remove_tree(path, *args, **kwargs)
+
+    swap_root_then_remove.avoids_symlink_attacks = remove_tree.avoids_symlink_attacks
+    monkeypatch.setattr("core.workspaces.shutil.rmtree", swap_root_then_remove)
+    undo_owned_task(root, owned.name, apply=True)
+
+    assert keep.read_text(encoding="utf-8") == "user data"
+    metadata = json.loads(
+        (moved_root / ".lightclaw-meta" / f"{owned.name}.json").read_text(encoding="utf-8")
+    )
+    assert metadata["state"] == "undone"
+    assert not (outside / ".lightclaw-meta").exists()
 
 
 def test_task_metadata_directory_symlink_cannot_read_or_write_outside_root(tmp_path: Path):

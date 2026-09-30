@@ -49,7 +49,7 @@ def _relative_parts(relative: str | Path) -> tuple[str, ...]:
 
 
 def open_directory_at(
-    root: str | Path,
+    root: str | Path | int,
     parts: tuple[str, ...],
     *,
     create: bool = False,
@@ -59,7 +59,9 @@ def open_directory_at(
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     directory_fd: int | None = None
     try:
-        directory_fd = os.open(root, flags)
+        directory_fd = os.dup(root) if isinstance(root, int) else os.open(root, flags)
+        if not stat.S_ISDIR(os.fstat(directory_fd).st_mode):
+            raise OSError(errno.ENOTDIR, "workspace root is not a directory")
         for part in parts:
             if part in {"", ".", ".."} or "/" in part or "\x00" in part:
                 raise ValueError("workspace path must be safe and relative")
@@ -90,7 +92,7 @@ def open_directory_at(
 
 
 def open_regular_file_at(
-    root: str | Path, relative: str | Path
+    root: str | Path | int, relative: str | Path
 ) -> tuple[int, os.stat_result]:
     """Open one regular workspace file without following symlinks."""
     parts = _relative_parts(relative)
@@ -117,7 +119,7 @@ def open_regular_file_at(
 
 
 def read_text_bounded_at(
-    root: str | Path,
+    root: str | Path | int,
     relative: str | Path,
     max_bytes: int,
     *,
@@ -169,12 +171,13 @@ def _workspace_file_snapshot_at(
 
 
 def atomic_write_text_at(
-    root: str | Path,
+    root: str | Path | int,
     relative: str | Path,
     content: str,
     *,
     expected_content: str | None,
     private_parents: bool = False,
+    mode: int | None = None,
     encoding: str = "utf-8",
 ) -> None:
     """Atomically write beneath a workspace using symlink-safe directory handles."""
@@ -186,9 +189,10 @@ def atomic_write_text_at(
     temp_name: str | None = None
     file_fd: int | None = None
     try:
-        mode, initial_snapshot = _workspace_file_snapshot_at(
+        initial_mode, initial_snapshot = _workspace_file_snapshot_at(
             directory_fd, name, expected_content, encoding
         )
+        write_mode = initial_mode if mode is None else mode
 
         temp_name = f".{name}.{secrets.token_hex(8)}.tmp"
         file_fd = os.open(
@@ -201,13 +205,13 @@ def atomic_write_text_at(
             file_fd = None
             handle.write(content)
             handle.flush()
-            os.fchmod(handle.fileno(), mode)
+            os.fchmod(handle.fileno(), write_mode)
             os.fsync(handle.fileno())
 
         current_mode, current_snapshot = _workspace_file_snapshot_at(
             directory_fd, name, expected_content, encoding
         )
-        if current_snapshot != initial_snapshot or current_mode != mode:
+        if current_snapshot != initial_snapshot or current_mode != initial_mode:
             raise OSError(errno.EAGAIN, "workspace file changed while the update was prepared")
 
         if expected_content is None:

@@ -165,6 +165,7 @@ capped at 64 KiB; larger files are skipped.
 Acceptance commands are user-approved host processes, not sandboxed by LightClaw; review them and
 use OS/container isolation for untrusted repositories. Secret detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.
+Undo reads that record and removes the task relative to the opened workspace directory.
 
 These controls do not protect the host after you explicitly enable `trusted-command`, approve a malicious acceptance command, install malicious instructions, weaken an external CLI sandbox, or place secrets inside a readable task workspace.
 

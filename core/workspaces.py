@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import errno
+import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import time
 from pathlib import Path
 
-from .fs import atomic_write_json, open_directory_at, read_json_object
+from .fs import atomic_write_text_at, open_directory_at, read_text_bounded_at
 from .security import delegated_process_env
 
 METADATA_DIRNAME = ".lightclaw-meta"
@@ -21,25 +23,22 @@ class WorkspaceSafetyError(ValueError):
     """Raised when a workspace cannot be proven to be LightClaw-owned."""
 
 
-def _chmod_private_directory(path: Path) -> None:
+def _atomic_private_json(
+    root_fd: int, relative: str, payload: dict[str, object], expected_content: str | None
+) -> None:
     try:
-        os.chmod(path, 0o700, follow_symlinks=False)
+        atomic_write_text_at(
+            root_fd,
+            relative,
+            json.dumps(payload, indent=2, sort_keys=True) + "\n",
+            expected_content=expected_content,
+            private_parents=True,
+            mode=0o600,
+        )
     except OSError as exc:
-        if path.is_symlink():
-            raise WorkspaceSafetyError("private workspace directory must not be a symlink") from exc
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise WorkspaceSafetyError("task metadata directory must not be a symlink") from exc
         raise
-    if path.is_symlink():
-        raise WorkspaceSafetyError("private workspace directory must not be a symlink")
-    if not path.is_dir():
-        raise WorkspaceSafetyError("private workspace path must contain real directories")
-
-
-def _atomic_private_json(path: Path, payload: dict[str, object]) -> None:
-    if path.parent.is_symlink():
-        raise WorkspaceSafetyError("task metadata directory must not be a symlink")
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    _chmod_private_directory(path.parent)
-    atomic_write_json(path, payload, mode=0o600, trailing_newline=True)
 
 
 def validate_workspace_root(raw_root: str | Path) -> Path:
@@ -129,27 +128,37 @@ def register_task_workspace(root: Path, workspace: Path, goal: str) -> dict[str,
         "starting_files": [],
         "starting_git": capture_git_checkpoint(workspace),
     }
-    metadata_dir = ensure_private_workspace_dir(root, METADATA_DIRNAME)
-    _atomic_private_json(metadata_dir / f"{relative.name}.json", metadata)
+    root_fd = open_directory_at(root, ())
+    try:
+        _atomic_private_json(
+            root_fd, f"{METADATA_DIRNAME}/{relative.name}.json", metadata, None
+        )
+    finally:
+        os.close(root_fd)
     return metadata
 
 
-def resolve_owned_task(root: str | Path, task_name: str) -> tuple[Path, Path, dict[str, object]]:
-    """Resolve a task only when external metadata proves LightClaw ownership."""
-    root_path = validate_workspace_root(root)
+def _resolve_owned_task_at(
+    root_path: Path, root_fd: int, task_name: str
+) -> tuple[Path, Path, dict[str, object], str, bool]:
     name = str(task_name or "").strip()
     if not TASK_NAME_PATTERN.fullmatch(name):
         raise WorkspaceSafetyError("task name must be a single safe workspace label")
 
-    metadata_dir = root_path / METADATA_DIRNAME
-    if metadata_dir.is_symlink():
-        raise WorkspaceSafetyError("task ownership record directory must not be a symlink")
-    metadata_path = metadata_dir / f"{name}.json"
-    if metadata_path.is_symlink() or not metadata_path.is_file():
-        raise WorkspaceSafetyError("no LightClaw ownership record exists for this task")
+    relative_metadata = f"{METADATA_DIRNAME}/{name}.json"
     try:
-        metadata = read_json_object(metadata_path)
-    except (OSError, ValueError) as exc:
+        raw_metadata = read_text_bounded_at(root_fd, relative_metadata, 1024 * 1024)
+    except FileNotFoundError as exc:
+        raise WorkspaceSafetyError("no LightClaw ownership record exists for this task") from exc
+    except OSError as exc:
+        if exc.errno in {errno.ELOOP, errno.ENOTDIR}:
+            raise WorkspaceSafetyError(
+                "task ownership record directory must not be a symlink"
+            ) from exc
+        raise WorkspaceSafetyError("task ownership record is unreadable") from exc
+    try:
+        metadata = json.loads(raw_metadata)
+    except ValueError as exc:
         raise WorkspaceSafetyError("task ownership record is unreadable") from exc
     if not isinstance(metadata, dict) or metadata.get("owner") != "lightclaw":
         raise WorkspaceSafetyError("task ownership record is invalid")
@@ -157,29 +166,59 @@ def resolve_owned_task(root: str | Path, task_name: str) -> tuple[Path, Path, di
         raise WorkspaceSafetyError("task ownership record does not match this workspace root")
 
     workspace = root_path / name
-    if workspace.is_symlink():
+    try:
+        workspace_stat = os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+    except FileNotFoundError:
+        workspace_stat = None
+    if workspace_stat is not None and stat.S_ISLNK(workspace_stat.st_mode):
         raise WorkspaceSafetyError("refusing to undo a symlinked task workspace")
-    if workspace.resolve(strict=False).parent != root_path:
-        raise WorkspaceSafetyError("task workspace is not a direct child of the configured root")
-    return workspace, metadata_path, metadata
+    return workspace, root_path / relative_metadata, metadata, raw_metadata, bool(
+        workspace_stat and stat.S_ISDIR(workspace_stat.st_mode)
+    )
+
+
+def resolve_owned_task(root: str | Path, task_name: str) -> tuple[Path, Path, dict[str, object]]:
+    """Resolve a task only when external metadata proves LightClaw ownership."""
+    root_path = validate_workspace_root(root)
+    root_fd = open_directory_at(root_path, ())
+    try:
+        workspace, metadata_path, metadata, _raw, _exists = _resolve_owned_task_at(
+            root_path, root_fd, task_name
+        )
+        return workspace, metadata_path, metadata
+    finally:
+        os.close(root_fd)
 
 
 def undo_owned_task(root: str | Path, task_name: str, *, apply: bool = False) -> dict[str, object]:
     """Preview or delete one LightClaw-created task directory and nothing else."""
-    workspace, metadata_path, metadata = resolve_owned_task(root, task_name)
-    exists = workspace.is_dir()
-    result: dict[str, object] = {
-        "task_name": task_name,
-        "workspace": workspace.as_posix(),
-        "exists": exists,
-        "applied": False,
-    }
-    if not apply or not exists:
-        return result
+    root_path = validate_workspace_root(root)
+    root_fd = open_directory_at(root_path, ())
+    try:
+        workspace, metadata_path, metadata, raw_metadata, exists = _resolve_owned_task_at(
+            root_path, root_fd, task_name
+        )
+        result: dict[str, object] = {
+            "task_name": task_name,
+            "workspace": workspace.as_posix(),
+            "exists": exists,
+            "applied": False,
+        }
+        if not apply or not exists:
+            return result
+        if not shutil.rmtree.avoids_symlink_attacks:
+            raise WorkspaceSafetyError("safe task workspace deletion is unavailable")
 
-    shutil.rmtree(workspace)
-    metadata["state"] = "undone"
-    metadata["undone_at"] = int(time.time())
-    _atomic_private_json(metadata_path, metadata)
-    result["applied"] = True
-    return result
+        shutil.rmtree(workspace.name, dir_fd=root_fd)
+        metadata["state"] = "undone"
+        metadata["undone_at"] = int(time.time())
+        _atomic_private_json(
+            root_fd,
+            metadata_path.relative_to(root_path).as_posix(),
+            metadata,
+            raw_metadata,
+        )
+        result["applied"] = True
+        return result
+    finally:
+        os.close(root_fd)
