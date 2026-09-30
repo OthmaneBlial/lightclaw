@@ -177,18 +177,18 @@
       "path": "lightclaw_cli.py"
     },
     {
+      "branch_points": 28,
+      "line": 288,
+      "lines": 214,
+      "name": "cmd_cron",
+      "path": "core/bot/commands/cron.py"
+    },
+    {
       "branch_points": 58,
       "line": 862,
       "lines": 209,
       "name": "_normalize_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
-    },
-    {
-      "branch_points": 26,
-      "line": 282,
-      "lines": 206,
-      "name": "cmd_cron",
-      "path": "core/bot/commands/cron.py"
     },
     {
       "branch_points": 48,
@@ -273,14 +273,14 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 491,
-      "path": "core/artifacts.py"
+      "lines": 501,
+      "path": "core/bot/commands/cron.py"
     },
     {
-      "lines": 487,
-      "path": "core/bot/commands/cron.py"
+      "lines": 491,
+      "path": "core/artifacts.py"
     }
   ],
-  "runtime_lines": 19167,
+  "runtime_lines": 19181,
   "schema_version": 1
 }

@@ -46,25 +46,25 @@ class CommandsCronMixin:
 
 
     @staticmethod
+    def _is_renderable_cron_timestamp(value: float) -> bool:
+        try:
+            return value > 0 and math.isfinite(value) and bool(time.localtime(value))
+        except (OverflowError, OSError, ValueError):
+            return False
+
+
+    @staticmethod
     def _parse_cron_at(value: str) -> float | None:
         raw = (value or "").strip()
         if not raw:
             return None
 
-        if raw.isdigit():
-            parsed = float(raw)
-            return parsed if parsed > 0 else None
-
-        for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S"):
-            try:
-                return datetime.strptime(raw, fmt).timestamp()
-            except ValueError:
-                continue
-
         try:
-            return datetime.fromisoformat(raw).timestamp()
-        except ValueError:
+            parsed = float(raw) if raw.isdigit() else datetime.fromisoformat(raw).timestamp()
+        except (OverflowError, OSError, ValueError):
             return None
+
+        return parsed if CommandsCronMixin._is_renderable_cron_timestamp(parsed) else None
 
 
     def _read_cron_store(self) -> dict[str, Any]:
@@ -95,7 +95,7 @@ class CommandsCronMixin:
                 next_run_at = float(raw.get("next_run_at"))
             except Exception:
                 continue
-            if next_run_at <= 0:
+            if not self._is_renderable_cron_timestamp(next_run_at):
                 continue
 
             try:
@@ -116,6 +116,12 @@ class CommandsCronMixin:
                 try:
                     interval_sec = max(60, int(raw.get("interval_sec", 60)))
                 except Exception:
+                    continue
+                try:
+                    next_run = time.time() + interval_sec
+                except OverflowError:
+                    continue
+                if not self._is_renderable_cron_timestamp(next_run):
                     continue
                 job["interval_sec"] = interval_sec
 
@@ -345,12 +351,20 @@ class CommandsCronMixin:
                     return
 
                 interval_sec = interval_min * 60
+                try:
+                    next_run_at = now + interval_sec
+                except OverflowError:
+                    next_run_at = math.inf
+                if not self._is_renderable_cron_timestamp(next_run_at):
+                    await self._reply_logged(update, "That interval is too far in the future.")
+                    return
+
                 job = {
                     "id": uuid.uuid4().hex[:8],
                     "chat_id": session_id,
                     "mode": "every",
                     "interval_sec": interval_sec,
-                    "next_run_at": now + interval_sec,
+                    "next_run_at": next_run_at,
                     "text": text,
                     "created_at": now,
                 }

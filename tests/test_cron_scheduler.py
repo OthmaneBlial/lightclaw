@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from telegram.error import NetworkError, RetryAfter
@@ -82,3 +82,45 @@ async def test_cron_loop_retries_after_transient_iteration_error(monkeypatch):
 
     assert attempts == 2
     assert bot._cron_task is None
+
+
+def test_cron_parser_rejects_timestamp_outside_localtime_range():
+    assert CommandsCronMixin._parse_cron_at("9" * 100) is None
+
+
+def test_cron_store_discards_unrenderable_timestamps_and_intervals(monkeypatch, tmp_path):
+    bot = CronHarness()
+    bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
+    monkeypatch.setattr(
+        "core.bot.commands.cron.read_json_object",
+        lambda *_args, **_kwargs: {
+            "jobs": [
+                {"id": "bad-time", "chat_id": "1", "mode": "at", "text": "x", "next_run_at": 1e100},
+                {"id": "bad-interval", "chat_id": "1", "mode": "every", "text": "x", "next_run_at": time.time(), "interval_sec": 10**100},
+                {"id": "valid", "chat_id": "1", "mode": "at", "text": "x", "next_run_at": time.time() + 60},
+            ]
+        },
+    )
+
+    assert [job["id"] for job in bot._read_cron_store()["jobs"]] == ["valid"]
+
+
+@pytest.mark.asyncio
+async def test_cron_interval_outside_localtime_range_is_rejected():
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot._cron_poll_sec = 15
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = lambda *_args: None
+    bot._reply_logged = AsyncMock()
+    bot._read_cron_store = lambda: {"jobs": []}
+    bot._write_cron_store = Mock()
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
+    context = SimpleNamespace(args=["add", "every", "9" * 100, "check"], bot=SimpleNamespace())
+
+    await bot.cmd_cron(update, context)
+
+    bot._write_cron_store.assert_not_called()
+    assert "too far in the future" in bot._reply_logged.await_args.args[1].lower()
