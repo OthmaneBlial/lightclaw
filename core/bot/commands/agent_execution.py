@@ -870,10 +870,8 @@ class CommandsAgentExecutionMixin:
             "checkpoint": checkpoint,
             "undo": f"lightclaw undo {multi_workspace.name} --apply",
         }
-        receipt_json, receipt_markdown, _ = await asyncio.to_thread(
-            write_receipt,
-            receipt,
-            receipt_output,
+        receipt_json, receipt_markdown, _ = await await_thread_completion(
+            write_receipt, receipt, receipt_output
         )
         final_lines.append("")
         final_lines.append(f"🧾 Receipt: `{receipt_markdown.as_posix()}`")

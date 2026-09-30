@@ -595,6 +595,69 @@ async def test_cancel_during_patch_creation_cancels_durable_job(tmp_path, monkey
 
 
 @pytest.mark.asyncio
+async def test_cancel_during_receipt_write_waits_for_private_files(tmp_path, monkeypatch):
+    import core.bot.delegation.execution as execution
+
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    receipt_started = threading.Event()
+    release_receipt = threading.Event()
+    write_receipt = execution.write_receipt
+
+    def delayed_write_receipt(*args, **kwargs):
+        receipt_started.set()
+        assert release_receipt.wait(timeout=5)
+        return write_receipt(*args, **kwargs)
+
+    monkeypatch.setattr(execution, "write_receipt", delayed_write_receipt)
+    monkeypatch.setattr(execution, "create_patch_bundle", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    bot._invoke_local_agent_streaming = AsyncMock(
+        return_value={
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "summary": "Agent completed",
+            "elapsed": 0.25,
+            "timed_out": False,
+        }
+    )
+    task = asyncio.create_task(
+        bot._run_local_agent_task("fixture-session", "codex", "finish receipt")
+    )
+    try:
+        assert await asyncio.to_thread(receipt_started.wait, 5)
+        run_id = bot.jobs.list_jobs()[0]["run_id"]
+        task.cancel()
+        release_receipt.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        receipt_dir = bot._receipt_output_dir(str(run_id))
+        assert (receipt_dir / "receipt.json").is_file()
+        assert (receipt_dir / "receipt.md").is_file()
+        assert bot.jobs.get_job(str(run_id))["status"] == "succeeded"
+        assert bot._active_run_ids_by_session == {}
+    finally:
+        release_receipt.set()
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("failures_before_success", [1, 2])
 async def test_durable_job_finish_retries_and_records_sqlite_failure(
     tmp_path, monkeypatch, failures_before_success

@@ -1196,10 +1196,11 @@ class DelegationExecutionMixin:
         }
         receipt_paths: tuple[Path, Path] | None = None
         if emit_receipt:
-            receipt_json, receipt_markdown, safe_receipt = await asyncio.to_thread(
-                write_receipt,
-                receipt,
-                receipt_output,
+            receipt_json, receipt_markdown, safe_receipt = await self._await_durable_run_phase(
+                await_thread_completion(write_receipt, receipt, receipt_output),
+                durable_store,
+                session_id,
+                run_id,
             )
             receipt_paths = (receipt_json, receipt_markdown)
             receipt = safe_receipt
