@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -103,6 +104,7 @@ async def test_oversized_voice_is_rejected_before_transcription(
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
     bot.is_update_allowed = lambda _update: True
+    bot._pending_voice_goal_by_session = {}
     bot._reply_logged = AsyncMock()
     voice = SimpleNamespace(file_size=message_size, get_file=get_file)
     update = SimpleNamespace(
@@ -121,3 +123,51 @@ async def test_oversized_voice_is_rejected_before_transcription(
         voice_file.download_as_bytearray.assert_not_awaited()
     transcribe.assert_not_awaited()
     assert "transcription limit" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_out_of_order(
+    monkeypatch,
+):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda update: str(update.effective_chat.id)
+    bot._pending_voice_goal_by_session = {}
+    bot._reply_logged = AsyncMock()
+    old_transcription_started = asyncio.Event()
+    release_old_transcription = asyncio.Event()
+
+    async def transcribe(audio, _key):
+        if audio == b"old":
+            old_transcription_started.set()
+            await release_old_transcription.wait()
+            return "older request"
+        return "latest request"
+
+    monkeypatch.setattr("core.bot.handlers.transcribe_voice", transcribe)
+
+    def make_update(audio):
+        voice_file = SimpleNamespace(
+            file_size=None,
+            download_as_bytearray=AsyncMock(return_value=bytearray(audio)),
+        )
+        voice = SimpleNamespace(
+            file_size=None,
+            get_file=AsyncMock(return_value=voice_file),
+        )
+        return SimpleNamespace(
+            effective_user=SimpleNamespace(id=123),
+            effective_chat=SimpleNamespace(id=456, type="private"),
+            message=SimpleNamespace(voice=voice, caption=""),
+        )
+
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+    older = asyncio.create_task(bot.handle_voice(make_update(b"old"), context))
+    await old_transcription_started.wait()
+    await bot.handle_voice(make_update(b"new"), context)
+    release_old_transcription.set()
+    await older
+
+    assert bot._pending_voice_goal_by_session["456"]["transcription"] == "latest request"
+    bot._reply_logged.assert_awaited_once()

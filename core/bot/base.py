@@ -86,6 +86,7 @@ class BotBaseMixin:
         self._pending_trusted_agent_run_by_session: dict[str, dict[str, object]] = {}
         # Explicit voice-transcription approval gate and live run controls.
         self._pending_voice_goal_by_session: dict[str, dict[str, object]] = {}
+        self._voice_request_ids_by_session: dict[str, str] = {}
         self._active_run_tasks_by_session: dict[str, asyncio.Task[object]] = {}
         self._active_run_ids_by_session: dict[str, str] = {}
         self._session_run_locks: dict[str, asyncio.Lock] = {}

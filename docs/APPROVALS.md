@@ -26,7 +26,7 @@ Destructive language, publishing/deployment, credential changes, or external-sys
 
 ## Voice goals
 
-Voice transcription is limited to 20 MB. Oversized declared files are rejected before download; any oversized downloaded data is discarded. Accepted input is displayed as “not executed” and retained in memory only as a short-lived pending action. Nothing enters the normal agent loop until the user taps Use transcription. Discard and expiry execute nothing.
+Voice transcription is limited to 20 MB. Oversized declared files are rejected before download; any oversized downloaded data is discarded. A new valid voice request invalidates an older pending approval, and late results from older requests are discarded. Accepted input is displayed as “not executed” and retained in memory only as a short-lived pending action. Nothing enters the normal agent loop until the user taps Use transcription. Discard and expiry execute nothing.
 
 ## Result controls
 

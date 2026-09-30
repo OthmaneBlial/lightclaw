@@ -103,6 +103,13 @@ class BotHandlersMixin:
         if voice_size is not None and voice_size > MAX_VOICE_FILE_BYTES:
             await self._reply_logged(update, VOICE_TOO_LARGE)
             return
+        session_id = self._session_id_from_update(update)
+        voice_requests = getattr(self, "_voice_request_ids_by_session", None)
+        if voice_requests is None:
+            voice_requests = self._voice_request_ids_by_session = {}
+        request_id = secrets.token_hex(8)
+        voice_requests[session_id] = request_id
+        self._pending_voice_goal_by_session.pop(session_id, None)
         chat_id = update.effective_chat.id if update.effective_chat else 0
 
         if update.effective_chat:
@@ -111,23 +118,37 @@ class BotHandlersMixin:
             except TelegramError:
                 log.debug("Could not send voice typing indicator")
 
+        if voice_requests.get(session_id) != request_id:
+            return
         try:
             voice_file = await voice.get_file()
+            if voice_requests.get(session_id) != request_id:
+                return
             file_size = getattr(voice_file, "file_size", None)
             if file_size is not None and file_size > MAX_VOICE_FILE_BYTES:
+                voice_requests.pop(session_id, None)
                 await self._reply_logged(update, VOICE_TOO_LARGE)
                 return
             voice_bytes = await voice_file.download_as_bytearray()
         except Exception as e:
+            if voice_requests.get(session_id) != request_id:
+                return
+            voice_requests.pop(session_id, None)
             log.error(f"Failed to download voice: {e}")
             await self._reply_logged(update, "⚠️ Couldn't download voice message.")
             return
 
+        if voice_requests.get(session_id) != request_id:
+            return
         if len(voice_bytes) > MAX_VOICE_FILE_BYTES:
+            voice_requests.pop(session_id, None)
             await self._reply_logged(update, VOICE_TOO_LARGE)
             return
 
         text = await transcribe_voice(bytes(voice_bytes), self.config.groq_api_key)
+        if voice_requests.get(session_id) != request_id:
+            return
+        voice_requests.pop(session_id, None)
 
         if text:
             caption = update.message.caption or ""
@@ -135,7 +156,6 @@ class BotHandlersMixin:
             if caption:
                 user_text = f"{caption}\n{user_text}"
             log.info("Voice message transcribed and awaiting approval")
-            session_id = self._session_id_from_update(update)
             approval_id = secrets.token_hex(8)
             self._pending_voice_goal_by_session[session_id] = {
                 "text": user_text,
