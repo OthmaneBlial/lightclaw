@@ -6,6 +6,8 @@ Allowlisted bots accept commands only in private Telegram chats because group me
 
 Plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps.
 
+Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.
+
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 
 Delegated CLI output has per-line and per-stream limits. LightClaw marks truncated output for review.

@@ -331,7 +331,7 @@
           <article class="boundary-card reveal">
             <span class="boundary-tag safe">MINIMAL ENV</span>
             <h3>Worker isolation</h3>
-            <p>Delegated workers get a minimal environment and owned task workspace. CLI output is bounded and truncation is surfaced. Automatic edit retries omit common credential paths and detected secret-bearing files; generated edits cannot write common credential paths, chat file operations reject symlinked workspace paths, private metadata directories are created without following symlinks, and undo stays anchored to its opened workspace.</p>
+            <p>Delegated workers get a minimal environment and owned task workspace. CLI output is bounded and truncation is surfaced. Automatic edit retries omit common credential paths and detected secret-bearing files; generated edits cannot write common credential paths, chat file operations reject symlinked workspace paths, private metadata directories are created without following symlinks, and undo stays anchored to its opened workspace. Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.</p>
           </article>
           <article class="boundary-card reveal">
             <span class="boundary-tag warn">YOUR DECISION</span>

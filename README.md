@@ -162,7 +162,8 @@ write common credential paths, reject symlinked workspace paths during reads and
 each chat-edited file at 2 MiB. Private metadata, receipt, and message directories are created
 through no-follow directory descriptors with owner-only permissions. Writes replace files
 atomically. Use a delegated local-agent task for larger files. Scheduled `HEARTBEAT.md` input is
-capped at 64 KiB; larger files are skipped.
+capped at 64 KiB; larger files are skipped. Memory and job SQLite databases, including existing
+WAL/SHM sidecars, are restricted to owner-only permissions before use.
 Acceptance commands are user-approved host processes, not sandboxed by LightClaw; review them and
 use OS/container isolation for untrusted repositories. Secret detection is heuristic. `lightclaw undo`
 refuses paths that lack a LightClaw ownership record.

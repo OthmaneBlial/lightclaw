@@ -108,6 +108,15 @@ def test_site_discloses_credential_context_guards() -> None:
     assert "generated edits cannot write common credential paths" in html
 
 
+def test_site_discloses_private_sqlite_file_permissions() -> None:
+    html, _ = _document()
+    llms = (SITE / "llms.txt").read_text(encoding="utf-8")
+
+    assert "Memory and job SQLite databases" in html
+    assert "existing WAL/SHM sidecars" in html
+    assert "owner-only permissions before use" in llms
+
+
 def test_site_discovery_files_are_canonical_and_bounded() -> None:
     sitemap = ET.parse(SITE / "sitemap.xml").getroot()
     namespace = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
