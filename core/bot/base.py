@@ -86,6 +86,7 @@ class BotBaseMixin:
         self._cron_last_run_at: float = 0.0
         self._cron_task = None
         self._cron_lock = asyncio.Lock()
+        self._cron_iteration_lock = asyncio.Lock()
         # Pending /agent multi plan proposals awaiting confirm/edit/cancel.
         self._pending_multi_plan_by_session: dict[str, dict[str, object]] = {}
         self._pending_multi_plan_ttl_sec: int = 15 * 60

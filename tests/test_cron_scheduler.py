@@ -43,6 +43,7 @@ async def test_failed_cron_delivery_is_retained_with_retry_delay(error, minimum_
     ]
     writes = []
     bot._cron_lock = asyncio.Lock()
+    bot._cron_iteration_lock = asyncio.Lock()
     bot._cron_poll_sec = 15
     bot._cron_last_run_at = 0
     bot._read_cron_store = lambda: {"jobs": jobs}
@@ -153,3 +154,50 @@ async def test_cron_command_preserves_unreadable_store(tmp_path, args, content):
     bot._write_cron_store.assert_not_called()
     assert store_path.read_bytes() == original
     assert "unreadable" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+async def test_cron_delivery_does_not_block_schedule_edits(tmp_path):
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot._cron_iteration_lock = asyncio.Lock()
+    bot._cron_poll_sec = 15
+    bot._cron_last_run_at = 0
+    bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
+    bot._write_cron_store(
+        {
+            "jobs": [
+                {
+                    "id": "due",
+                    "chat_id": "123",
+                    "mode": "at",
+                    "text": "reminder",
+                    "next_run_at": time.time() - 1,
+                }
+            ]
+        }
+    )
+    send_started = asyncio.Event()
+    finish_send = asyncio.Event()
+
+    async def send_message(**_kwargs):
+        send_started.set()
+        await finish_send.wait()
+
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = lambda *_args: None
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
+    context = SimpleNamespace(args=["add", "every", "5", "new job"], bot=SimpleNamespace())
+    scheduler = asyncio.create_task(bot._run_due_cron_jobs(SimpleNamespace(send_message=send_message)))
+
+    await asyncio.wait_for(send_started.wait(), timeout=1)
+    try:
+        await asyncio.wait_for(bot.cmd_cron(update, context), timeout=1)
+    finally:
+        finish_send.set()
+        await scheduler
+
+    assert [job["text"] for job in bot._read_cron_store()["jobs"]] == ["new job"]

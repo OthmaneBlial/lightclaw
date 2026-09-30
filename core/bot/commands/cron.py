@@ -174,34 +174,28 @@ class CommandsCronMixin:
         if not hasattr(bot, "send_message"):
             return
 
-        now = time.time()
-        changed = False
-
-        async with self._cron_lock:
-            store = self._read_cron_store()
-            jobs = list(store.get("jobs", []))
-            if not jobs:
-                return
-
-            updated_jobs: list[dict[str, Any]] = []
+        async with self._cron_iteration_lock:
+            now = time.time()
+            updates: dict[str, dict[str, Any] | None] = {}
+            async with self._cron_lock:
+                jobs = list(self._read_cron_store().get("jobs", []))
 
             for job in jobs:
                 next_run_at = float(job.get("next_run_at", 0))
                 if next_run_at <= 0 or next_run_at > now:
-                    updated_jobs.append(job)
                     continue
 
+                job_id = str(job["id"])
                 chat_id_raw = str(job.get("chat_id") or "").strip()
                 message_text = str(job.get("text") or "").strip()
                 if not chat_id_raw or not message_text:
-                    changed = True
+                    updates[job_id] = None
                     continue
 
                 try:
                     chat_id = int(chat_id_raw)
                 except ValueError:
-                    # Ignore malformed chat ids.
-                    changed = True
+                    updates[job_id] = None
                     continue
 
                 message = f"⏰ Cron reminder\n\n{message_text}"
@@ -228,34 +222,35 @@ class CommandsCronMixin:
                         retry_after = retry_after.total_seconds()
                     retry_delay = max(retry_delay, math.ceil(retry_after))
                     sent = False
-                    log.warning("Cron job %s rate limited; retrying later", job["id"])
+                    log.warning("Cron job %s rate limited; retrying later", job_id)
                 except TelegramError as e:
                     sent = False
-                    log.warning("Cron job %s delivery failed; retrying later: %s", job["id"], e)
+                    log.warning("Cron job %s delivery failed; retrying later: %s", job_id, e)
 
                 if not sent:
                     if mode == "every":
                         retry_delay = max(retry_delay, int(job.get("interval_sec", 60)))
                     job["next_run_at"] = now + retry_delay
-                    updated_jobs.append(job)
-                    changed = True
-                    continue
-
-                self._cron_last_run_at = now
-                if mode == "every":
+                    updates[job_id] = job
+                elif mode == "every":
                     interval_sec = max(60, int(job.get("interval_sec", 60)))
                     job["next_run_at"] = now + interval_sec
-                    updated_jobs.append(job)
-                    changed = True
+                    updates[job_id] = job
+                    self._cron_last_run_at = now
                 else:
                     # one-time "at" job: remove after successful run
-                    changed = True
+                    updates[job_id] = None
+                    self._cron_last_run_at = now
 
-            if not changed and len(updated_jobs) != len(jobs):
-                changed = True
-
-            if changed:
-                self._write_cron_store({"jobs": updated_jobs})
+            if updates:
+                async with self._cron_lock:
+                    current_jobs = list(self._read_cron_store().get("jobs", []))
+                    merged_jobs = [
+                        updated
+                        for job in current_jobs
+                        if (updated := updates.get(str(job["id"]), job)) is not None
+                    ]
+                    self._write_cron_store({"jobs": merged_jobs})
 
 
     def _render_cron_list(self, session_id: str) -> str:
