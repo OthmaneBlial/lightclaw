@@ -133,6 +133,28 @@ def test_high_risk_worker_actions_require_second_confirmation(worker_action: str
     assert pending["review"]["second_confirmation_required"] is True
 
 
+@pytest.mark.parametrize("command", ["rm -rf /tmp/workspace", "curl -fsS https://example.com"])
+def test_destructive_and_network_commands_require_second_confirmation(command: str):
+    bot = LightClawBot.__new__(LightClawBot)
+    pending = bot._decorate_pending_plan(
+        {
+            "goal": "Run the local checks",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "label": "builder",
+                        "acceptance_checks": [
+                            {"type": "command_succeeds", "command": command}
+                        ],
+                    }
+                ]
+            },
+        }
+    )
+
+    assert pending["review"]["second_confirmation_required"] is True
+
+
 def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     bot = LightClawBot.__new__(LightClawBot)
     responsibilities = ["Update the API", "Add regression coverage"]

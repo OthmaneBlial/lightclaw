@@ -22,7 +22,7 @@ Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or sy
 
 ## High-risk confirmation
 
-Destructive language, publishing/deployment, credential changes, or external-system scope requires two ordered confirmations. The shared execution gate enforces the second confirmation for button, text, and slash-command entry points. A forged second-confirmation callback is rejected unless the first approval was recorded. Trusted host execution retains its separate confirmation gate.
+Destructive language and commands, privileged or network commands, publishing/deployment, credential changes, or external-system scope require two ordered confirmations. The shared execution gate enforces the second confirmation for button, text, and slash-command entry points. A forged second-confirmation callback is rejected unless the first approval was recorded. This keyword check is heuristic; it does not sandbox commands. Trusted host execution retains its separate confirmation gate.
 
 The plan preview shows worker responsibilities, expected outputs, owned paths, and acceptance commands. The risk scan checks the goal, worker roles, responsibilities, expected inputs and outputs, owned paths, and commands. These text checks are heuristic; review the full plan before approving.
 
