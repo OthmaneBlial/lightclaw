@@ -4,6 +4,8 @@ import hashlib
 import io
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -62,16 +64,43 @@ def test_bounded_text_reader_stops_at_limit_plus_one(tmp_path, monkeypatch):
     path = tmp_path / "large.txt"
     path.write_text("x" * 100, encoding="utf-8")
     read_requests = []
-    original_open = Path.open
+    original_open = os.fdopen
 
-    def probe_open(candidate, *args, **kwargs):
-        handle = original_open(candidate, *args, **kwargs)
-        return _ReadProbe(handle, read_requests) if candidate == path else handle
+    def probe_open(file_fd, *args, **kwargs):
+        return _ReadProbe(original_open(file_fd, *args, **kwargs), read_requests)
 
-    monkeypatch.setattr(Path, "open", probe_open)
+    monkeypatch.setattr(os, "fdopen", probe_open)
     with pytest.raises(FileTooLargeError):
         read_text_bounded(path, 8)
     assert read_requests == [9]
+
+
+def test_bounded_text_reader_rejects_fifo_without_waiting(tmp_path):
+    path = tmp_path / "pipe"
+    os.mkfifo(path)
+    script = (
+        "import sys\nfrom core.fs import read_text_bounded\n"
+        "try:\n    read_text_bounded(sys.argv[1], 64)\n"
+        "except OSError:\n    pass\n"
+        "else:\n    raise AssertionError('FIFO was accepted')\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(path)],
+        timeout=5, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_bounded_text_reader_keeps_configured_file_aliases_and_encoding(tmp_path):
+    target = tmp_path / "text.txt"
+    target.write_bytes("café".encode("latin-1"))
+    alias = tmp_path / "alias.txt"
+    alias.symlink_to(target)
+    assert read_text_bounded(alias, 4, encoding="latin-1") == "café"
+    alias.unlink()
+    alias.symlink_to(alias)
+    with pytest.raises(OSError):
+        read_text_bounded(alias, 4)
 
 
 def test_atomic_private_write_and_bounded_json_read(tmp_path):

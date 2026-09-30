@@ -41,6 +41,8 @@ Cancellation also covers agent startup, before the process group is registered. 
 
 `/heartbeat on [minutes]` starts the single global heartbeat scheduler for the chat that enables it (minimum five minutes). Intervals too large for the runtime are rejected without changing an existing schedule; `HEARTBEAT_INTERVAL_MIN` is validated at startup too. Ordinary messages and `/heartbeat show` do not change that destination. Running `/heartbeat on` again explicitly changes the destination and user memory scope and restarts the interval. `/heartbeat off` stops it. `HEARTBEAT.md` remains a host-wide file; authorized users share control of this scheduler.
 
+Personality, heartbeat, and agent authentication text reads accept regular files and configured file aliases. Named pipes and other special files are rejected without waiting for their contents, preventing these reads from blocking the bot.
+
 `/cron` manages reminders for the current Telegram chat. The bot must remain running to deliver them.
 
 ```text

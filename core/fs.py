@@ -70,13 +70,12 @@ def read_text_bounded(
     *,
     encoding: str = "utf-8",
 ) -> str:
-    """Read and decode text while consuming at most max_bytes plus one byte."""
-    limit = max(1, int(max_bytes))
-    with Path(path).open("rb") as handle:
-        raw = handle.read(limit + 1)
-    if len(raw) > limit:
-        raise FileTooLargeError(f"file exceeds the {limit}-byte read limit")
-    return raw.decode(encoding)
+    """Read bounded regular text, resolving configured aliases before opening."""
+    try:
+        source = Path(path).resolve()
+    except RuntimeError as exc:
+        raise OSError("text file path cannot be resolved") from exc
+    return read_text_bounded_at(source.parent, source.name, max_bytes, encoding=encoding)
 
 
 def _relative_parts(relative: str | Path) -> tuple[str, ...]:
