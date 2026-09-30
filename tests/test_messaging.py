@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html.parser import HTMLParser
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -20,16 +21,6 @@ class MessagingHarness(BotMessagingMixin):
         pass
 
 
-def test_chunk_message_respects_utf16_limit_and_preserves_content():
-    text = "😀" * 2501 + "\n" + "x" * 25
-
-    chunks = MessagingHarness._chunk_message(text, max_len=3000)
-
-    assert len(chunks) > 1
-    assert all(len(chunk.encode("utf-16-le")) // 2 <= 3000 for chunk in chunks)
-    assert "".join(chunks) == text
-
-
 @pytest.mark.asyncio
 async def test_escaped_content_is_not_truncated_after_html_conversion():
     bot = MessagingHarness()
@@ -42,6 +33,51 @@ async def test_escaped_content_is_not_truncated_after_html_conversion():
     html_chunk = placeholder.edit_text.await_args.args[0]
     assert len(html_chunk) > 4096
     assert html_chunk == "&lt;" * 1500
+
+
+@pytest.mark.asyncio
+async def test_long_fenced_code_keeps_html_formatting_across_messages():
+    bot = MessagingHarness()
+    placeholder = SimpleNamespace(edit_text=AsyncMock())
+    message = SimpleNamespace(reply_text=AsyncMock())
+    source = (
+        "Before\n```\n"
+        + "value = '<tag> 😀 & text'\n" * 160
+        + "```\nAfter **bold**"
+    )
+
+    await bot._send_response(placeholder, SimpleNamespace(message=message), source)
+
+    chunks = [placeholder.edit_text.await_args.args[0]] + [
+        call.args[0] for call in message.reply_text.await_args_list
+    ]
+    assert len(chunks) > 1
+
+    class HTMLText(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.stack: list[str] = []
+            self.text: list[str] = []
+
+        def handle_starttag(self, tag, _attrs):
+            self.stack.append(tag)
+
+        def handle_endtag(self, tag):
+            assert self.stack.pop() == tag
+
+        def handle_data(self, data):
+            self.text.append(data)
+
+    parsed = []
+    for chunk in chunks:
+        parser = HTMLText()
+        parser.feed(chunk)
+        parser.close()
+        assert not parser.stack
+        assert len("".join(parser.text).encode("utf-16-le")) // 2 <= 3000
+        parsed.extend(parser.text)
+
+    assert "".join(parsed) == "Before\n" + "value = '<tag> 😀 & text'\n" * 160 + "\nAfter bold"
 
 
 @pytest.mark.asyncio

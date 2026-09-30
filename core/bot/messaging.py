@@ -7,7 +7,8 @@ import re
 import secrets
 import tempfile
 import time
-from html import unescape
+from html import escape, unescape
+from html.parser import HTMLParser
 from pathlib import Path
 
 from telegram import InputFile, Update
@@ -20,6 +21,66 @@ from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
 from ..workspaces import WorkspaceSafetyError, ensure_private_workspace_dir
+
+
+class _TelegramHTMLChunker(HTMLParser):
+    def __init__(self, max_len: int):
+        super().__init__(convert_charrefs=True)
+        self.max_len = max_len
+        self.chunks: list[str] = []
+        self.parts: list[str] = []
+        self.open_tags: list[tuple[str, str, str]] = []
+        self.units = 0
+
+    def handle_starttag(self, tag: str, _attrs) -> None:
+        opening = self.get_starttag_text() or f"<{tag}>"
+        self.parts.append(opening)
+        self.open_tags.append((tag, opening, f"</{tag}>"))
+
+    def handle_endtag(self, tag: str) -> None:
+        if self.open_tags and self.open_tags[-1][0] == tag:
+            self.parts.append(self.open_tags.pop()[2])
+        else:
+            self.parts.append(f"</{tag}>")
+
+    def handle_data(self, data: str) -> None:
+        offset = 0
+        while offset < len(data):
+            if self.units >= self.max_len:
+                self._split()
+            available = self.max_len - self.units
+            end = offset
+            used = 0
+            while end < len(data):
+                char_units = 2 if ord(data[end]) > 0xFFFF else 1
+                if used + char_units > available:
+                    break
+                used += char_units
+                end += 1
+            if end == offset:
+                if self.units:
+                    self._split()
+                    continue
+                end += 1
+                used = 2 if ord(data[offset]) > 0xFFFF else 1
+            self.parts.append(escape(data[offset:end], quote=True))
+            self.units += used
+            offset = end
+            if offset < len(data):
+                self._split()
+
+    def _split(self) -> None:
+        self.parts.extend(close for _tag, _opening, close in reversed(self.open_tags))
+        self.chunks.append("".join(self.parts))
+        self.parts = [opening for _tag, opening, _close in self.open_tags]
+        self.units = 0
+
+    def finish(self) -> list[str]:
+        self.close()
+        if self.parts or not self.chunks:
+            self.parts.extend(close for _tag, _opening, close in reversed(self.open_tags))
+            self.chunks.append("".join(self.parts))
+        return self.chunks
 
 
 class BotMessagingMixin:
@@ -43,37 +104,8 @@ class BotMessagingMixin:
             temp.unlink(missing_ok=True)
         return path
 
-    @staticmethod
-    def _chunk_message(text: str, max_len: int = 3500) -> list[str]:
-        """Split Markdown into chunks below Telegram's UTF-16 text limit."""
-        if max_len < 1:
-            raise ValueError("max_len must be positive")
-        if not text or len(text.encode("utf-16-le")) // 2 <= max_len:
-            return [text]
-
-        chunks: list[str] = []
-        while text:
-            units = 0
-            safe_cut = 0
-            newline_cut = 0
-            for index, char in enumerate(text):
-                units += 2 if ord(char) > 0xFFFF else 1
-                if units > max_len:
-                    break
-                safe_cut = index + 1
-                if char == "\n":
-                    newline_cut = safe_cut
-            if safe_cut == len(text):
-                chunks.append(text)
-                break
-            split_at = newline_cut or safe_cut
-            chunks.append(text[:split_at])
-            text = text[split_at:]
-
-        return chunks
-
     async def _send_response(self, placeholder, update: Update, markdown_response: str):
-        """Send bounded Markdown chunks after converting each one to HTML."""
+        """Send bounded Telegram HTML chunks while preserving formatting."""
         if len(markdown_response) > 6000 or self._is_large_code_leak(markdown_response):
             try:
                 artifact = self._write_long_response_artifact(markdown_response)
@@ -134,14 +166,13 @@ class BotMessagingMixin:
                         await self._try_send(update.message.reply_text, failure)
             return
 
-        # First chunk the markdown (before HTML conversion which expands entities)
-        markdown_chunks = self._chunk_message(markdown_response, max_len=3000)
+        html_chunks = _TelegramHTMLChunker(max_len=3000)
+        html_chunks.feed(markdown_to_telegram_html(markdown_response))
+        rendered_chunks = html_chunks.finish()
         session_id = self._session_id_from_update(update)
 
-        for i, markdown_chunk in enumerate(markdown_chunks):
-            self._log_bot_message(session_id, markdown_chunk)
-            # Convert each chunk to HTML separately
-            html_chunk = markdown_to_telegram_html(markdown_chunk)
+        for i, html_chunk in enumerate(rendered_chunks):
+            self._log_bot_message(session_id, markdown_response)
 
             if i == 0 and placeholder:
                 # First chunk: edit the placeholder
@@ -155,8 +186,8 @@ class BotMessagingMixin:
                 await self._try_send(update.message.reply_text, html_chunk)
 
         # If we had multiple chunks, log it
-        if len(markdown_chunks) > 1:
-            log.info(f"Long response split into {len(markdown_chunks)} messages ({len(markdown_response)} chars)")
+        if len(rendered_chunks) > 1:
+            log.info(f"Long response split into {len(rendered_chunks)} messages ({len(markdown_response)} chars)")
 
     @staticmethod
     def _is_large_code_leak(text: str) -> bool:
