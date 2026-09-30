@@ -266,9 +266,19 @@ def write_receipt(
     errors = validate_receipt(safe)
     if errors:
         raise ValueError("invalid receipt: " + "; ".join(errors))
+    json_content = json.dumps(safe, indent=2, sort_keys=True) + "\n"
+    if len(json_content) > MAX_RECEIPT_BYTES or len(
+        json_content.encode("utf-8")
+    ) > MAX_RECEIPT_BYTES:
+        raise ValueError("receipt exceeds size limit")
+    markdown_content = render_receipt_markdown(safe)
+    if len(markdown_content) > MAX_RECEIPT_BYTES or len(
+        markdown_content.encode("utf-8")
+    ) > MAX_RECEIPT_BYTES:
+        raise ValueError("receipt exceeds size limit")
     output = Path(output_dir).expanduser().resolve()
     json_path = output / "receipt.json"
     markdown_path = output / "receipt.md"
-    _write_private(json_path, json.dumps(safe, indent=2, sort_keys=True) + "\n")
-    _write_private(markdown_path, render_receipt_markdown(safe))
+    _write_private(json_path, json_content)
+    _write_private(markdown_path, markdown_content)
     return json_path, markdown_path, safe

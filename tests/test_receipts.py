@@ -102,6 +102,15 @@ def test_read_receipt_is_bounded_and_rejects_non_objects(tmp_path, monkeypatch):
         read_receipt(source)
 
 
+def test_write_receipt_enforces_read_limit_before_creating_files(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.receipts.MAX_RECEIPT_BYTES", 128)
+
+    with pytest.raises(ValueError, match="exceeds size limit"):
+        write_receipt(_receipt("x" * 256), tmp_path)
+
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_share_card_is_preview_first_whitelisted_and_redacted(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-fixture-sensitive")
     source = tmp_path / "receipt.json"
