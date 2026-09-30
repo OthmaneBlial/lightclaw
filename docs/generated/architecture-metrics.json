@@ -249,7 +249,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 804,
+      "lines": 807,
       "path": "core/jobs.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 19040,
+  "runtime_lines": 19043,
   "schema_version": 1
 }

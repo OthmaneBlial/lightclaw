@@ -715,10 +715,13 @@ class JobStore:
             if not groups_stopped:
                 reason += "; delegated process cleanup failed"
             with self._lock, self.db:
-                self.db.execute(
-                    "UPDATE jobs SET status = 'stalled', updated_at = ?, last_error = ? WHERE run_id = ?",
-                    (current, reason, row["run_id"]),
+                updated = self.db.execute(
+                    "UPDATE jobs SET status = 'stalled', updated_at = ?, last_error = ? "
+                    "WHERE run_id = ? AND status = ?",
+                    (current, reason, row["run_id"], row["status"]),
                 )
+                if updated.rowcount != 1:
+                    continue
                 self._event(row["run_id"], "stalled", {"reason": reason})
             recovered.append(str(row["run_id"]))
         return recovered

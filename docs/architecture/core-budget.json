@@ -2,7 +2,7 @@
   "schema_version": 1,
   "scope": "Python runtime modules under core plus public top-level facades",
   "limits": {
-    "runtime_lines": 19040,
+    "runtime_lines": 19044,
     "runtime_module_lines": 2000,
     "core_module_lines": 1300,
     "function_lines": 700,
@@ -11,5 +11,5 @@
     "cold_start_p95_ms": 1000,
     "wheel_bytes": 1000000
   },
-  "review_policy": "The local quality suite enforces these limits; GitHub CI is disabled. runtime_lines is 19040 to cover path-safe, non-overwriting artifact backups and atomic cross-connection job/lane transitions, retries, and cancellation; revisit after removing comparable runtime code. Raising a limit requires an ADR or an explicit architecture-budget rationale in the same review."
+  "review_policy": "The local quality suite enforces these limits; GitHub CI is disabled. runtime_lines is 19044 to cover path-safe, non-overwriting artifact backups and atomic job/lane transitions, retries, cancellation, and stalled recovery; revisit after removing comparable runtime code. Raising a limit requires an ADR or an explicit architecture-budget rationale in the same review."
 }

@@ -178,6 +178,36 @@ def test_late_lane_start_cannot_resurrect_canceled_lane(tmp_path):
         store.close()
 
 
+def test_concurrent_stall_recovery_writes_one_event_across_connections(tmp_path):
+    database = tmp_path / "jobs.db"
+    stores = [JobStore(database) for _ in range(2)]
+    job = _create(stores[0], tmp_path / "repo")
+    stores[0].claim_next(workspace=tmp_path / "repo", worker_pid=999999)
+    barrier = threading.Barrier(len(stores))
+    for store in stores:
+        stop_process_groups = store._stop_process_groups
+
+        def wait_for_recovery(run_id, stop=stop_process_groups):
+            barrier.wait(timeout=5)
+            return stop(run_id)
+
+        store._stop_process_groups = wait_for_recovery
+
+    try:
+        with ThreadPoolExecutor(max_workers=len(stores)) as pool:
+            results = list(pool.map(lambda store: store.recover_stalled(), stores))
+        event_count = stores[0].db.execute(
+            "SELECT count(*) FROM job_events WHERE run_id = ? AND kind = 'stalled'",
+            (job["run_id"],),
+        ).fetchone()[0]
+        assert sum(len(result) for result in results) == 1
+        assert event_count == 1
+        assert stores[0].get_job(job["run_id"])["status"] == "stalled"
+    finally:
+        for store in stores:
+            store.close()
+
+
 def test_priority_queue_and_one_active_writer_per_workspace(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     workspace = tmp_path / "repo"
