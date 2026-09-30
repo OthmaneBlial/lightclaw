@@ -183,3 +183,99 @@ async def test_planning_in_one_chat_does_not_invalidate_another_chat():
 
     assert bot._get_pending_multi_plan("456")["goal"] == "slow goal"
     assert bot._get_pending_multi_plan("789")["goal"] == "other goal"
+
+
+async def _plan_action(bot, update, approval_id, action):
+    if action == "slash":
+        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "confirm"]))
+    elif action == "text":
+        await bot._process_user_message(update, SimpleNamespace(), "yes")
+    else:
+        update.callback_query = SimpleNamespace(
+            data=f"lc:plan:{action}:{approval_id}", answer=AsyncMock(), message=update.message
+        )
+        update.effective_message = update.message
+        await bot.handle_run_action(update, SimpleNamespace())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["slash", "text", "approve", "confirm-risk"])
+@pytest.mark.parametrize("high_risk", [False, True])
+async def test_incomplete_review_cannot_execute_or_prime_second_confirmation(action, high_risk):
+    bot = _bot()
+    bot._active_run_tasks_by_session = {}
+    bot._active_run_ids_by_session = {}
+    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("update docs")))
+    pending["review"]["second_confirmation_required"] = high_risk
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    sends = 0
+
+    async def send(*_args, **_kwargs):
+        nonlocal sends
+        sends += 1
+        if sends == 2:
+            entered.set()
+            await release.wait()
+
+    bot._reply_logged.side_effect = send
+    update = _update()
+    preview = asyncio.create_task(
+        bot._reply_multi_plan_preview(update, "scope " * 850, pending["approval_id"], False)
+    )
+    await entered.wait()
+    await _plan_action(bot, update, pending["approval_id"], action)
+    bot._execute_multi_agent_plan.assert_not_awaited()
+    assert not pending["review"]["second_confirmation_prompted"]
+    assert not pending["review"]["second_confirmed"]
+    assert bot._get_pending_multi_plan("456") is pending
+
+    release.set()
+    await preview
+    assert pending["review_delivered"]
+    await _plan_action(bot, update, pending["approval_id"], "slash")
+    if high_risk:
+        bot._execute_multi_agent_plan.assert_not_awaited()
+        assert pending["review"]["second_confirmation_prompted"]
+        await _plan_action(bot, update, pending["approval_id"], "confirm-risk")
+    bot._execute_multi_agent_plan.assert_awaited_once()
+    assert not bot._pending_multi_plan_by_session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [RuntimeError, asyncio.CancelledError])
+@pytest.mark.parametrize("replace", [False, True])
+async def test_failed_review_delivery_invalidates_only_its_own_plan(failure, replace):
+    bot = _bot()
+    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("old goal")))
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    first = True
+
+    async def send(*_args, **_kwargs):
+        nonlocal first
+        if first:
+            first = False
+            entered.set()
+            await release.wait()
+            raise failure()
+
+    bot._reply_logged.side_effect = send
+    update = _update()
+    preview = asyncio.create_task(
+        bot._reply_multi_plan_preview(update, "old review", pending["approval_id"], False)
+    )
+    await entered.wait()
+    if replace:
+        bot._plan_multi_agent_payload = AsyncMock(return_value=(_payload("latest goal"), ""))
+        await bot.cmd_agent(update, SimpleNamespace(args=["multi", "latest goal"]))
+        latest = bot._get_pending_multi_plan("456")
+    release.set()
+    with pytest.raises(failure):
+        await preview
+    if replace:
+        assert bot._get_pending_multi_plan("456") is latest
+        assert latest["review_delivered"]
+    else:
+        assert not bot._pending_multi_plan_by_session
+    bot._execute_multi_agent_plan.assert_not_awaited()

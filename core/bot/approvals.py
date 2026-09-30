@@ -273,7 +273,17 @@ class BotApprovalsMixin:
             )
         return "\n".join(lines)
 
+    async def _require_complete_plan_review(self, update, pending: dict[str, object]) -> bool:
+        if pending.get("review_delivered") is True:
+            return True
+        await self._reply_logged(
+            update, "Wait for the complete plan review before approving. No run was started."
+        )
+        return False
+
     async def _prompt_second_confirmation(self, update, pending: dict[str, object]) -> None:
+        if not await self._require_complete_plan_review(update, pending):
+            return
         review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
         review["second_confirmation_prompted"] = True
         pending["review"] = review
@@ -401,6 +411,8 @@ class BotApprovalsMixin:
                 await self._reply_logged(proxy, "Denied pending plan. Nothing was executed.")
                 return
             review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
+            if decision in {"approve", "confirm-risk"} and not await self._require_complete_plan_review(proxy, pending):
+                return
             if decision in {"approve", "confirm-risk"} and review.get("approval_blocked"):
                 await self._reply_logged(proxy, "Approval blocked; edit the plan to expose all commands.")
                 return

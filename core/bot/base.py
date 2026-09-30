@@ -472,6 +472,7 @@ class BotBaseMixin:
         now = time.time()
         item = dict(payload or {})
         item["approval_id"] = secrets.token_hex(8)
+        item["review_delivered"] = False
         item["created_at"] = now
         item["expires_at"] = now + ttl
         item["expires_monotonic"] = time.monotonic() + ttl

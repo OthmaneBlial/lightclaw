@@ -254,8 +254,12 @@ def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
 async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
     bot = LightClawBot.__new__(LightClawBot)
     bot._reply_logged = AsyncMock()
+    bot._session_id_from_update = lambda _update: "456"
     update = SimpleNamespace()
     approval_id = "0123456789abcdef"
+    bot._pending_multi_plan_by_session = {
+        "456": {"approval_id": approval_id, "review_delivered": False}
+    }
     preview = bot._render_multi_plan_preview("x" * 3900, [], {})
     preview += "\n\n" + bot._render_plan_review({})
 
@@ -266,6 +270,7 @@ async def test_long_plan_preview_is_chunked_with_approval_on_final_chunk():
     assert all(len(call.args[1]) < 4096 for call in calls)
     assert all(call.kwargs["reply_markup"] is None for call in calls[:-1])
     assert calls[-1].kwargs["reply_markup"] is not None
+    assert bot._pending_multi_plan_by_session["456"]["review_delivered"]
 
 
 def test_plan_with_unreviewed_commands_cannot_be_approved():
@@ -352,6 +357,7 @@ async def test_hidden_plan_command_callback_is_refused():
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True
     pending = {
+        "review_delivered": True,
         "approval_id": "0123456789abcdef",
         "review": {
             "proposed_commands": ["python -m pytest"],
@@ -384,6 +390,7 @@ async def test_hidden_plan_command_callback_is_refused():
 async def test_pending_plan_execution_refuses_hidden_commands():
     bot = LightClawBot.__new__(LightClawBot)
     bot._get_pending_multi_plan = lambda _session: {
+        "review_delivered": True,
         "review": {"approval_blocked": True}
     }
     bot._reply_logged = AsyncMock()
@@ -397,6 +404,7 @@ async def test_pending_plan_execution_refuses_hidden_commands():
 async def test_shared_execution_gate_requires_second_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     pending = {
+        "review_delivered": True,
         "approval_id": "0123456789abcdef",
         "review": {
             "second_confirmation_required": True,
@@ -421,6 +429,7 @@ async def test_shared_execution_gate_requires_second_confirmation():
 async def test_multi_agent_setup_failure_explains_approval_was_consumed():
     bot = LightClawBot.__new__(LightClawBot)
     bot._get_pending_multi_plan = lambda _session: {
+        "review_delivered": True,
         "goal": "review the patch",
         "workers": [("builder", "codex"), ("auditor", "claude")],
         "plan_payload": {"workers": []},
@@ -682,6 +691,7 @@ async def test_high_risk_callback_requires_ordered_second_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True
     pending = {
+        "review_delivered": True,
         "approval_id": "0123456789abcdef",
         "review": {
             "second_confirmation_required": True,
@@ -723,6 +733,7 @@ async def test_high_risk_callback_requires_ordered_second_confirmation():
 async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
     bot = LightClawBot.__new__(LightClawBot)
     pending = {
+        "review_delivered": True,
         "approval_id": "0123456789abcdef",
         "review": {
             "second_confirmation_required": True,
@@ -800,6 +811,7 @@ async def test_duplicate_plan_approval_callbacks_start_one_run():
             "review": {"second_confirmation_required": False},
         },
     )["approval_id"]
+    bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -1120,6 +1132,7 @@ async def test_cancelled_multi_plan_stops_workers_and_releases_durable_job(
             "plan_payload": {"workers": []},
         },
     )
+    bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
     bot.jobs = JobStore(tmp_path / "jobs.db")
     bot._active_run_ids_by_session = {}
     bot._active_run_tasks_by_session = {}
@@ -1223,6 +1236,7 @@ async def test_cancelled_multi_workspace_creation_removes_late_owned_directory(
             "plan_payload": {"workers": []},
         },
     )
+    bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
     bot._active_run_ids_by_session = {}
     bot._active_run_tasks_by_session = {}
     bot._active_worker_tasks_by_run = {}
@@ -1275,6 +1289,7 @@ async def test_failed_multi_workspace_preflight_removes_unannounced_workspace(tm
             "plan_payload": {"workers": []},
         },
     )
+    bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
     bot._active_run_ids_by_session = {}
     bot._active_run_tasks_by_session = {}
     bot._active_worker_tasks_by_run = {}
@@ -1305,6 +1320,7 @@ async def test_unexpected_multi_plan_failure_cleans_workers_and_fails_job(tmp_pa
             "plan_payload": {"workers": []},
         },
     )
+    bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
     bot.jobs = JobStore(tmp_path / "jobs.db")
     bot._active_run_ids_by_session = {}
     bot._active_run_tasks_by_session = {}

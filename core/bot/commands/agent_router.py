@@ -38,6 +38,10 @@ class CommandsAgentRouterMixin:
         approval_id: str,
         approval_blocked: bool,
     ) -> None:
+        session_id = self._session_id_from_update(update)
+        pending = self._pending_multi_plan_by_session.get(session_id)
+        if not pending or pending.get("approval_id") != approval_id:
+            return
         chunker = _TelegramHTMLChunker(max_len=3000)
         chunker.feed(preview)
         chunks = chunker.finish()
@@ -45,13 +49,19 @@ class CommandsAgentRouterMixin:
             approval_id,
             approval_blocked=approval_blocked,
         )
-        for index, chunk in enumerate(chunks):
-            await self._reply_logged(
-                update,
-                chunk,
-                parse_mode=ParseMode.HTML,
-                reply_markup=reply_markup if index == len(chunks) - 1 else None,
-            )
+        try:
+            for index, chunk in enumerate(chunks):
+                await self._reply_logged(
+                    update,
+                    chunk,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup if index == len(chunks) - 1 else None,
+                )
+        except BaseException:
+            if self._pending_multi_plan_by_session.get(session_id) is pending:
+                self._clear_pending_multi_plan(session_id)
+            raise
+        pending["review_delivered"] = True
 
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:

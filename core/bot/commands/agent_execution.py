@@ -139,6 +139,8 @@ class CommandsAgentExecutionMixin:
             )
             return
         review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
+        if not await self._require_complete_plan_review(update, pending):
+            return
         if review.get("approval_blocked"):
             await self._reply_logged(
                 update,

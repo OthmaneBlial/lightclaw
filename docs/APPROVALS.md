@@ -21,6 +21,10 @@ chat. Late planner results and errors are discarded after a newer request,
 `/agent multi cancel`, `/clear`, or a global memory wipe. Canceling planning does
 not interrupt a model call already in progress; its result cannot create a new approval.
 
+Buttons, slash commands, and text confirmations cannot execute or prime a second
+confirmation until every part of the plan review has been sent. Failed or interrupted
+review delivery discards that plan and preserves any newer request in the chat.
+
 `command_succeeds` checks run as host subprocesses after approval. They receive a minimal environment and an in-workspace working directory, but LightClaw does not add an operating-system sandbox around them. Review each command; use OS/container isolation for untrusted repositories.
 
 Worker handoff JSON must be a regular file no larger than 1 MiB. Oversized or symlinked handoffs fail their acceptance checks.
