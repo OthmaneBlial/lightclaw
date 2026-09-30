@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import threading
 import time
 from pathlib import Path
@@ -12,6 +13,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 
 from ...artifacts import ArtifactError, create_patch_bundle, initialize_artifact_repository
+from ...fs import open_directory_at
 from ...jobs import JobConflictError, JobStateError
 from ...logging_setup import log
 from ...markdown import _escape_html
@@ -254,9 +256,9 @@ class CommandsAgentExecutionMixin:
             self._write_agents_plan_file, multi_workspace, plan_payload
         )
 
-        handoff_dir = multi_workspace / "handoff"
         await self._await_multi_preflight_thread(
-            run_id, multi_workspace, handoff_dir.mkdir, parents=True, exist_ok=True
+            run_id, multi_workspace,
+            lambda: os.close(open_directory_at(multi_workspace, ("handoff",), create=True, private=True)),
         )
         try:
             checkpoint = await self._await_multi_preflight_thread(

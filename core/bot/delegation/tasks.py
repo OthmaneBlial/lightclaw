@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+from ...fs import atomic_write_text_at
+
 
 class DelegationMultiTaskMixin:
     @staticmethod
@@ -526,6 +528,5 @@ class DelegationMultiTaskMixin:
         payload: dict[str, object],
     ) -> Path:
         target = workspace / "AGENTS.md"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(self._render_agents_markdown(payload), encoding="utf-8")
+        atomic_write_text_at(workspace, target.name, self._render_agents_markdown(payload), expected_content=None)
         return target

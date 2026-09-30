@@ -46,6 +46,8 @@ Cancellation also covers agent startup, before the process group is registered. 
 
 Agent startup uses the same opened-directory launcher as acceptance commands. Replacing the workspace with a symlink before opening fails; replacing its path after opening cannot redirect the initial working directory. Codex uses this directory as its root, and the delegated prompt directs both agents to use relative paths rather than re-enter a moved workspace path. This preserves the existing agent permission profiles and does not add an OS sandbox.
 
+Multi-agent preparation creates `AGENTS.md` atomically through the existing workspace directory handles and refuses an unexpected existing plan file. The handoff directory uses the same no-follow directory opener. A workspace or plan-file symlink cannot redirect this preparation into another directory.
+
 ## Scheduled Telegram updates and reminders
 
 `/heartbeat on [minutes]` starts the single global heartbeat scheduler for the chat that enables it (minimum five minutes). Intervals too large for the runtime are rejected without changing an existing schedule; `HEARTBEAT_INTERVAL_MIN` is validated at startup too. Ordinary messages and `/heartbeat show` do not change that destination. Running `/heartbeat on` again explicitly changes the destination and user memory scope and restarts the interval. `/heartbeat off` stops it. `HEARTBEAT.md` remains a host-wide file; authorized users share control of this scheduler.

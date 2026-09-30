@@ -8,8 +8,65 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from core.artifacts import ArtifactError
 from core.bot import LightClawBot
 from core.jobs import JobStateError, JobStore
+
+
+@pytest.mark.parametrize("swap", ["workspace", "file", "existing"])
+def test_agents_plan_preserves_unexpected_existing_paths(tmp_path, swap):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    victim = (workspace if swap == "existing" else outside) / "AGENTS.md"
+    victim.write_text("unrelated instructions")
+    if swap == "workspace":
+        workspace.rename(tmp_path / "original-workspace")
+        workspace.symlink_to(outside, target_is_directory=True)
+    elif swap == "file":
+        (workspace / "AGENTS.md").symlink_to(victim)
+    bot = LightClawBot.__new__(LightClawBot)
+    try:
+        bot._write_agents_plan_file(workspace, {"goal": "approved plan", "workers": []})
+    except OSError:
+        pass
+    assert victim.read_text() == "unrelated instructions"
+
+
+@pytest.mark.asyncio
+async def test_handoff_preparation_refuses_a_swapped_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    workspace.mkdir()
+    outside.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot.jobs = SimpleNamespace(get_job=Mock(side_effect=JobStateError("unclaimed")))
+    bot._create_task_workspace = lambda _goal: workspace
+    bot._reply_logged = AsyncMock()
+    bot._run_local_agent_task = AsyncMock()
+    write_plan = bot._write_agents_plan_file
+
+    def swap_after_plan(*args):
+        path = write_plan(*args)
+        workspace.rename(tmp_path / "original-workspace")
+        workspace.symlink_to(outside, target_is_directory=True)
+        return path
+
+    def refuse_checkpoint(*_args):
+        raise ArtifactError("fixture stops before agent launch")
+
+    bot._write_agents_plan_file = swap_after_plan
+    monkeypatch.setattr("core.bot.commands.agent_execution.initialize_artifact_repository", refuse_checkpoint)
+    try:
+        await bot._execute_multi_agent_plan(
+            SimpleNamespace(), "fixture", "approved goal", [], {"workers": []}, "fixture-run"
+        )
+    except OSError:
+        pass
+    assert not (outside / "handoff").exists()
+    bot._run_local_agent_task.assert_not_awaited()
 
 
 @pytest.mark.asyncio
