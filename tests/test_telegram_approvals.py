@@ -73,6 +73,36 @@ def test_plan_responsibilities_trigger_second_confirmation():
     assert pending["review"]["second_confirmation_required"] is True
 
 
+def test_plan_expected_outputs_are_visible_and_trigger_second_confirmation():
+    bot = LightClawBot.__new__(LightClawBot)
+    pending = bot._decorate_pending_plan(
+        {
+            "goal": "Improve project documentation",
+            "plan_payload": {
+                "workers": [
+                    {
+                        "label": "writer",
+                        "role": "documentation",
+                        "responsibilities": ["Update API documentation"],
+                        "expected_outputs": ["Publish the production release"],
+                        "owned_paths": ["docs/api.md"],
+                    }
+                ]
+            },
+        }
+    )
+
+    preview = bot._render_multi_plan_preview(
+        "Improve project documentation",
+        [("writer", "codex")],
+        pending["plan_payload"],
+        include_confirm_hint=False,
+    )
+
+    assert pending["review"]["second_confirmation_required"] is True
+    assert "outputs: Publish the production release" in preview
+
+
 def test_plan_preview_shows_every_worker_responsibility_and_owned_path():
     bot = LightClawBot.__new__(LightClawBot)
     responsibilities = ["Update the API", "Add regression coverage"]
