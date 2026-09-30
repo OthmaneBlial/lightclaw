@@ -33,7 +33,7 @@ LightClaw memory and task workspaces are local by default. Model inference is no
 | Orphan child process | New process group/session plus TERM/KILL tree handling on timeout/cancellation | OS or external CLI defects can still leave processes behind |
 | Malicious skill archive | Bounded archive parsing, encrypted/ambiguous bundle rejection, permission-manifest validation, inactive install, pinned provenance, and source-plus-manifest hash approval | Reviewed prompt guidance can still be malicious; manifests are not a security audit |
 | Credential leakage in errors | Known-value, assignment, bearer, and Telegram-token redaction; configured secrets are scrubbed from Telegram network and voice-download errors before logging | Novel secret formats or secrets shorter than four characters may evade redaction |
-| Dependency compromise | Pinned GitHub Actions, local dependency audit, active Dependabot, CodeQL, and Scorecard; pull-request dependency review is part of the disabled CI workflow | Registry and maintainer compromise cannot be eliminated |
+| Dependency compromise | Pinned GitHub Actions, local dependency audit, and active Dependabot updates; GitHub CI, CodeQL, OpenSSF Scorecard, and pull-request dependency review are disabled | New dependency or workflow vulnerabilities may go undetected until local review; registry and maintainer compromise cannot be eliminated |
 | Log or receipt disclosure | Local storage and redaction are defaults | Anyone with access to the host account can read local state |
 
 ## Capability profiles
