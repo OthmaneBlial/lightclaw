@@ -106,17 +106,17 @@ class DelegationWorkspaceMixin:
         self, store, session_id: str, run_id: str, workspace: Path, *, owns_workspace: bool
     ) -> None:
         try:
-            job = await await_thread_completion(store.get_job, run_id)
-        except JobStateError:
-            if owns_workspace:
-                await self._cleanup_unclaimed_task_workspace(workspace)
-            return
-        except Exception:
-            log.exception("Could not inspect canceled delegation setup %s", run_id)
-            return
+            try:
+                job = await await_thread_completion(store.get_job, run_id)
+            except JobStateError:
+                if owns_workspace:
+                    await self._cleanup_unclaimed_task_workspace(workspace)
+                return
+            except Exception:
+                log.exception("Could not inspect canceled delegation setup %s", run_id)
+                return
 
-        status = str(job["status"])
-        try:
+            status = str(job["status"])
             if status == "running":
                 await await_thread_completion(store.request_cancel, run_id)
             for lane in job["lanes"]:
@@ -128,11 +128,29 @@ class DelegationWorkspaceMixin:
                 await await_thread_completion(store.request_cancel, run_id)
             elif status in {"running", "cancel_requested"}:
                 await await_thread_completion(store.mark_canceled, run_id)
-        except JobStateError:
+        except Exception:
             log.exception("Could not cancel unstarted delegation job %s", run_id)
         finally:
             if self._active_run_ids_by_session.get(session_id) == run_id:
                 self._active_run_ids_by_session.pop(session_id, None)
+
+    async def _handle_durable_setup_failure(
+        self, error: Exception, store, session_id: str, run_id: str, workspace: Path, owns: bool
+    ) -> str:
+        await self._cancel_unstarted_delegation(
+            store, session_id, run_id, workspace, owns_workspace=owns
+        )
+        if isinstance(error, JobStateError):
+            return f"⚠️ Durable job control refused the run: {error}"
+        log.error(
+            "Durable job setup failed before local agent launch: %s",
+            run_id,
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        return (
+            "⚠️ Durable job setup failed; the local agent was not started. "
+            f"Run ID: `{run_id}`. See local logs for details."
+        )
 
     @staticmethod
     def _slugify_goal_name(text: str, max_len: int = 56) -> str:

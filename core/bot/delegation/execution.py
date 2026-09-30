@@ -1044,15 +1044,15 @@ class DelegationExecutionMixin:
                     owns_workspace=owns_workspace,
                 )
                 raise
-            except JobStateError as exc:
-                await self._cancel_unstarted_delegation(
+            except Exception as exc:
+                return await self._handle_durable_setup_failure(
+                    exc,
                     durable_store,
                     session_id,
                     run_id,
                     target_workspace,
-                    owns_workspace=owns_workspace,
+                    owns_workspace,
                 )
-                return f"⚠️ Durable job control refused the run: {exc}"
 
         try:
             if progress_cb:
