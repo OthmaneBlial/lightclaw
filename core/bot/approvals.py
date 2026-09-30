@@ -15,11 +15,13 @@ from telegram.ext import ContextTypes
 
 from ..artifacts import ArtifactError, accept_artifact, reject_artifact
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
+from ..fs import FileTooLargeError, read_text_bounded_at
 from ..jobs import JobStateError
 from ..markdown import _escape_html
 from ..receipts import read_receipt
 
 MAX_REVIEWED_COMMANDS = 6
+MAX_DIFF_PREVIEW_BYTES = 32 * 1024
 
 
 class BotApprovalsMixin:
@@ -79,6 +81,31 @@ class BotApprovalsMixin:
                 ],
             ]
         )
+
+    @staticmethod
+    def _mobile_diff_preview(patch: str) -> str:
+        excerpt: list[str] = []
+        in_hunk = False
+        for line in patch.splitlines():
+            if line.startswith("diff --git ") and in_hunk:
+                break
+            elif line.startswith("@@"):
+                if in_hunk:
+                    break
+                in_hunk = True
+                excerpt.append(line)
+            elif in_hunk and line[:1] in {" ", "+", "-"}:
+                safe_line = "".join(
+                    char if char == "\t" or ord(char) >= 32 else "�" for char in line
+                )
+                if len(safe_line) > 140:
+                    safe_line = safe_line[:137] + "..."
+                excerpt.append(safe_line)
+                if len(excerpt) >= 9:
+                    break
+        if not excerpt:
+            return "No text hunk; full patch attached."
+        return "\n".join(excerpt)
 
     @staticmethod
     def _inline_voice_keyboard(approval_id: str) -> InlineKeyboardMarkup:
@@ -484,14 +511,14 @@ class BotApprovalsMixin:
         changed_files = [item for item in changes if isinstance(item, dict)]
         if changed_files:
             review_lines.append("Changed files:")
-            for item in changed_files[:12]:
+            for item in changed_files[:8]:
                 status = re.sub(r"\s+", " ", str(item.get("change") or "changed"))
                 path = re.sub(r"\s+", " ", str(item.get("path") or ""))
-                if len(path) > 180:
-                    path = path[:177].rstrip() + "..."
+                if len(path) > 120:
+                    path = path[:117].rstrip() + "..."
                 review_lines.append(f"- {status[:24]}: {path}")
-            if len(changed_files) > 12:
-                review_lines.append(f"- and {len(changed_files) - 12} more files")
+            if len(changed_files) > 8:
+                review_lines.append(f"- and {len(changed_files) - 8} more files")
         patch_size: int | None = None
         if patch_path and update.message:
             try:
@@ -508,6 +535,22 @@ class BotApprovalsMixin:
             return
 
         if patch_path and patch_size is not None and update.message:
+            workspace = Path(self.config.workspace_path).expanduser().resolve()
+            try:
+                relative_patch = patch_path.absolute().relative_to(workspace)
+                if patch_size <= MAX_DIFF_PREVIEW_BYTES:
+                    patch = read_text_bounded_at(
+                        workspace, relative_patch, MAX_DIFF_PREVIEW_BYTES
+                    )
+                    review_lines.extend(
+                        ["", "Patch preview (first text hunk):", self._mobile_diff_preview(patch)]
+                    )
+                else:
+                    review_lines.extend(
+                        ["", "Patch exceeds the inline preview limit; full patch attached."]
+                    )
+            except (FileTooLargeError, OSError, UnicodeError, ValueError):
+                review_lines.extend(["", "Inline preview unavailable; full patch attached."])
             review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
             await self._reply_logged(update, "\n".join(review_lines))
             try:

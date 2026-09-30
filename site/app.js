@@ -3,7 +3,7 @@ const scenarios = {
     kicker: "PHONE REQUEST → VERIFIED PATCH",
     title: "A real Git patch with a real passing unit test.",
     body:
-      "The fixture creates a disposable Git-backed service, adds a health check, runs unittest, and records the request, approval, test output, and patch.",
+      "The fixture creates a disposable Git-backed service, adds a health check, runs unittest, and records the request, approval, test output, and patch. Telegram shows the first text hunk inline, then attaches the complete patch for deeper review.",
     artifacts: [
       "review/changes.patch",
       "artifact/test-output.txt",

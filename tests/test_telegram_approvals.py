@@ -1023,17 +1023,25 @@ async def test_duplicate_result_taps_only_run_one_acceptance():
 @pytest.mark.asyncio
 async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
     patch_path = tmp_path / "changes.patch"
-    patch_path.write_text("diff --git a/file b/file\n", encoding="utf-8")
+    patch_path.write_text(
+        "diff --git a/file b/file\n"
+        "--- a/file\n+++ b/file\n@@ -1 +1,2 @@\n-old\n+new\n+added\n",
+        encoding="utf-8",
+    )
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_text(
         json.dumps(
             {
                 "run_id": "run-18",
-                "diff_summary": "large file-by-file stat\n3 files changed, 7 insertions(+), 2 deletions(-)",
+                "diff_summary": "large file-by-file stat\n10 files changed, 7 insertions(+), 2 deletions(-)",
                 "file_changes": [
                     {"change": "modified", "path": "src/main.py"},
                     {"change": "added", "path": "tests/test_main.py"},
                     {"change": "deleted", "path": "old.txt"},
+                    *[
+                        {"change": "modified", "path": f"extra/file-{index}.py"}
+                        for index in range(7)
+                    ],
                 ],
                 "artifacts": [str(patch_path)],
             }
@@ -1053,6 +1061,7 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
         events.append(("patch", ""))
 
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
     bot._last_run_receipts_by_session = {"456": str(receipt_path)}
     bot._reply_logged = AsyncMock(side_effect=send_summary)
     message = SimpleNamespace(reply_document=AsyncMock(side_effect=send_patch))
@@ -1061,10 +1070,18 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
     await bot._send_last_run_diff(update, "456", "run-18")
 
     assert [kind for kind, _ in events] == ["summary", "patch"]
-    assert "3 files changed, 7 insertions(+), 2 deletions(-)" in events[0][1]
+    assert "10 files changed, 7 insertions(+), 2 deletions(-)" in events[0][1]
     assert "src/main.py" in events[0][1]
+    assert "and 2 more files" in events[0][1]
+    assert "extra/file-4.py" in events[0][1]
+    assert "extra/file-6.py" not in events[0][1]
+    assert "Patch preview (first text hunk)" in events[0][1]
+    assert "-old" in events[0][1] and "+new" in events[0][1]
     assert "nothing has been accepted or pushed" in events[0][1]
     message.reply_document.assert_awaited_once()
+    assert bot._mobile_diff_preview(
+        "diff --git a/logo.png b/logo.png\nGIT binary patch\ndata"
+    ) == "No text hunk; full patch attached."
 
 
 @pytest.mark.asyncio
