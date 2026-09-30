@@ -296,7 +296,8 @@ class CommandsAgentAcceptanceMixin:
                     or "." in Path(normalized).name
                     or normalized.lower().startswith("readme")
                 )
-                if looks_like_path and not (workspace / normalized).exists():
+                path = self._resolve_multi_workspace_path(workspace, normalized)
+                if looks_like_path and (path is None or not path.exists()):
                     findings.append(f"`{label}` deliverable does not exist in workspace: `{normalized}`")
 
         deduped: list[str] = []
@@ -318,17 +319,13 @@ class CommandsAgentAcceptanceMixin:
             return "command_succeeds check is missing `command`"
 
         cwd_rel = self._normalize_multi_contract_path(str(check.get("cwd") or ""))
-        cwd = workspace / cwd_rel if cwd_rel else workspace
+        cwd = self._resolve_multi_workspace_path(workspace, cwd_rel)
+        if cwd is None:
+            return f"command_succeeds cwd is outside the workspace: `{cwd_rel}`"
         if not cwd.exists():
             return f"command_succeeds cwd does not exist: `{cwd_rel}`"
         if not cwd.is_dir():
             return f"command_succeeds cwd is not a directory: `{cwd_rel}`"
-        try:
-            workspace_root = workspace.resolve(strict=True)
-            cwd = cwd.resolve(strict=True)
-            cwd.relative_to(workspace_root)
-        except (OSError, RuntimeError, ValueError):
-            return f"command_succeeds cwd is outside the workspace: `{cwd_rel}`"
 
         try:
             argv = shlex.split(command)
@@ -389,10 +386,28 @@ class CommandsAgentAcceptanceMixin:
         label: str,
     ) -> tuple[dict[str, Any], str]:
         relative_path = self._multi_handoff_json_path(label)
-        path = workspace / relative_path
+        candidate = workspace / relative_path
+        if candidate.is_symlink():
+            return {}, f"handoff JSON `{relative_path}` must not be a symlink"
+        path = self._resolve_multi_workspace_path(workspace, relative_path)
+        if path is None:
+            return {}, f"handoff JSON `{relative_path}` is outside the workspace"
         if not path.exists():
             return {}, f"missing `{relative_path}`"
         return self._read_multi_handoff_json(path, relative_path)
+
+    @staticmethod
+    def _resolve_multi_workspace_path(
+        workspace: Path,
+        relative_path: str,
+    ) -> Path | None:
+        try:
+            root = workspace.resolve(strict=True)
+            path = (root / relative_path).resolve()
+            path.relative_to(root)
+            return path
+        except (OSError, RuntimeError, ValueError):
+            return None
 
     @staticmethod
     def _read_multi_handoff_json(
@@ -466,7 +481,8 @@ class CommandsAgentAcceptanceMixin:
 
             if kind == "file_exists":
                 rel_path = self._normalize_multi_contract_path(str(check.get("path") or ""))
-                if not rel_path or not (workspace / rel_path).is_file():
+                path = self._resolve_multi_workspace_path(workspace, rel_path) if rel_path else None
+                if path is None or not path.is_file():
                     failures.append(f"missing required file `{rel_path or '(invalid path)'}`")
                 continue
 
@@ -475,7 +491,14 @@ class CommandsAgentAcceptanceMixin:
                     self._normalize_multi_contract_path(str(check.get("path") or ""))
                     or self._multi_handoff_json_path(label)
                 )
-                target = workspace / rel_path
+                candidate = workspace / rel_path
+                target = self._resolve_multi_workspace_path(workspace, rel_path)
+                if candidate.is_symlink():
+                    failures.append(f"handoff JSON `{rel_path}` must not be a symlink")
+                    continue
+                if target is None:
+                    failures.append(f"handoff JSON `{rel_path}` is outside the workspace")
+                    continue
                 if not target.is_file():
                     failures.append(f"missing handoff JSON `{rel_path}`")
                     continue
@@ -498,7 +521,14 @@ class CommandsAgentAcceptanceMixin:
                     failures.append("invalid glob_nonempty pattern")
                     continue
                 try:
-                    matches = [item for item in workspace.glob(pattern) if item.is_file()]
+                    matches = [
+                        path
+                        for item in workspace.glob(pattern)
+                        if (path := self._resolve_multi_workspace_path(
+                            workspace, item.relative_to(workspace).as_posix()
+                        )) is not None
+                        and path.is_file()
+                    ]
                 except Exception as e:
                     failures.append(f"invalid glob pattern `{pattern}`: {e}")
                     continue
@@ -535,7 +565,11 @@ class CommandsAgentAcceptanceMixin:
                 if not reported:
                     failures.append("handoff JSON must list at least one changed file")
                     continue
-                missing = [path for path in reported if not (workspace / path).exists()]
+                missing = []
+                for reported_path in reported:
+                    path = self._resolve_multi_workspace_path(workspace, reported_path)
+                    if path is None or not path.exists():
+                        missing.append(reported_path)
                 if missing:
                     failures.append(
                         "reported changed_files do not exist: "
