@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ...artifacts import ArtifactError, create_patch_bundle
-from ...jobs import JobStateError
 from ...logging_setup import log
 from ...receipts import write_receipt
 from ...security import delegated_process_env, redact_text
@@ -1022,19 +1021,14 @@ class DelegationExecutionMixin:
                 async def durable_heartbeat() -> None:
                     while True:
                         await asyncio.sleep(30)
-                        try:
-                            current_job = await asyncio.to_thread(
-                                durable_store.heartbeat,
-                                run_id,
-                                worker_pid=os.getpid(),
-                            )
-                            if current_job["status"] == "cancel_requested" and delegated_task:
-                                self._cancel_task_once(delegated_task)
-                                return
-                        except JobStateError:
+                        current_job, stop = await self._durable_job_heartbeat(
+                            durable_store, run_id, worker_pid=os.getpid()
+                        )
+                        if stop:
                             return
-                        except Exception:
-                            log.exception("Durable job heartbeat failed; retrying run %s", run_id)
+                        if current_job and current_job["status"] == "cancel_requested" and delegated_task:
+                            self._cancel_task_once(delegated_task)
+                            return
 
                 heartbeat_task = asyncio.create_task(durable_heartbeat())
             except asyncio.CancelledError:

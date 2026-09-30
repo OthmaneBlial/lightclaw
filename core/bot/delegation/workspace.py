@@ -103,6 +103,17 @@ class DelegationWorkspaceMixin:
             return await self._await_task_workspace_preflight(workspace, function, *args)
         return await await_thread_completion(function, *args)
 
+    async def _durable_job_heartbeat(self, store, run_id: str, *, worker_pid: int | None = None):
+        try:
+            return await await_thread_completion(
+                store.heartbeat, run_id, worker_pid=worker_pid
+            ), False
+        except JobStateError:
+            return None, True
+        except Exception:
+            log.exception("Durable job heartbeat failed; retrying run %s", run_id)
+            return None, False
+
     async def _cancel_durable_delegation(
         self, store, session_id: str, run_id: str, workspace: Path, *, owns_workspace: bool
     ) -> None:

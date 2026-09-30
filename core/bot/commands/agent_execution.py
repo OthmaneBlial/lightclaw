@@ -397,25 +397,23 @@ class CommandsAgentExecutionMixin:
         async def _multi_job_heartbeat() -> None:
             while True:
                 await asyncio.sleep(30)
-                try:
-                    current_job = await asyncio.to_thread(self.jobs.heartbeat, run_id)
-                    if current_job["status"] == "cancel_requested":
-                        for task in list(running):
-                            self._cancel_task_once(task)
-                        for lane in current_job["lanes"]:
-                            if lane["status"] in {"queued", "running"}:
-                                await asyncio.to_thread(
-                                    self.jobs.update_lane,
-                                    run_id,
-                                    str(lane["label"]),
-                                    "canceled",
-                                )
-                        await asyncio.to_thread(self.jobs.mark_canceled, run_id)
-                        if multi_execution_task:
-                            self._cancel_task_once(multi_execution_task)
-                        return
-                except JobStateError:
+                current_job, stop = await self._durable_job_heartbeat(self.jobs, run_id)
+                if stop:
                     return
+                if not current_job or current_job["status"] != "cancel_requested":
+                    continue
+                for task in list(running):
+                    self._cancel_task_once(task)
+                await self._cancel_durable_delegation(
+                    self.jobs,
+                    session_id,
+                    run_id,
+                    multi_workspace,
+                    owns_workspace=False,
+                )
+                if multi_execution_task:
+                    self._cancel_task_once(multi_execution_task)
+                return
 
         durable_heartbeat = asyncio.create_task(_multi_job_heartbeat())
         self._active_run_heartbeats_by_run[run_id] = durable_heartbeat
