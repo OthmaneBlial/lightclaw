@@ -121,7 +121,7 @@ class DelegationWorkspaceMixin:
         run_id: str,
         workspace: Path | None = None,
         *,
-        owns_workspace: bool,
+        owns_workspace: bool = False,
     ) -> None:
         async def cancel_once() -> None:
             try:

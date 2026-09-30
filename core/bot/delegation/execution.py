@@ -1095,12 +1095,19 @@ class DelegationExecutionMixin:
                     await heartbeat_task
                 except asyncio.CancelledError:
                     pass
-        after = await asyncio.to_thread(self._snapshot_workspace_state, target_workspace)
-        durable_error = (
-            await self._finalize_durable_delegation(durable_store, run_id, result)
-            if durable_store is not None
-            else ""
-        )
+        try:
+            after = await await_thread_completion(
+                self._snapshot_workspace_state, target_workspace
+            )
+            durable_error = (
+                await self._finalize_durable_delegation(durable_store, run_id, result)
+                if durable_store is not None
+                else ""
+            )
+        except asyncio.CancelledError:
+            if durable_store is not None:
+                await self._cancel_durable_delegation(durable_store, session_id, run_id)
+            raise
 
         summary = self._compact_external_agent_summary(str(result.get("summary") or ""))
         delta_summary = self._summarize_workspace_delta(before, after)
