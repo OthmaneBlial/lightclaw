@@ -244,6 +244,71 @@ def test_task_artifacts_ignore_configured_monitor_and_stale_index(tmp_path, acti
     assert monitor.exists()
 
 
+@pytest.mark.parametrize("phase", ["checkpoint", "bundle", "accept"])
+@pytest.mark.parametrize("filter_kind", ["clean", "process"])
+def test_task_staging_disables_active_configured_content_filters(tmp_path, phase, filter_kind):
+    task = tmp_path / "task"
+    task.mkdir()
+    initialize_artifact_repository(task, "content-filter-test")
+    marker = tmp_path / "outside-filter-marker"
+    filter_program = tmp_path / "content-filter"
+    invocation = "printf ran > " + shlex.quote(str(marker))
+    if filter_kind == "clean":
+        invocation += "\ncat"
+    filter_program.write_text("#!/bin/sh\n" + invocation + "\n")
+    filter_program.chmod(0o700)
+    _git(task, "config", f"filter.fixture.{filter_kind}", str(filter_program))
+    _git(task, "config", "filter.fixture.required", "true")
+    (task / ".gitattributes").write_text("result.txt filter=fixture\n")
+    result_file = task / "result.txt"
+    result_file.write_bytes(b"unfiltered task content\0\n")
+
+    if phase == "checkpoint":
+        commit = initialize_artifact_repository(task, "content-filter-test")["base_commit"]
+    elif phase == "bundle":
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="content-filter-test")
+        assert bundle["changed_paths"] == [
+            {"status": "A", "path": ".gitattributes"},
+            {"status": "A", "path": "result.txt"},
+        ]
+        commit = None
+    else:
+        commit = accept_artifact(task, "content-filter-test")["commit"]
+
+    assert not marker.exists()
+    assert result_file.read_bytes() == b"unfiltered task content\0\n"
+    assert _git(task, "config", "--get", f"filter.fixture.{filter_kind}") == str(filter_program)
+    assert _git(task, "config", "--get", "filter.fixture.required") == "true"
+    treeish = f"{commit}:result.txt" if commit else ":result.txt"
+    assert _git(task, "show", treeish) == "unfiltered task content\0"
+
+
+def test_task_checkout_disables_configured_smudge_filter(tmp_path):
+    task = tmp_path / "task"
+    task.mkdir()
+    (task / ".gitattributes").write_text("result.txt filter=fixture\n")
+    result_file = task / "result.txt"
+    result_file.write_text("checkpoint\n")
+    initialize_artifact_repository(task, "smudge-filter-test")
+    marker = tmp_path / "outside-filter-marker"
+    filter_program = tmp_path / "content-filter"
+    filter_program.write_text(
+        "#!/bin/sh\nprintf ran > " + shlex.quote(str(marker)) + "\ncat\n"
+    )
+    filter_program.chmod(0o700)
+    _git(task, "config", "filter.fixture.smudge", str(filter_program))
+    _git(task, "config", "filter.fixture.required", "true")
+    result_file.write_text("agent edit\n")
+
+    checkout = artifact_module._git(task, "checkout", "--", "result.txt")
+
+    assert checkout.returncode == 0, checkout.stderr
+    assert not marker.exists()
+    assert result_file.read_text() == "checkpoint\n"
+    assert _git(task, "config", "--get", "filter.fixture.smudge") == str(filter_program)
+    assert _git(task, "config", "--get", "filter.fixture.required") == "true"
+
+
 @pytest.mark.parametrize("operation", ["bundle", "accept"])
 @pytest.mark.parametrize("helper_kind", ["textconv", "command"])
 def test_artifact_diffs_ignore_external_helpers_and_preserve_raw_changes(tmp_path, operation, helper_kind):
@@ -357,13 +422,17 @@ def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeyp
     (workspace / "inside.txt").write_text("approved")
     (outside / "outside.txt").write_text("private")
     run = subprocess.run
+    launches = 0
 
     def swap():
         workspace.rename(tmp_path / "original")
         workspace.symlink_to(outside, target_is_directory=True)
 
     def swapped_launch(*args, **kwargs):
-        swap()
+        nonlocal launches
+        launches += 1
+        if launches == 2:
+            swap()
         return run(*args, **kwargs)
 
     if phase == "before_open":

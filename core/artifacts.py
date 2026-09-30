@@ -68,27 +68,86 @@ def _check_artifact_git_metadata(root_fd: int) -> None:
         os.close(git_fd)
 
 
-def _git(workspace: Path, *args: str, timeout: int = 30, trusted_repository: bool = False) -> subprocess.CompletedProcess[str]:
+def _git(
+    workspace: Path,
+    *args: str,
+    timeout: int = 30,
+    trusted_repository: bool = False,
+) -> subprocess.CompletedProcess[str]:
     try:
+        command_index = 0
+        while command_index < len(args) and args[command_index] == "-c":
+            command_index += 2
         if args and args[0] == "diff":
             args = ("diff", "--no-ext-diff", "--no-textconv", "--no-color", "--src-prefix=a/", "--dst-prefix=b/", *args[1:])
-        # Empty value also disables legacy pathname-based filesystem monitors.
+        # An empty value disables legacy pathname-based filesystem monitors.
         git_options = () if trusted_repository else ("-c", f"core.hooksPath={os.devnull}", "-c", "core.fsmonitor=", "-c", "commit.gpgSign=false")
-        with directory_command_at(workspace, (), "git", *git_options, "--git-dir=.git", "--work-tree=.", "-C", ".", *args) as (command, pass_fds):
+        root_fd = open_directory_at(workspace, ())
+        try:
             if not trusted_repository:
                 try:
-                    _check_artifact_git_metadata(pass_fds[0])
+                    _check_artifact_git_metadata(root_fd)
                 except (OSError, UnicodeError) as exc:
                     raise ArtifactError("artifact Git metadata is invalid or no longer matches this workspace") from exc
-            return subprocess.run(
-                command,
-                pass_fds=pass_fds,
-                text=True,
-                capture_output=True,
-                timeout=timeout,
-                check=False,
-                env=delegated_process_env(),
-            )
+
+            def run_git(*git_args: str, options: tuple[str, ...] = ()) -> subprocess.CompletedProcess[str]:
+                with directory_command_at(
+                    root_fd,
+                    (),
+                    "git",
+                    *git_options,
+                    *options,
+                    "--git-dir=.git",
+                    "--work-tree=.",
+                    "-C",
+                    ".",
+                    *git_args,
+                ) as (command, pass_fds):
+                    return subprocess.run(
+                        command,
+                        pass_fds=pass_fds,
+                        text=True,
+                        capture_output=True,
+                        timeout=timeout,
+                        check=False,
+                        env=delegated_process_env(),
+                    )
+
+            filter_options: tuple[str, ...] = ()
+            if (
+                not trusted_repository
+                and command_index < len(args)
+                and args[command_index] in {"add", "checkout", "commit", "reset", "restore", "switch"}
+            ):
+                configured = run_git(
+                    "config",
+                    "--null",
+                    "--name-only",
+                    "--get-regexp",
+                    r"^filter\..*\.(clean|process|smudge|required)$",
+                )
+                if configured.returncode not in {0, 1}:
+                    raise ArtifactError("could not inspect task Git content filters")
+                drivers = {
+                    name.removeprefix("filter.").rsplit(".", 1)[0]
+                    for name in configured.stdout.split("\0")
+                    if name
+                }
+                if len(drivers) > 32 or any(
+                    not re.fullmatch(r"[A-Za-z0-9._-]{1,255}", driver) for driver in drivers
+                ):
+                    raise ArtifactError("configured Git content filters are too numerous or invalid")
+                filter_options = tuple(
+                    item
+                    for driver in sorted(drivers)
+                    for key, value in (
+                        ("clean", ""), ("process", ""), ("required", "false"), ("smudge", "")
+                    )
+                    for item in ("-c", f"filter.{driver}.{key}={value}")
+                )
+            return run_git(*args, options=filter_options)
+        finally:
+            os.close(root_fd)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise ArtifactError(f"git command could not run: {' '.join(args)}") from exc
 

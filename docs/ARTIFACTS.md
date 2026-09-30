@@ -28,6 +28,13 @@ if a previously active monitor left cached index entries. An empty value also di
 Git versions interpreting `false` as an executable pathname. Stored monitor configuration is
 preserved; the explicitly selected source repository keeps its existing monitor behavior.
 
+During automatic task staging, commits, and checkouts, configured Git content filters are
+temporarily disabled for that command. Workspace bytes enter checkpoints and review patches
+unchanged, and task-controlled filter programs do not run on the host. Stored filter settings
+remain intact, and explicitly selected source worktrees keep their normal behavior. Git documents
+these filters in its
+[attributes reference](https://git-scm.com/docs/gitattributes).
+
 LightClaw-generated checkpoint and acceptance commits are unsigned. A per-command
 [`commit.gpgSign=false` override](https://git-scm.com/docs/git-config) prevents inherited signing
 settings from launching a signer, requesting host keys or passphrases, or failing an automatic
