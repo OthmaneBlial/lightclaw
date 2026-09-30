@@ -18,6 +18,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from core.fs import secure_sqlite_files
+
 log = logging.getLogger("lightclaw.memory")
 
 MEMORY_SCHEMA_VERSION = 2
@@ -110,14 +112,15 @@ class MemoryStore:
         )
         self._last_query_ms = 0.0
         self._timed_out_queries = 0
+        secure_sqlite_files(self.path)
         self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=5)
         self.db.row_factory = sqlite3.Row
-        self._init_db()
-        self._enforce_retention()
         try:
-            self.path.chmod(0o600)
-        except OSError:
-            pass
+            self._init_db()
+            self._enforce_retention()
+        except BaseException:
+            self.db.close()
+            raise
 
     def _init_db(self) -> None:
         with self._lock:

@@ -17,6 +17,44 @@ class FileTooLargeError(OSError):
     """Raised when a bounded text read exceeds its byte limit."""
 
 
+def secure_sqlite_files(path: str | Path) -> None:
+    """Restrict a SQLite database and any existing WAL sidecars to the owner."""
+    database = Path(path)
+    nofollow = os.O_NOFOLLOW | os.O_NONBLOCK
+    try:
+        database_fd = os.open(database, os.O_RDWR | os.O_CREAT | os.O_EXCL | nofollow, 0o600)
+    except FileExistsError:
+        database_fd = os.open(database, os.O_RDONLY | nofollow)
+
+    try:
+        _secure_open_sqlite_file(database, database_fd)
+    finally:
+        os.close(database_fd)
+
+    for candidate in (Path(f"{database}-wal"), Path(f"{database}-shm")):
+        try:
+            sidecar_fd = os.open(candidate, os.O_RDONLY | nofollow)
+        except FileNotFoundError:
+            continue
+        try:
+            _secure_open_sqlite_file(candidate, sidecar_fd)
+        finally:
+            os.close(sidecar_fd)
+
+
+def _secure_open_sqlite_file(path: Path, fd: int) -> None:
+    opened = os.fstat(fd)
+    if not stat.S_ISREG(opened.st_mode):
+        raise OSError(errno.EINVAL, f"SQLite state path is not a regular file: {path}")
+    os.fchmod(fd, 0o600)
+    current = os.stat(path, follow_symlinks=False)
+    if not stat.S_ISREG(current.st_mode) or (current.st_dev, current.st_ino) != (
+        opened.st_dev,
+        opened.st_ino,
+    ):
+        raise OSError(errno.EINVAL, f"SQLite state path changed during permission update: {path}")
+
+
 def sha256_file(path: str | Path) -> str:
     """Hash a file in fixed-size chunks so large artifacts stay memory-bounded."""
     digest = hashlib.sha256()

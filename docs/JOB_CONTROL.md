@@ -1,6 +1,6 @@
 # Durable Job Control
 
-LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in `jobs.db` beside the configured memory database. The parent runtime directory is private and the database uses owner-only permissions.
+LightClaw stores approved job, lane, lease, heartbeat, retry, and event state in `jobs.db` beside the configured memory database. New runtime directories are owner-only; keep an existing parent directory private. Startup restricts the database and existing SQLite WAL/SHM sidecars to owner-only before enabling WAL, and fails closed if it cannot.
 
 ## Guarantees
 

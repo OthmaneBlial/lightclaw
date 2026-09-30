@@ -66,22 +66,45 @@ def test_jobs_persist_across_restart_with_private_database(tmp_path):
     second.close()
 
 
+def test_job_store_keeps_wal_sidecars_private_in_shared_parent(tmp_path):
+    parent = tmp_path / "shared"
+    parent.mkdir()
+    parent.chmod(0o755)
+    database = parent / "jobs.db"
+    legacy = sqlite3.connect(database)
+    legacy.execute("PRAGMA journal_mode=WAL")
+    legacy.execute("CREATE TABLE legacy (value TEXT)")
+    legacy.execute("INSERT INTO legacy VALUES ('private state')")
+    legacy.commit()
+    os.chmod(database, 0o600)
+    for suffix in ("-wal", "-shm"):
+        os.chmod(database.with_name(database.name + suffix), 0o644)
+
+    store = JobStore(database)
+    _create(store, parent / "repo")
+
+    for path in (database, database.with_name("jobs.db-wal"), database.with_name("jobs.db-shm")):
+        assert path.exists()
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    store.close()
+    legacy.close()
+
+
 def test_job_store_does_not_chmod_database_symlink_target(tmp_path, monkeypatch):
     database = tmp_path / "jobs.db"
     victim = tmp_path / "victim.db"
     victim.write_text("private", encoding="utf-8")
     os.chmod(victim, 0o644)
-    chmod = os.chmod
+    fchmod = os.fchmod
 
-    def swap_then_chmod(path, mode, *, dir_fd=None, follow_symlinks=True):
-        if os.fspath(path) == str(database):
-            database.unlink()
-            database.symlink_to(victim)
-        return chmod(path, mode, dir_fd=dir_fd, follow_symlinks=follow_symlinks)
+    def swap_then_chmod(fd, mode):
+        database.unlink()
+        database.symlink_to(victim)
+        return fchmod(fd, mode)
 
-    monkeypatch.setattr(os, "chmod", swap_then_chmod)
-    store = JobStore(database)
-    store.close()
+    monkeypatch.setattr("core.fs.os.fchmod", swap_then_chmod)
+    with pytest.raises(OSError, match="changed during permission update"):
+        JobStore(database)
 
     assert victim.read_text(encoding="utf-8") == "private"
     assert stat.S_IMODE(victim.stat().st_mode) == 0o644
@@ -91,7 +114,7 @@ def test_job_store_fails_closed_when_database_cannot_be_private(tmp_path, monkey
     def fail_chmod(*_args, **_kwargs):
         raise PermissionError("fixture permission failure")
 
-    monkeypatch.setattr("core.jobs.os.chmod", fail_chmod)
+    monkeypatch.setattr("core.fs.os.fchmod", fail_chmod)
     with pytest.raises(PermissionError, match="fixture permission failure"):
         JobStore(tmp_path / "jobs.db")
 

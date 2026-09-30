@@ -12,6 +12,8 @@ import time
 import uuid
 from pathlib import Path, PurePosixPath
 
+from core.fs import secure_sqlite_files
+
 JOB_SCHEMA_VERSION = 2
 TERMINAL_STATUSES = frozenset({"canceled", "failed", "succeeded", "accepted", "rejected"})
 TERMINAL_LANE_STATUSES = frozenset({"canceled", "failed", "skipped", "succeeded"})
@@ -117,6 +119,7 @@ class JobStore:
     def __init__(self, db_path: str | Path):
         self.path = Path(db_path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        secure_sqlite_files(self.path)
         self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
         self.db.row_factory = sqlite3.Row
         self._lock = threading.RLock()
@@ -191,11 +194,6 @@ class JobStore:
                     "UPDATE jobs SET schema_version = ?", (JOB_SCHEMA_VERSION,)
                 )
             self.db.commit()
-        try:
-            os.chmod(self.path, 0o600, follow_symlinks=False)
-        except OSError:
-            self.db.close()
-            raise
 
     def close(self) -> None:
         with self._lock:
