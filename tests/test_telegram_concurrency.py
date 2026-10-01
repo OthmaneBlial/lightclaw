@@ -140,6 +140,13 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
 @pytest.mark.parametrize("clear_kind", ["session", "global"])
 async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_kind):
     bot = LightClawBot.__new__(LightClawBot)
+    loop_thread = threading.get_ident()
+    memory_read_threads = []
+
+    def record_memory_read(result):
+        memory_read_threads.append(threading.get_ident())
+        return result
+
     bot.config = SimpleNamespace(
         memory_top_k=3,
         context_window=128,
@@ -197,9 +204,9 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_k
     bot.llm = SimpleNamespace(chat=chat)
     bot.skills = SimpleNamespace(prompt_context=lambda _session: "")
     bot.memory = SimpleNamespace(
-        recall=Mock(return_value=[]),
+        recall=Mock(side_effect=lambda *_args, **_kwargs: record_memory_read([])),
         format_memories_for_prompt=Mock(return_value=""),
-        get_recent=Mock(return_value=[]),
+        get_recent=Mock(side_effect=lambda *_args, **_kwargs: record_memory_read([])),
         ingest=Mock(),
         clear_session=Mock(),
         clear_all=Mock(),
@@ -238,6 +245,8 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_k
         bot.memory.clear_session.assert_called_once_with("chat-42")
     else:
         bot.memory.clear_all.assert_called_once_with()
+    assert len(memory_read_threads) == 2
+    assert all(thread_id != loop_thread for thread_id in memory_read_threads)
     bot.memory.ingest.assert_not_called()
     assert chat_calls == 1
     assert bot._active_message_clear_events_by_session == {}

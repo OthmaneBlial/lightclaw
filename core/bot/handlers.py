@@ -391,16 +391,19 @@ class BotHandlersMixin:
             return
 
         # 2. Recall relevant memories
-        memories = self.memory.recall(
-            user_text,
-            top_k=self.config.memory_top_k,
-            session_id=session_id,
+        memories, recent = await asyncio.gather(
+            asyncio.to_thread(
+                self.memory.recall,
+                user_text,
+                top_k=self.config.memory_top_k,
+                session_id=session_id,
+            ),
+            asyncio.to_thread(self.memory.get_recent, session_id, limit=20),
         )
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)
 
         # 3. Get recent conversation history + clean orphans
-        recent = self.memory.get_recent(session_id, limit=20)
         recent = self._clean_orphan_messages(recent)
         recent = self._filter_recent_context(recent)
 
