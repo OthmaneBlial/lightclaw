@@ -598,8 +598,8 @@ async def test_32_character_retry_button_reaches_job_store():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["cancel", "accept", "reject", "retry"])
-async def test_public_group_run_mutations_are_limited_to_requester(action):
+@pytest.mark.parametrize("action", ["cancel", "accept", "reject", "retry", "diff"])
+async def test_public_group_run_callbacks_enforce_requester_boundary(action):
     bot = LightClawBot.__new__(LightClawBot)
     run_id = "public-run"
     bot.is_update_allowed = lambda _update: True
@@ -613,6 +613,7 @@ async def test_public_group_run_mutations_are_limited_to_requester(action):
     bot.jobs = SimpleNamespace(request_cancel=Mock(), retry_lane=Mock())
     bot._accept_last_run_result = AsyncMock()
     bot._reject_last_run_result = AsyncMock()
+    bot._send_last_run_diff = AsyncMock()
     bot._reply_logged = AsyncMock()
     suffix = ":builder" if action == "retry" else ""
     query = SimpleNamespace(
@@ -629,8 +630,12 @@ async def test_public_group_run_mutations_are_limited_to_requester(action):
 
     await bot.handle_run_action(update, SimpleNamespace())
 
-    bot._reply_logged.assert_awaited_once()
-    assert "Only the requester" in bot._reply_logged.await_args.args[1]
+    if action == "diff":
+        bot._send_last_run_diff.assert_awaited_once()
+        bot._reply_logged.assert_not_awaited()
+    else:
+        bot._reply_logged.assert_awaited_once()
+        assert "Only the requester" in bot._reply_logged.await_args.args[1]
     bot.jobs.request_cancel.assert_not_called()
     bot.jobs.retry_lane.assert_not_called()
     bot._accept_last_run_result.assert_not_awaited()
