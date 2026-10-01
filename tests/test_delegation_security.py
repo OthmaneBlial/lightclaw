@@ -252,6 +252,49 @@ async def test_streaming_timeout_also_covers_prompt_stdin_write(tmp_path: Path):
     assert result["exit_code"] == 124
 
 
+@pytest.mark.skipif(os.name != "posix", reason="detached pipe inheritance is POSIX-only")
+async def test_prompt_timeout_does_not_wait_for_detached_child_holding_output_pipes(
+    tmp_path: Path,
+):
+    pid_path = tmp_path / "detached-child.pid"
+    child_code = (
+        "import os,pathlib,time; "
+        f"pathlib.Path({str(pid_path)!r}).write_text(str(os.getpid())); "
+        "time.sleep(20)"
+    )
+    parent_code = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable,'-c',{child_code!r}],start_new_session=True); "
+        "time.sleep(30)"
+    )
+    harness = TimeoutHarness()
+    harness._build_local_agent_command = lambda **_kwargs: (
+        [sys.executable, "-c", parent_code],
+        "x" * (1024 * 1024),
+    )
+    task = asyncio.create_task(
+        harness._invoke_local_agent_streaming("codex", "large prompt", workspace=tmp_path)
+    )
+    try:
+        deadline = time.monotonic() + 3
+        while not pid_path.exists() and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        assert pid_path.exists(), "agent did not start its detached child"
+        done, _ = await asyncio.wait({task}, timeout=2)
+        assert task in done, "prompt timeout waited for the detached child's output pipes"
+        result = task.result()
+        assert result["timed_out"] is True
+    finally:
+        if pid_path.exists():
+            try:
+                os.kill(int(pid_path.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
 async def test_prompt_stdin_failure_is_not_reported_as_success(tmp_path: Path):
     harness = TimeoutHarness()
     harness._build_local_agent_command = lambda **_kwargs: (

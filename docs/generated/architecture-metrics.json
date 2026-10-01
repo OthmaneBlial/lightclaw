@@ -36,7 +36,7 @@
     },
     {
       "branch_points": 71,
-      "line": 850,
+      "line": 859,
       "lines": 404,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -99,17 +99,17 @@
     },
     {
       "branch_points": 43,
+      "line": 501,
+      "lines": 288,
+      "name": "_invoke_local_agent_streaming",
+      "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 43,
       "line": 164,
       "lines": 73,
       "name": "validate_skill_manifest",
       "path": "skills.py"
-    },
-    {
-      "branch_points": 41,
-      "line": 224,
-      "lines": 149,
-      "name": "_parse_multi_agent_args",
-      "path": "core/bot/delegation/agents.py"
     }
   ],
   "largest_functions": [
@@ -136,7 +136,7 @@
     },
     {
       "branch_points": 71,
-      "line": 850,
+      "line": 859,
       "lines": 404,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
@@ -170,9 +170,9 @@
       "path": "core/artifacts.py"
     },
     {
-      "branch_points": 39,
+      "branch_points": 43,
       "line": 501,
-      "lines": 279,
+      "lines": 288,
       "name": "_invoke_local_agent_streaming",
       "path": "core/bot/delegation/execution.py"
     },
@@ -233,7 +233,7 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1253,
+      "lines": 1262,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21925,
+  "runtime_lines": 21934,
   "schema_version": 1
 }

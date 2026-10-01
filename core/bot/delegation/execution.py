@@ -707,6 +707,11 @@ class DelegationExecutionMixin:
             except Exception:
                 proc.kill()
             await proc.wait()
+            if not streams_task.done():
+                try:
+                    await asyncio.wait_for(streams_task, timeout=0.25)
+                except Exception:
+                    pass
             await asyncio.gather(streams_task, return_exceptions=True)
             stderr_capture.append_line(f"Timed out after {timeout_sec}s")
         except asyncio.CancelledError:
@@ -714,6 +719,8 @@ class DelegationExecutionMixin:
             try:
                 await await_task_completion(cleanup_task)
             finally:
+                if not streams_task.done():
+                    streams_task.cancel()
                 await await_task_completion(
                     asyncio.gather(streams_task, return_exceptions=True)
                 )
@@ -721,6 +728,8 @@ class DelegationExecutionMixin:
         except Exception as exc:
             io_failed = True
             await stop_process_tree(proc)
+            if not streams_task.done():
+                streams_task.cancel()
             await asyncio.gather(streams_task, return_exceptions=True)
             stderr_capture.append_line(f"Agent output stream failed: {exc}")
         finally:
