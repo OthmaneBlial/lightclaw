@@ -299,6 +299,7 @@ class CommandsAgentExecutionMixin:
                 update,
                 f"<code>{_escape_html(tag)}</code>\nQueued...",
                 parse_mode=ParseMode.HTML,
+                reply_markup=self._inline_cancel_keyboard(run_id),
             )
             worker_msgs.append(worker_msg)
 
@@ -552,7 +553,8 @@ class CommandsAgentExecutionMixin:
                 reason = self._short_progress_text("; ".join(last_failures), max_chars=180)
                 try:
                     await progress_msg.edit_text(
-                        f"{tag}\n🔧 Repair attempt {attempt + 1}/{repair_attempts}: {reason}"
+                        f"{tag}\n🔧 Repair attempt {attempt + 1}/{repair_attempts}: {reason}",
+                        reply_markup=self._inline_cancel_keyboard(run_id),
                     )
                 except Exception:
                     pass
@@ -573,14 +575,13 @@ class CommandsAgentExecutionMixin:
             if wait_status_by_label.get(label) == status_text:
                 return
             wait_status_by_label[label] = status_text
-            msg = worker_msgs[index_by_label[label]]
-            tag = self._multi_agent_tag(
-                label,
-                workers_by_label[label],
-                index_by_label[label],
-            )
+            index = index_by_label[label]
+            tag = self._multi_agent_tag(label, workers_by_label[label], index)
             try:
-                await msg.edit_text(f"{tag}\n{status_text}")
+                await worker_msgs[index].edit_text(
+                    f"{tag}\n{status_text}",
+                    reply_markup=self._inline_cancel_keyboard(run_id),
+                )
             except Exception:
                 pass
 

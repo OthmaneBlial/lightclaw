@@ -71,7 +71,7 @@ async def test_handoff_preparation_refuses_a_swapped_workspace(tmp_path, monkeyp
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("clear_kind", [None, "session", "global"])
-async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path, clear_kind):
+async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(tmp_path, clear_kind):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(
         workspace_path=str(tmp_path),
@@ -115,6 +115,31 @@ async def test_multi_agent_repairs_record_every_durable_attempt(tmp_path, clear_
             ]},
             run_id="multi-repair-fixture",
         )
+        def has_cancel_button(markup):
+            return any(
+                button.text == "Cancel run"
+                for row in getattr(markup, "inline_keyboard", [])
+                for button in row
+            )
+
+        queued_replies = [
+            call
+            for call in bot._reply_logged.await_args_list
+            if "Queued..." in str(call.args[1])
+        ]
+        assert len(queued_replies) == 2
+        assert all(has_cancel_button(call.kwargs.get("reply_markup")) for call in queued_replies)
+
+        worker_updates = bot._reply_logged.return_value.edit_text.await_args_list
+        waiting_updates = [call for call in worker_updates if "Waiting for dependencies" in str(call.args[0])]
+        repair_updates = [call for call in worker_updates if "Repair attempt" in str(call.args[0])]
+        assert waiting_updates and all(
+            has_cancel_button(call.kwargs.get("reply_markup")) for call in waiting_updates
+        )
+        assert repair_updates and all(
+            has_cancel_button(call.kwargs.get("reply_markup")) for call in repair_updates
+        )
+
         assert invocations == [1, 2]
         job = bot.jobs.get_job("multi-repair-fixture")
         assert job["status"] == "succeeded"

@@ -9,7 +9,7 @@
     {
       "branch_points": 99,
       "line": 239,
-      "lines": 699,
+      "lines": 700,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -116,7 +116,7 @@
     {
       "branch_points": 99,
       "line": 239,
-      "lines": 699,
+      "lines": 700,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -245,7 +245,7 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 937,
+      "lines": 938,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21769,
+  "runtime_lines": 21770,
   "schema_version": 1
 }
