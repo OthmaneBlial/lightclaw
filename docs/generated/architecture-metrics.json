@@ -7,9 +7,9 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
-      "branch_points": 99,
-      "line": 251,
-      "lines": 699,
+      "branch_points": 94,
+      "line": 276,
+      "lines": 694,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -114,9 +114,9 @@
   ],
   "largest_functions": [
     {
-      "branch_points": 99,
-      "line": 251,
-      "lines": 699,
+      "branch_points": 94,
+      "line": 276,
+      "lines": 694,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 955,
-      "path": "core/artifacts.py"
+      "lines": 969,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 949,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 955,
+      "path": "core/artifacts.py"
     },
     {
       "lines": 908,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22159,
+  "runtime_lines": 22179,
   "schema_version": 1
 }

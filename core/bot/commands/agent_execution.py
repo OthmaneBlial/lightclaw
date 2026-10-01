@@ -21,6 +21,31 @@ from ...receipts import write_receipt
 from ..delegation.workspace import await_thread_completion
 
 
+def _multi_run_receipt_checks(workers, completed, failures, audits):
+    checks = []
+    for label, _agent in workers:
+        passed = label in completed
+        checks.append(
+            {
+                "name": f"lane {label} acceptance",
+                "passed": passed,
+                "evidence": "worker contract passed"
+                if passed
+                else failures.get(label, "worker contract failed or was skipped"),
+            }
+        )
+    checks.extend(
+        {
+            "name": name,
+            "passed": not findings,
+            "evidence": "; ".join(findings[:6]) if findings else "passed",
+        }
+        for name, applicable, findings in audits
+        if applicable
+    )
+    return checks
+
+
 class CommandsAgentExecutionMixin:
     async def _await_multi_preflight_thread(
         self, run_id: str, workspace: Path, function, *args, **kwargs
@@ -548,6 +573,7 @@ class CommandsAgentExecutionMixin:
                 last_result = enriched_result
                 last_failures = acceptance_failures or ["worker execution failed"]
                 if attempt >= repair_attempts:
+                    lane_failure_reasons[label] = "; ".join(last_failures)[:500]
                     await asyncio.to_thread(
                         self.jobs.update_lane,
                         run_id,
@@ -576,6 +602,7 @@ class CommandsAgentExecutionMixin:
         completed_ok: set[str] = set()
         failed: set[str] = set()
         results_by_label: dict[str, object] = {}
+        lane_failure_reasons: dict[str, str] = {}
         evidence_by_label: dict[str, list[dict[str, object]]] = {}
         index_by_label = {label: idx for idx, (label, _) in enumerate(workers)}
         wait_status_by_label: dict[str, str] = {}
@@ -603,6 +630,7 @@ class CommandsAgentExecutionMixin:
             remaining.discard(label)
             failed.add(label)
             reason = ", ".join(unknown_deps)
+            lane_failure_reasons[label] = f"unknown dependency: {reason}"
             skip_text = f"⚠️ Skipped because AGENTS.md references unknown dependency: {reason}"
             results_by_label[label] = skip_text
             await asyncio.to_thread(
@@ -629,6 +657,7 @@ class CommandsAgentExecutionMixin:
                 failed.add(label)
                 dep_list = dependency_map.get(label) or []
                 reason = ", ".join(d for d in dep_list if d in failed) or "failed dependency"
+                lane_failure_reasons[label] = f"failed dependency: {reason}"
                 skip_text = f"⚠️ Skipped because dependency failed: {reason}"
                 results_by_label[label] = skip_text
                 await asyncio.to_thread(
@@ -671,6 +700,7 @@ class CommandsAgentExecutionMixin:
                 for label in list(remaining):
                     remaining.discard(label)
                     failed.add(label)
+                    lane_failure_reasons[label] = "unresolved dependency cycle in AGENTS.md"
                     skip_text = "⚠️ Skipped due to unresolved dependency cycle in AGENTS.md."
                     results_by_label[label] = skip_text
                     await asyncio.to_thread(
@@ -775,29 +805,16 @@ class CommandsAgentExecutionMixin:
             before_multi,
             after_multi,
         )
-        receipt_checks: list[dict[str, object]] = []
-        for label, _agent in workers:
-            ok = label in completed_ok
-            receipt_checks.append(
-                {
-                    "name": f"lane {label} acceptance",
-                    "passed": ok,
-                    "evidence": "worker contract passed" if ok else "worker contract failed or was skipped",
-                }
-            )
-        for name, applicable, findings in (
-            ("cross-lane API audit", api_audit_applicable, api_audit_findings),
-            ("cross-lane findings audit", findings_audit_applicable, findings_audit_findings),
-            ("deliverables audit", deliverables_audit_applicable, deliverables_audit_findings),
-        ):
-            if applicable:
-                receipt_checks.append(
-                    {
-                        "name": name,
-                        "passed": not findings,
-                        "evidence": "; ".join(findings[:6]) if findings else "passed",
-                    }
-                )
+        receipt_checks = _multi_run_receipt_checks(
+            workers,
+            completed_ok,
+            lane_failure_reasons,
+            (
+                ("cross-lane API audit", api_audit_applicable, api_audit_findings),
+                ("cross-lane findings audit", findings_audit_applicable, findings_audit_findings),
+                ("deliverables audit", deliverables_audit_applicable, deliverables_audit_findings),
+            ),
+        )
 
         commands: list[dict[str, object]] = []
         failures: list[str] = []
@@ -813,7 +830,10 @@ class CommandsAgentExecutionMixin:
                 attempt_failures = attempt.get("failures")
                 if isinstance(attempt_failures, list):
                     failures.extend(f"{label}: {item}" for item in attempt_failures if str(item))
-        failures.extend(f"{label}: lane did not complete" for label in sorted(failed))
+        failures.extend(
+            f"{label}: {lane_failure_reasons.get(label, 'lane did not complete')}"
+            for label in sorted(failed)
+        )
         failures.extend(api_audit_findings)
         failures.extend(findings_audit_findings)
         failures.extend(deliverables_audit_findings)

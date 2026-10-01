@@ -253,8 +253,13 @@ async def test_cancel_button_stops_multi_agent_workspace_preparation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("clear_kind", [None, "session", "global"])
-async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(tmp_path, clear_kind):
+@pytest.mark.parametrize(
+    ("clear_kind", "acceptance_fails"),
+    [(None, False), (None, True), ("session", False), ("global", False)],
+)
+async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(
+    tmp_path, clear_kind, acceptance_fails
+):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(
         workspace_path=str(tmp_path),
@@ -272,7 +277,10 @@ async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(tmp_
     bot._reply_logged = AsyncMock(return_value=SimpleNamespace(edit_text=AsyncMock()))
     bot._send_response = AsyncMock()
     bot._llm_backoff_active = lambda: True
-    bot._evaluate_multi_worker_acceptance_off_thread = AsyncMock(return_value=(True, [], {}))
+    acceptance_failures = ["expected item src/feature.py is missing"] if acceptance_fails else []
+    bot._evaluate_multi_worker_acceptance_off_thread = AsyncMock(
+        return_value=(not acceptance_fails, acceptance_failures, {})
+    )
     invocations: list[int] = []
 
     async def worker(**kwargs):
@@ -325,10 +333,19 @@ async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(tmp_
 
         assert invocations == [1, 2]
         job = bot.jobs.get_job("multi-repair-fixture")
-        assert job["status"] == "succeeded"
-        assert [lane["attempt"] for lane in job["lanes"]] == [2, 1]
+        assert job["status"] == ("failed" if acceptance_fails else "succeeded")
+        assert [lane["attempt"] for lane in job["lanes"]] == (
+            [2, 0] if acceptance_fails else [2, 1]
+        )
         receipt = json.loads(Path(bot._last_run_receipts_by_session["fixture-session"]).read_text())
         assert receipt["retries"] == 1
+        if acceptance_fails:
+            assert "builder: expected item src/feature.py is missing" in receipt["failures"]
+            builder_check = next(
+                check for check in receipt["checks"]
+                if check["name"] == "lane builder acceptance"
+            )
+            assert builder_check["evidence"] == "expected item src/feature.py is missing"
         assert bot.memory.ingest.call_count == (0 if clear_kind else 2)
         assert not bot._active_message_clear_events_by_session
     finally:
