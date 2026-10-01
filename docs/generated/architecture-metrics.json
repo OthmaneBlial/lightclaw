@@ -36,8 +36,8 @@
     },
     {
       "branch_points": 72,
-      "line": 258,
-      "lines": 378,
+      "line": 264,
+      "lines": 381,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -143,8 +143,8 @@
     },
     {
       "branch_points": 72,
-      "line": 258,
-      "lines": 378,
+      "line": 264,
+      "lines": 381,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -214,7 +214,7 @@
     {
       "branch_points": 30,
       "line": 118,
-      "lines": 175,
+      "lines": 176,
       "name": "_run_heartbeat_once_impl",
       "path": "core/bot/commands/heartbeat.py"
     }
@@ -253,7 +253,7 @@
       "path": "core/jobs.py"
     },
     {
-      "lines": 878,
+      "lines": 890,
       "path": "memory.py"
     },
     {
@@ -269,7 +269,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 637,
+      "lines": 646,
       "path": "core/bot/handlers.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22179,
+  "runtime_lines": 22213,
   "schema_version": 1
 }

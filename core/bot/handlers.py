@@ -40,7 +40,13 @@ class BotHandlersMixin:
         minutes, seconds = divmod(remainder, 60)
 
         stats, installed_skills, job_diagnostics = await asyncio.gather(
-            asyncio.to_thread(self.memory.stats, session_id=session_id),
+            asyncio.to_thread(
+                self.memory.stats,
+                session_id=session_id,
+                current_session_only=(
+                    getattr(update.effective_chat, "type", "private") != "private"
+                ),
+            ),
             asyncio.to_thread(self.skills.list_skills),
             asyncio.to_thread(self.jobs.diagnostics, session_id=session_id),
         )
@@ -406,6 +412,9 @@ class BotHandlersMixin:
                 user_text,
                 top_k=self.config.memory_top_k,
                 session_id=session_id,
+                current_session_only=(
+                    getattr(update.effective_chat, "type", "private") != "private"
+                ),
             ),
             asyncio.to_thread(self.memory.get_recent, session_id, limit=20),
         )

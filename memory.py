@@ -412,8 +412,11 @@ class MemoryStore:
         session_id: str | None = None,
         user_namespace: str | None = None,
         workspace_namespace: str | None = None,
+        current_session_only: bool = False,
     ) -> list[MemoryRecord]:
-        """Return bounded FTS5 lexical results from exactly one private scope."""
+        """Return bounded FTS5 results from one private scope, optionally one session."""
+        if current_session_only and session_id is None:
+            raise ValueError("current-session recall requires a session id")
         terms = list(dict.fromkeys(_tokenize(query)))[:MAX_QUERY_TERMS]
         if not terms:
             return []
@@ -427,8 +430,11 @@ class MemoryStore:
         candidate_count = min(self.candidate_limit, max(25, requested * 8))
         params: list[object] = [match, user, workspace]
         session_clause = ""
+        if current_session_only:
+            session_clause += " AND i.session_id = ?"
+            params.append(str(session_id))
         if exclude_session:
-            session_clause = " AND i.session_id != ?"
+            session_clause += " AND i.session_id != ?"
             params.append(str(exclude_session))
         identity = self._embedding_identity()
         join = ""
@@ -666,11 +672,14 @@ class MemoryStore:
         session_id: str | None = None,
         user_namespace: str | None = None,
         workspace_namespace: str | None = None,
+        current_session_only: bool = False,
     ) -> dict[str, object]:
-        """Return truthful global or exact-scope memory statistics."""
+        """Return global, scoped, or current-session memory statistics."""
         where = ""
         params: tuple[object, ...] = ()
         scoped = session_id is not None or user_namespace is not None or workspace_namespace is not None
+        if current_session_only and session_id is None:
+            raise ValueError("current-session stats require a session id")
         if scoped:
             user, workspace = self.scope_for(
                 session_id,
@@ -679,6 +688,9 @@ class MemoryStore:
             )
             where = " WHERE user_namespace = ? AND workspace_namespace = ?"
             params = (user, workspace)
+            if current_session_only:
+                where += " AND session_id = ?"
+                params += (str(session_id),)
         embedding_adapter = "/".join(self._embedding_identity() or ()) or None
         with self._lock:
             total = int(

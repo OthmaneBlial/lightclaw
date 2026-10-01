@@ -153,6 +153,7 @@ class CommandsHeartbeatMixin:
             "heartbeat automation",
             top_k=max(1, min(self.config.memory_top_k, 4)),
             session_id=session_id,
+            current_session_only=chat_id < 0,
         )
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)

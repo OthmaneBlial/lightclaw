@@ -89,6 +89,35 @@ def test_fts5_lexical_recall_isolated_by_user_workspace_and_summary(tmp_path):
     store.db.close()
 
 
+def test_current_session_only_recall_and_stats_exclude_private_chat_history(tmp_path):
+    store = MemoryStore(str(tmp_path / "memory.db"))
+    scope = {
+        "user_namespace": "telegram-user:42",
+        "workspace_namespace": "/workspace",
+    }
+    store.ingest("user", "private birch phrase", "private-chat", **scope)
+    group_id = store.ingest("user", "group birch phrase", "group-chat", **scope)
+    store.bind_session("group-chat", **scope)
+
+    cross_chat = store.recall("birch phrase", session_id="group-chat")
+    group_only = store.recall(
+        "birch phrase", session_id="group-chat", current_session_only=True
+    )
+    all_stats = store.stats(session_id="group-chat")
+    group_stats = store.stats(session_id="group-chat", current_session_only=True)
+
+    assert {record.session_id for record in cross_chat} == {"private-chat", "group-chat"}
+    assert [record.id for record in group_only] == [group_id]
+    assert all_stats["total_interactions"] == 2
+    assert group_stats["total_interactions"] == 1
+    assert group_stats["unique_sessions"] == 1
+    with pytest.raises(ValueError, match="current-session recall requires"):
+        store.recall("birch phrase", current_session_only=True)
+    with pytest.raises(ValueError, match="current-session stats require"):
+        store.stats(current_session_only=True)
+    store.db.close()
+
+
 def test_concurrent_same_chat_bindings_do_not_cross_async_contexts(tmp_path):
     store = MemoryStore(str(tmp_path / "memory.db"))
     ready = asyncio.Event()

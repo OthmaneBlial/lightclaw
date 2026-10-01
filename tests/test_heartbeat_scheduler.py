@@ -305,27 +305,35 @@ async def test_unexpected_heartbeat_error_does_not_stop_scheduler(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["skills", "model", "delivery"])
 @pytest.mark.parametrize("erase", ["current", "other", "global", "none"])
+@pytest.mark.parametrize("session_id", ["123", "-100"])
 async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
-    tmp_path, monkeypatch, phase, erase
+    tmp_path, monkeypatch, phase, erase, session_id
 ):
     heartbeat = tmp_path / "HEARTBEAT.md"
     heartbeat.write_text("Summarize the last conversation.")
     bot = LightClawBot.__new__(LightClawBot)
-    bot.config = Config(workspace_path=str(tmp_path), telegram_allowed_users=["42"])
+    group_chat = int(session_id) < 0
+    bot.config = Config(
+        workspace_path=str(tmp_path),
+        telegram_allowed_users=[] if group_chat else ["42"],
+        telegram_public_bot_ack=group_chat,
+    )
     bot.memory = MemoryStore(tmp_path / "memory.db")
     loop_thread = threading.get_ident()
-    recall_threads = []
+    recall_calls = []
     recall = bot.memory.recall
 
     def capture_recall(*args, **kwargs):
-        recall_threads.append(threading.get_ident())
+        recall_calls.append((threading.get_ident(), kwargs))
         return recall(*args, **kwargs)
 
     bot.memory.recall = capture_recall
     bot.memory.bind_session(
-        "123", user_namespace="telegram-user:42", workspace_namespace=str(tmp_path.resolve())
+        session_id,
+        user_namespace="telegram-user:42",
+        workspace_namespace=str(tmp_path.resolve()),
     )
-    bot.memory.ingest("user", "old secret amberfalcon", "123")
+    bot.memory.ingest("user", "old secret amberfalcon", session_id)
     bot._heartbeat_file_path = lambda: heartbeat
     bot._llm_backoff_active = lambda: False
     bot._filter_recalled_memories = lambda memories: memories
@@ -380,12 +388,17 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
     bot.llm = SimpleNamespace(chat=AsyncMock(side_effect=model))
     transport = SimpleNamespace(send_message=AsyncMock(side_effect=deliver))
     monkeypatch.setattr("core.bot.commands.heartbeat.build_system_prompt", lambda *_args: "")
-    run = asyncio.create_task(bot._run_heartbeat_once(transport, "123"))
+    run = asyncio.create_task(bot._run_heartbeat_once(transport, session_id))
     try:
         await asyncio.wait_for(entered.wait(), timeout=2)
         update = SimpleNamespace(
             effective_user=SimpleNamespace(id=42),
-            effective_chat=SimpleNamespace(id=456 if erase == "other" else 123, type="private"),
+            effective_chat=SimpleNamespace(
+                id=(int(session_id) - 1 if group_chat else 456)
+                if erase == "other"
+                else int(session_id),
+                type="group" if group_chat else "private",
+            ),
             message=SimpleNamespace(),
         )
         if erase == "global":
@@ -396,10 +409,11 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
         release.set()
         release_skills.set()
         await run
-        assert len(recall_threads) == 1
-        assert recall_threads[0] != loop_thread
+        assert len(recall_calls) == 1
+        assert recall_calls[0][0] != loop_thread
+        assert recall_calls[0][1]["current_session_only"] is group_chat
 
-        saved = bot.memory.get_recent("123")
+        saved = bot.memory.get_recent(session_id)
         if erase in {"other", "none"}:
             assert any("[heartbeat]" in entry["content"] for entry in saved)
         else:

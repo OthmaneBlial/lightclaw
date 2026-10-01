@@ -364,7 +364,10 @@ async def test_show_reports_persisted_summary_after_restart():
 
 
 @pytest.mark.asyncio
-async def test_show_runs_database_and_skill_reads_off_event_loop():
+@pytest.mark.parametrize(
+    ("chat_type", "session_only"), [("private", False), ("group", True)]
+)
+async def test_show_runs_database_and_skill_reads_off_event_loop(chat_type, session_only):
     loop_thread = threading.get_ident()
     worker_threads = []
 
@@ -398,7 +401,7 @@ async def test_show_runs_database_and_skill_reads_off_event_loop():
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=42),
-        effective_chat=SimpleNamespace(id=42, type="private"),
+        effective_chat=SimpleNamespace(id=42, type=chat_type),
         message=SimpleNamespace(),
     )
 
@@ -406,10 +409,14 @@ async def test_show_runs_database_and_skill_reads_off_event_loop():
 
     assert len(worker_threads) == 5
     assert all(thread_id != loop_thread for thread_id in worker_threads)
+    assert bot.memory.stats.call_args.kwargs["current_session_only"] is session_only
 
 
 @pytest.mark.asyncio
-async def test_memory_diagnostic_commands_query_sqlite_off_event_loop():
+@pytest.mark.parametrize(
+    ("chat_type", "session_only"), [("private", False), ("group", True)]
+)
+async def test_memory_diagnostic_commands_query_sqlite_off_event_loop(chat_type, session_only):
     loop_thread = threading.get_ident()
     query_threads = []
 
@@ -437,7 +444,7 @@ async def test_memory_diagnostic_commands_query_sqlite_off_event_loop():
     )
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=42),
-        effective_chat=SimpleNamespace(id=42, type="private"),
+        effective_chat=SimpleNamespace(id=42, type=chat_type),
         message=SimpleNamespace(),
     )
 
@@ -446,6 +453,8 @@ async def test_memory_diagnostic_commands_query_sqlite_off_event_loop():
 
     assert len(query_threads) == 2
     assert all(thread_id != loop_thread for thread_id in query_threads)
+    assert bot.memory.stats.call_args.kwargs["current_session_only"] is session_only
+    assert bot.memory.recall.call_args.kwargs["current_session_only"] is session_only
 
 
 @pytest.mark.asyncio
