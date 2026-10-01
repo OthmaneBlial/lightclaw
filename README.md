@@ -141,7 +141,9 @@ LightClaw is local-first and lightweight. It is **not** a hosted multi-tenant se
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install --require-hashes -r requirements-pip.txt
+python -m pip install --require-hashes -r requirements-dev.txt
+python -m pip install --no-deps --no-build-isolation -e .
 python scripts/quality.py
 ```
 

@@ -53,13 +53,16 @@ roadmap's “proof over claims” rule.
   Python 3.10.21, 3.11.16, 3.12.14, 3.13.1, and 3.14.7. Python 3.10–3.13 emitted three
   third-party deprecation warnings each; Python 3.14 emitted four from `python-telegram-bot`
   and `google-genai`.
-- Latest canonical quality suite at `2a48d4f` on 2026-09-30: all 452 tests passed on macOS
-  arm64 with Python 3.14.7; lint, docs, architecture, dependency audit, and package build/install
-  also passed. The suite covers the bounded per-user summary cache, bounded inline diff preview,
-  eight-file mobile summary, and resistance to replacing the patch path with a symlink during
-  Telegram delivery.
-  One third-party `google-genai` deprecation warning remains. This run does not extend the
-  earlier five-version test result to all 452 tests.
+- Latest canonical quality suite at `c5fa6f4` on 2026-10-01: all 847 tests passed on macOS
+  arm64 with Python 3.10.21; lint, documentation links, provider matrix, architecture/runtime
+  budgets, locked dependency resolution, runtime footprint, skill validation, showcase replay,
+  launch evidence, dependency audit, package build, and clean-wheel installation also passed.
+  The three legacy skill migration cases cover symlink files, symlink swaps, and oversized files.
+  The clean venv used the pinned pip from `requirements-pip.txt`; Python 3.10.21's bundled pip
+  23.0.1 could not resolve one hashed transitive extra.
+- Canonical quality at `1de80ce` on 2026-10-01 passed all 846 tests on Python 3.14.7 with the
+  package build/install checks. The `c5fa6f4` symlink-swap test extension also passed all three
+  cases on Python 3.14.7. One third-party `google-genai` deprecation warning remains on 3.14.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
@@ -71,10 +74,11 @@ roadmap's “proof over claims” rule.
 - The current `python:3.14-slim` digest matches the official registry tag, and local quality
   passes on Python 3.14.7. A container build with this Dockerfile remains unverified because
   the existing Podman VM cannot start without its configured SSH identity file.
-- GitHub controls: private vulnerability reporting and Discussions enabled; community profile
-  100%; Release, Dependabot Updates, and Dependency Graph workflows active; CI, CodeQL,
-  OpenSSF Scorecard, and showcase validation disabled. Repository description, topics, and live
-  docs URL were rechecked on 2026-09-30.
+- GitHub controls rechecked on 2026-10-01: CI, CodeQL, OpenSSF Scorecard, and showcase workflows
+  are `disabled_manually`; Release, Dependabot Updates, and Dependency Graph remain active; no
+  open issues exist. Repository description and topics are populated. The project Pages endpoint
+  is served from `OthmaneBlial/OthmaneBlial.github.io` on `master`, and the live LightClaw URL
+  returned HTTP 200.
 
 Live state can change after this snapshot. Release and external-adoption gates must be
 rechecked at the time they are claimed; this document is not a substitute for their URLs.
