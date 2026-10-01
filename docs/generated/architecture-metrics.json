@@ -99,7 +99,7 @@
     },
     {
       "branch_points": 43,
-      "line": 143,
+      "line": 158,
       "lines": 73,
       "name": "validate_skill_manifest",
       "path": "skills.py"
@@ -233,7 +233,7 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "lines": 1194,
+      "lines": 1252,
       "path": "skills.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21646,
+  "runtime_lines": 21704,
   "schema_version": 1
 }

@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+import skills as skills_module
 from core.bot import LightClawBot
 from lightclaw_cli import build_parser
 from skills import (
@@ -91,6 +92,58 @@ def test_local_skill_requires_hash_review_and_stale_approval_is_removed(tmp_path
     record.skill_path.write_text("# Changed after approval\n", encoding="utf-8")
     assert manager.prompt_context("chat") == ""
     assert manager.list_active("chat") == []
+
+
+@pytest.mark.parametrize("replacement", ["modified", "symlink"])
+def test_active_skill_rechecks_reviewed_bytes_before_prompt_use(
+    tmp_path, monkeypatch, replacement
+):
+    manager = _manager(tmp_path)
+    record = manager.create_local_skill("Review Helper", "Review evidence")
+    preview = manager.preview_activation(record.skill_id)
+    manager.activate("chat", record.skill_id, str(preview["activation_token"]))
+    active_records = manager.active_records
+    outside = tmp_path / "credentials.txt"
+    outside.write_text("external credential must not enter the prompt", encoding="utf-8")
+
+    def validate_then_replace(chat_id):
+        active = active_records(chat_id)
+        record.skill_path.unlink()
+        if replacement == "symlink":
+            record.skill_path.symlink_to(outside)
+        else:
+            record.skill_path.write_text("unreviewed instructions", encoding="utf-8")
+        return active
+
+    monkeypatch.setattr(manager, "active_records", validate_then_replace)
+    context = manager.prompt_context("chat")
+
+    assert context == ""
+    assert "credential" not in context
+    assert "unreviewed instructions" not in context
+
+
+def test_skill_preview_rejects_symlink_swap_after_hash_validation(tmp_path, monkeypatch):
+    manager = _manager(tmp_path)
+    record = manager.create_local_skill("Review Helper", "Review evidence")
+    secret = tmp_path / "credentials.txt"
+    secret.write_text("credential preview must be refused", encoding="utf-8")
+    validate = skills_module.validate_skill_directory
+    manager.resolve_skill = lambda _ref: record
+
+    def validate_then_swap(path):
+        report = validate(path)
+        record.skill_path.unlink()
+        record.skill_path.symlink_to(secret)
+        return report
+
+    monkeypatch.setattr(skills_module, "validate_skill_directory", validate_then_swap)
+    preview = manager.preview_activation(record.skill_id)
+
+    assert preview["valid"] is False
+    assert preview["activation_token"] is None
+    assert preview["source_preview"] == ""
+    assert "credential" not in preview["source_preview"]
 
 
 @pytest.mark.parametrize(

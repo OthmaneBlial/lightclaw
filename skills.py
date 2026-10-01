@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -26,9 +27,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
+from core.fs import FileTooLargeError, open_regular_file_at, read_json_object
 from core.fs import atomic_write_json as _atomic_write_json
 from core.fs import atomic_write_text as _atomic_write_text
-from core.fs import read_json_object
 
 DEFAULT_HUB_BASE_URL = "https://clawhub.ai"
 DEFAULT_API_PREFIX = "/api/v1"
@@ -108,6 +109,20 @@ def _review_sha256(skill_bytes: bytes, manifest_bytes: bytes) -> str:
     digest.update(len(manifest_bytes).to_bytes(8, "big"))
     digest.update(manifest_bytes)
     return digest.hexdigest()
+
+
+def _read_skill_file(directory: Path, name: str, max_bytes: int) -> bytes:
+    file_fd, _ = open_regular_file_at(directory, name)
+    try:
+        handle = os.fdopen(file_fd, "rb")
+    except BaseException:
+        os.close(file_fd)
+        raise
+    with handle:
+        content = handle.read(max_bytes + 1)
+    if len(content) > max_bytes:
+        raise FileTooLargeError(f"{name} exceeds the {max_bytes}-byte limit")
+    return content
 
 
 def _safe_relative_path(value: str) -> bool:
@@ -232,28 +247,31 @@ def validate_skill_directory(path: str | Path) -> dict[str, Any]:
         return {"valid": False, "directory": directory.as_posix(), "errors": ["skill directory is missing or symlinked"]}
     skill_path = directory / "SKILL.md"
     manifest_path = directory / SKILL_MANIFEST_NAME
-    if skill_path.is_symlink() or not skill_path.is_file():
-        errors.append("SKILL.md is missing or symlinked")
+    try:
+        skill_bytes = _read_skill_file(directory, "SKILL.md", MAX_SKILL_TEXT_BYTES)
+    except FileTooLargeError:
+        errors.append("SKILL.md exceeds the size limit")
         skill_bytes = b""
-    else:
-        skill_bytes = skill_path.read_bytes()
-        if len(skill_bytes) > MAX_SKILL_TEXT_BYTES:
-            errors.append("SKILL.md exceeds the size limit")
+    except OSError:
+        errors.append("SKILL.md is missing, symlinked, or not a regular file")
+        skill_bytes = b""
     manifest: dict[str, Any] = {}
     manifest_bytes = b""
-    if manifest_path.is_symlink() or not manifest_path.is_file():
-        errors.append("skill.json is missing or symlinked")
+    try:
+        manifest_bytes = _read_skill_file(
+            directory, SKILL_MANIFEST_NAME, MAX_SKILL_MANIFEST_BYTES
+        )
+    except FileTooLargeError:
+        errors.append("skill.json exceeds the size limit")
+    except OSError:
+        errors.append("skill.json is missing, symlinked, or not a regular file")
     else:
-        manifest_bytes = manifest_path.read_bytes()
-        if len(manifest_bytes) > MAX_SKILL_MANIFEST_BYTES:
-            errors.append("skill.json exceeds the size limit")
-        else:
-            try:
-                loaded = json.loads(manifest_bytes.decode("utf-8"))
-                manifest = loaded if isinstance(loaded, dict) else {}
-                errors.extend(validate_skill_manifest(loaded))
-            except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
-                errors.append("skill.json is invalid or exceeds the JSON nesting limit")
+        try:
+            loaded = json.loads(manifest_bytes.decode("utf-8"))
+            manifest = loaded if isinstance(loaded, dict) else {}
+            errors.extend(validate_skill_manifest(loaded))
+        except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+            errors.append("skill.json is invalid or exceeds the JSON nesting limit")
     capabilities = set(manifest.get("capabilities", [])) if manifest else set()
     network = manifest.get("network", {}) if manifest else {}
     isolated_only = bool(
@@ -652,18 +670,24 @@ class SkillManager:
         if directory.is_symlink():
             return None
         skill_path = directory / "SKILL.md"
-        if not skill_path.exists() or skill_path.is_symlink():
+        try:
+            skill_bytes = _read_skill_file(directory, "SKILL.md", MAX_SKILL_TEXT_BYTES)
+        except FileTooLargeError:
+            skill_bytes = b""
+        except OSError:
             return None
 
-        source_meta_path = directory / "source.json"
         source_meta: dict[str, Any] = {}
-        if source_meta_path.exists():
-            try:
-                source_meta = json.loads(source_meta_path.read_text(encoding="utf-8"))
-            except Exception:
-                source_meta = {}
+        try:
+            source_meta_bytes = _read_skill_file(
+                directory, "source.json", MAX_SKILL_META_BYTES
+            )
+            loaded = json.loads(source_meta_bytes.decode("utf-8"))
+            source_meta = loaded if isinstance(loaded, dict) else {}
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            pass
 
-        content = skill_path.read_text(encoding="utf-8", errors="replace")
+        content = skill_bytes.decode("utf-8", errors="replace")
         fm, body = _frontmatter(content)
         validation = validate_skill_directory(directory)
         manifest = (
@@ -780,17 +804,39 @@ class SkillManager:
         report = validate_skill_directory(record.directory)
         manifest = report.get("manifest") if isinstance(report.get("manifest"), dict) else {}
         source: dict[str, Any] = {}
-        source_path = record.directory / "source.json"
-        if source_path.is_file() and not source_path.is_symlink():
-            try:
-                loaded = json.loads(source_path.read_text(encoding="utf-8"))
-                source = loaded if isinstance(loaded, dict) else {}
-            except (OSError, json.JSONDecodeError):
-                source = {}
         try:
-            preview = record.skill_path.read_text(encoding="utf-8", errors="replace")[:1600]
+            source_meta_bytes = _read_skill_file(
+                record.directory, "source.json", MAX_SKILL_META_BYTES
+            )
+            loaded = json.loads(source_meta_bytes.decode("utf-8"))
+            source = loaded if isinstance(loaded, dict) else {}
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
+            pass
+        try:
+            skill_bytes = _read_skill_file(
+                record.directory, "SKILL.md", MAX_SKILL_TEXT_BYTES
+            )
+            manifest_bytes = _read_skill_file(
+                record.directory, SKILL_MANIFEST_NAME, MAX_SKILL_MANIFEST_BYTES
+            )
         except OSError:
+            report["valid"] = False
+            report["activation_token"] = None
+            report["errors"] = [
+                *report.get("errors", []),
+                "skill files changed or could not be read safely; review again",
+            ]
             preview = ""
+        else:
+            current_hash = _review_sha256(skill_bytes, manifest_bytes)
+            if current_hash != report.get("content_sha256"):
+                report["valid"] = False
+                report["activation_token"] = None
+                report["errors"] = [
+                    *report.get("errors", []),
+                    "skill files changed during review; review again",
+                ]
+            preview = skill_bytes.decode("utf-8", errors="replace")[:1600]
         return {
             "skill_id": record.skill_id,
             "name": record.name,
@@ -1146,23 +1192,35 @@ class SkillManager:
         if not active:
             return ""
 
-        parts = [
-            "## Active Skills",
-            (
-                "The user activated these skills for this chat. "
-                "Treat each skill as operating guidance and follow it unless it conflicts "
-                "with explicit user instructions or safety constraints."
-            ),
-        ]
-
+        parts: list[str] = []
         budget = max_total_chars
         for skill in active:
             try:
-                text = skill.skill_path.read_text(encoding="utf-8", errors="replace").strip()
-            except Exception:
+                skill_bytes = _read_skill_file(
+                    skill.directory, "SKILL.md", MAX_SKILL_TEXT_BYTES
+                )
+                manifest_bytes = _read_skill_file(
+                    skill.directory, SKILL_MANIFEST_NAME, MAX_SKILL_MANIFEST_BYTES
+                )
+            except OSError:
                 continue
+            if _review_sha256(skill_bytes, manifest_bytes) != skill.content_sha256:
+                continue
+            text = skill_bytes.decode("utf-8", errors="replace").strip()
             if not text:
                 continue
+
+            if not parts:
+                parts.extend(
+                    [
+                        "## Active Skills",
+                        (
+                            "The user activated these skills for this chat. "
+                            "Treat each skill as operating guidance and follow it unless it conflicts "
+                            "with explicit user instructions or safety constraints."
+                        ),
+                    ]
+                )
 
             clipped = False
             if len(text) > max_per_skill_chars:
