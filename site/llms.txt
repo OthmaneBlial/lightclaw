@@ -10,6 +10,8 @@ Text requests are limited to 20 per Telegram user per minute before model proces
 
 Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.
 
+Telegram `/agent runs` lists up to ten durable jobs for the current chat, with status and a short goal preview. The SQLite session filter keeps other chats out of the list, and the history survives bot restarts.
+
 Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes one chat; global /wipe_memory erases saved chat memory across chats. A group confirmation lasts 90 seconds and must come from the initiating Telegram user.
 
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
