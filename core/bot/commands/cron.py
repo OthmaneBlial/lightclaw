@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -26,7 +27,8 @@ from ..messaging import _TelegramHTMLChunker
 MAX_CRON_STORE_BYTES = 1024 * 1024
 _CRON_AT_USAGE = (
     "<code>/cron add at YYYY-MM-DD HH:MM &lt;message&gt;</code> (one-time, local time)\n"
-    "<code>/cron add at &lt;timestamp&gt; &lt;message&gt;</code> (one-time, Unix seconds)"
+    "<code>/cron add at &lt;timestamp&gt; &lt;message&gt;</code> (one-time, Unix seconds)\n"
+    "<code>/cron add at YYYY-MM-DDTHH:MM+02:00 &lt;message&gt;</code> (one-time, explicit offset)"
 )
 
 
@@ -72,7 +74,10 @@ class CommandsCronMixin:
             return None
 
         try:
-            parsed = float(raw) if raw.isdigit() else datetime.fromisoformat(raw).timestamp()
+            requested = None if raw.isdigit() else datetime.fromisoformat(raw)
+            parsed = float(raw) if requested is None else requested.timestamp()
+            if requested is not None and requested.tzinfo is None and datetime.fromtimestamp(parsed) != requested:
+                return None
         except (OverflowError, OSError, ValueError):
             return None
 
@@ -427,13 +432,25 @@ class CommandsCronMixin:
                 run_at: float | None = None
                 text_start_idx = 3
 
-                split_run_at = self._parse_cron_at(f"{args[2]} {args[3]}") if len(args) >= 5 else None
-                run_at = split_run_at or self._parse_cron_at(args[2])
-                if split_run_at is not None:
+                split_date_time = (
+                    len(args) >= 5
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", args[2]) is not None
+                    and re.fullmatch(r"\d+:\d+", args[3]) is not None
+                )
+                if split_date_time:
+                    run_at = self._parse_cron_at(f"{args[2]} {args[3]}")
                     text_start_idx = 4
+                else:
+                    run_at = self._parse_cron_at(args[2])
 
                 text = " ".join(args[text_start_idx:]).strip()
-                if run_at is None or not text:
+                if run_at is None:
+                    await self._reply_logged(
+                        update,
+                        "Invalid date/time. Use a real local time, an ISO timestamp with UTC offset, or Unix seconds.",
+                    )
+                    return
+                if not text:
                     await self._reply_logged(
                         update,
                         f"Usage:\n{_CRON_AT_USAGE}",

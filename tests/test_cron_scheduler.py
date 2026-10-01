@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import threading
 import time
@@ -270,6 +271,45 @@ def test_cron_parser_rejects_timestamp_outside_localtime_range():
     assert CommandsCronMixin._parse_cron_at("9" * 100) is None
 
 
+@pytest.mark.asyncio
+async def test_cron_rejects_missing_dst_time_and_accepts_explicit_offsets():
+    original_tz = os.environ.get("TZ")
+    try:
+        os.environ["TZ"] = "Europe/Paris"
+        time.tzset()
+
+        assert CommandsCronMixin._parse_cron_at("2026-03-29 02:30") is None
+        first = CommandsCronMixin._parse_cron_at("2026-10-25 02:30")
+        second = CommandsCronMixin._parse_cron_at("2026-10-25T02:30+01:00")
+
+        assert first is not None and second is not None
+        assert time.strftime("%z", time.localtime(first)) == "+0200"
+        assert second - first == 3600
+
+        bot = CronHarness()
+        bot.is_update_allowed = lambda _update: True
+        bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+        bot._session_id_from_update = lambda _update: "123"
+        bot._log_user_message = lambda *_args: None
+        bot._reply_logged = AsyncMock()
+        bot._write_cron_store = Mock()
+        await bot.cmd_cron(
+            SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object()),
+            SimpleNamespace(
+                args=["add", "at", "2026-03-29", "02:30", "Review"],
+                bot=SimpleNamespace(),
+            ),
+        )
+        bot._write_cron_store.assert_not_called()
+        assert "invalid date/time" in bot._reply_logged.await_args.args[1].lower()
+    finally:
+        if original_tz is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = original_tz
+        time.tzset()
+
+
 def test_cron_times_show_the_machine_local_utc_offset():
     timestamp = time.time() + 3600
     rendered = CommandsCronMixin._format_local_datetime(timestamp)
@@ -281,6 +321,7 @@ def test_cron_times_show_the_machine_local_utc_offset():
     assert "/cron add at YYYY-MM-DD HH:MM" in usage
     assert "one-time, local time" in usage
     assert "/cron add at &lt;timestamp&gt;" in usage
+    assert "YYYY-MM-DDTHH:MM+02:00" in usage
 
 
 def test_cron_store_discards_unrenderable_timestamps_and_intervals(monkeypatch, tmp_path):

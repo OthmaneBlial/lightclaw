@@ -184,9 +184,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 30,
-      "line": 330,
-      "lines": 215,
+      "branch_points": 29,
+      "line": 335,
+      "lines": 227,
       "name": "_cmd_cron",
       "path": "core/bot/commands/cron.py"
     },
@@ -277,10 +277,10 @@
       "path": "core/bot/base.py"
     },
     {
-      "lines": 544,
+      "lines": 561,
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21785,
+  "runtime_lines": 21802,
   "schema_version": 1
 }
