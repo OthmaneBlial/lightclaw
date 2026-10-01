@@ -10,7 +10,36 @@ import pytest
 
 from core.artifacts import ArtifactError
 from core.bot import LightClawBot
+from core.bot.commands.agent_execution import _multi_worker_dependencies
 from core.jobs import JobStateError, JobStore
+
+
+def test_multi_worker_dependencies_sanitize_contracts_and_report_unknown_labels():
+    builder = {"label": "builder", "depends_on": ["missing", "builder", "missing"]}
+    reviewer = {"label": "reviewer", "depends_on": ["builder", "builder", "ghost"]}
+    payload = {
+        "workers": [
+            None,
+            builder,
+            {"label": "unplanned", "depends_on": ["builder"]},
+            reviewer,
+        ]
+    }
+
+    contracts, dependencies, unknown = _multi_worker_dependencies(
+        [("builder", "codex"), ("reviewer", "claude"), ("extra", "codex")],
+        payload,
+    )
+
+    assert contracts == {
+        "builder": builder,
+        "reviewer": reviewer,
+        "extra": {"depends_on": []},
+    }
+    assert dependencies == {"builder": [], "reviewer": ["builder"], "extra": []}
+    assert unknown == {"builder": ["missing"], "reviewer": ["ghost"], "extra": []}
+    assert builder["depends_on"] == []
+    assert reviewer["depends_on"] == ["builder"]
 
 
 @pytest.mark.asyncio

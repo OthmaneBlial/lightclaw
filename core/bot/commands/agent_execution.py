@@ -21,6 +21,53 @@ from ...receipts import write_receipt
 from ..delegation.workspace import await_thread_completion
 
 
+def _multi_worker_dependencies(
+    workers: list[tuple[str, str]], plan_payload: dict[str, object]
+) -> tuple[
+    dict[str, dict[str, object]],
+    dict[str, list[str]],
+    dict[str, list[str]],
+]:
+    worker_labels = {label for label, _agent in workers}
+    contracts = plan_payload.get("workers")
+    contracts = contracts if isinstance(contracts, list) else []
+    contract_by_label: dict[str, dict[str, object]] = {
+        label: {} for label, _agent in workers
+    }
+    for contract in contracts:
+        if not isinstance(contract, dict):
+            continue
+        label = str(contract.get("label") or "").strip()
+        if label and label in worker_labels:
+            contract_by_label[label] = contract
+
+    dependencies: dict[str, list[str]] = {}
+    unknown_dependencies: dict[str, list[str]] = {}
+    for label, _agent in workers:
+        contract = contract_by_label[label]
+        raw_dependencies = contract.get("depends_on")
+        raw_dependencies = (
+            [str(dep).strip() for dep in raw_dependencies]
+            if isinstance(raw_dependencies, list)
+            else []
+        )
+        valid: list[str] = []
+        unknown: list[str] = []
+        seen: set[str] = set()
+        for dependency in raw_dependencies:
+            if not dependency or dependency == label or dependency in seen:
+                continue
+            seen.add(dependency)
+            if dependency in worker_labels:
+                valid.append(dependency)
+            else:
+                unknown.append(dependency)
+        contract["depends_on"] = valid
+        dependencies[label] = valid
+        unknown_dependencies[label] = unknown
+    return contract_by_label, dependencies, unknown_dependencies
+
+
 def _multi_run_receipt_checks(workers, completed, failures, audits):
     checks = []
     for label, _agent in workers:
@@ -352,44 +399,12 @@ class CommandsAgentExecutionMixin:
             )
             worker_msgs.append(worker_msg)
 
-        worker_contracts = plan_payload.get("workers")
-        contract_list = worker_contracts if isinstance(worker_contracts, list) else []
-        workers_by_label = {label: agent for label, agent in workers}
-        worker_contract_by_label: dict[str, dict[str, object]] = {
-            label: {} for label, _ in workers
-        }
-        for contract in contract_list:
-            if not isinstance(contract, dict):
-                continue
-            label = str(contract.get("label") or "").strip()
-            if not label or label not in workers_by_label:
-                continue
-            worker_contract_by_label[label] = contract
-
-        dependency_map: dict[str, list[str]] = {}
-        unknown_dependency_map: dict[str, list[str]] = {}
-        for label, _ in workers:
-            contract = worker_contract_by_label.get(label, {})
-            depends_obj = contract.get("depends_on")
-            raw_deps = (
-                [str(dep).strip() for dep in depends_obj]
-                if isinstance(depends_obj, list)
-                else []
-            )
-            valid_deps: list[str] = []
-            unknown_deps: list[str] = []
-            seen: set[str] = set()
-            for dep in raw_deps:
-                if not dep or dep == label or dep in seen:
-                    continue
-                seen.add(dep)
-                if dep in workers_by_label:
-                    valid_deps.append(dep)
-                else:
-                    unknown_deps.append(dep)
-            dependency_map[label] = valid_deps
-            unknown_dependency_map[label] = unknown_deps
-            contract["depends_on"] = valid_deps
+        (
+            worker_contract_by_label,
+            dependency_map,
+            unknown_dependency_map,
+        ) = _multi_worker_dependencies(workers, plan_payload)
+        workers_by_label = dict(workers)
 
         repair_attempts = max(
             0,
