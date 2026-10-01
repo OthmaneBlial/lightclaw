@@ -113,7 +113,7 @@ See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorizat
 
 ## 🛡️ Safety, without magic claims
 
-- Telegram startup requires `TELEGRAM_ALLOWED_USERS` or explicit public mode. Allowlisted bots accept commands only in private chats because group members share session and approval state. Public group mode requires an explicit acknowledgement and no user allowlist; its memory recall and counts stay within the current group session. Telegram forum topics with a topic ID have separate sessions, and scheduled messages return to their topic. Local terminal chat needs no Telegram allowlist.
+- Telegram startup requires a numeric user allowlist or explicitly acknowledged public-group mode. Allowlisted bots reject group chats. Public-group conversation and memory stay within each session. Only the requester can use plan, voice, or trusted-run controls, cancel active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topics have separate sessions, and scheduled messages return to their topic. Local terminal chat uses a separate memory scope.
 - Delegated workers get a minimal environment without Telegram/provider keys. Workspaces, output, callbacks, files, receipts, and SQLite permissions have explicit bounds.
 - Plans and trusted runs require approval of a specific complete review; approvals expire if the clock changes or the machine sleeps. Trusted host runs show the complete task and require the requester to approve that specific review.
 - **Acceptance commands run on your host and are not sandboxed by LightClaw.** Review them and use OS/container isolation for untrusted repositories.

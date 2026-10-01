@@ -114,9 +114,16 @@ def test_readme_and_site_share_the_playful_brand_assets() -> None:
 
 def test_site_explains_allowlisted_group_chat_boundary() -> None:
     html, _ = _document()
+    llms = (SITE / "llms.txt").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "Allowlisted bots accept commands only in private chats." in html
-    assert "forum topics with a topic ID keep separate sessions and memory" in html
-    assert "require explicit public mode and no user allowlist" in html
+    assert "Forum topics with a topic ID keep separate sessions and memory" in html
+    assert "Public groups require explicit public mode and no user allowlist." in html
+    assert "Only the requester can use plan, voice, or trusted-run controls" in html
+    assert "all group members can view run diffs" in html
+    assert "Only the requester can use plan, voice, or trusted-run controls" in llms
+    assert "all group members can view run diffs" in llms
+    assert "Only the requester can use plan, voice, or trusted-run controls" in readme
 
 
 def test_site_discloses_credential_context_guards() -> None:
