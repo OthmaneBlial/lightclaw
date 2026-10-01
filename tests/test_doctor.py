@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import sys
+import threading
 import time
 from types import SimpleNamespace
+
+import pytest
 
 from config import Config
 from core.bot.delegation.doctor import DelegationDoctorMixin
@@ -98,3 +102,51 @@ def test_agent_doctor_timeout_kills_probe_process_group(tmp_path):
     assert result["exit_code"] == 124
     if os.name == "posix":
         assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="detached pipe inheritance is POSIX-only")
+def test_agent_doctor_timeout_does_not_wait_for_detached_child_pipes(tmp_path):
+    pid_path = tmp_path / "detached-probe-child.pid"
+    child_code = (
+        "import os,pathlib,time; "
+        f"pathlib.Path({str(pid_path)!r}).write_text(str(os.getpid())); "
+        "time.sleep(20)"
+    )
+    parent_code = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable,'-c',{child_code!r}],start_new_session=True); "
+        "time.sleep(30)"
+    )
+    result = {}
+    errors = []
+    finished = threading.Event()
+
+    def run_probe():
+        try:
+            result["probe"] = DelegationDoctorMixin()._run_probe_command(
+                [sys.executable, "-c", parent_code], timeout_sec=1
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=run_probe, daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 3
+        while not pid_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert pid_path.exists(), "doctor probe did not start its detached child"
+        assert finished.wait(timeout=2), "doctor waited for a detached child's output pipes"
+    finally:
+        if pid_path.exists():
+            try:
+                os.kill(int(pid_path.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        thread.join(timeout=3)
+
+    assert not thread.is_alive()
+    assert not errors
+    assert result["probe"]["timed_out"] is True

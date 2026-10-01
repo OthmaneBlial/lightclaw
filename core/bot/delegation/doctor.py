@@ -56,8 +56,22 @@ class DelegationDoctorMixin:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
                     pass
+                except OSError:
+                    if process.poll() is None:
+                        process.kill()
             elif process.poll() is None:
                 process.kill()
+
+        def collect_after_stop():
+            try:
+                return process.communicate(timeout=0.25)
+            except subprocess.TimeoutExpired as cleanup_error:
+                if process.stdin:
+                    process.stdin.close()
+                process.stdout.close()
+                process.stderr.close()
+                process.wait()
+                return cleanup_error.output, cleanup_error.stderr
 
         try:
             process = subprocess.Popen(
@@ -83,7 +97,7 @@ class DelegationDoctorMixin:
         except subprocess.TimeoutExpired as e:
             if process is not None:
                 stop_process_tree()
-                stdout, stderr = process.communicate()
+                stdout, stderr = collect_after_stop()
             else:
                 stdout, stderr = e.stdout, e.stderr
             return {
@@ -97,7 +111,7 @@ class DelegationDoctorMixin:
         except Exception as e:
             if process is not None:
                 stop_process_tree()
-                process.communicate()
+                collect_after_stop()
             return {
                 "ok": False,
                 "exit_code": 1,
