@@ -902,8 +902,12 @@ async def test_stale_or_unknown_plan_callback_cannot_execute():
     await bot.handle_run_action(update, SimpleNamespace())
     query.data = f"lc:plan:unexpected:{current_plan['approval_id']}"
     await bot.handle_run_action(update, SimpleNamespace())
+    bot._pending_multi_plan_by_session.clear()  # Simulate process restart.
+    query.data = f"lc:plan:approve:{current_plan['approval_id']}"
+    await bot.handle_run_action(update, SimpleNamespace())
 
     bot._execute_approved_plan_action.assert_not_awaited()
+    assert "No pending plan" in bot._reply_logged.await_args.args[1]
 
 
 @pytest.mark.asyncio
