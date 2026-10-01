@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
+import time
 from types import SimpleNamespace
 
 from config import Config
+from core.bot.delegation.doctor import DelegationDoctorMixin
 from core.doctor import build_doctor_report, render_doctor_text
 from lightclaw_cli import cmd_doctor
 
@@ -71,3 +75,26 @@ def test_doctor_reports_missing_optional_provider_sdk(tmp_path, monkeypatch):
     assert report["overall"] == "error"
     assert provider_check["status"] == "error"
     assert "lightclaw-ai[gemini]" in provider_check["detail"]
+
+
+def test_agent_doctor_timeout_kills_probe_process_group(tmp_path):
+    marker = tmp_path / "child-survived-timeout"
+    child_code = (
+        "import pathlib,time; time.sleep(1.5); "
+        f"pathlib.Path({str(marker)!r}).write_text('alive')"
+    )
+    parent_code = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable,'-c',{child_code!r}]); "
+        "time.sleep(30)"
+    )
+
+    result = DelegationDoctorMixin()._run_probe_command(
+        [sys.executable, "-c", parent_code], timeout_sec=1
+    )
+    time.sleep(1)
+
+    assert result["timed_out"] is True
+    assert result["exit_code"] == 124
+    if os.name == "posix":
+        assert not marker.exists()

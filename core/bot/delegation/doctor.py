@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -45,33 +46,58 @@ class DelegationDoctorMixin:
         if codex_home := os.getenv("CODEX_HOME", "").strip():
             extra_env["CODEX_HOME"] = codex_home
         env = delegated_process_env(extra=extra_env)
+        process = None
+
+        def stop_process_tree() -> None:
+            if process is None:
+                return
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            elif process.poll() is None:
+                process.kill()
+
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 cmd,
-                input=input_text,
+                stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                capture_output=True,
-                timeout=max(1, int(timeout_sec)),
                 env=env,
+                start_new_session=os.name == "posix",
+            )
+            stdout, stderr = process.communicate(
+                input=input_text, timeout=max(1, int(timeout_sec))
             )
             return {
-                "ok": completed.returncode == 0,
-                "exit_code": int(completed.returncode),
-                "stdout": redact_text(str(completed.stdout or ""), os.environ),
-                "stderr": redact_text(str(completed.stderr or ""), os.environ),
+                "ok": process.returncode == 0,
+                "exit_code": int(process.returncode),
+                "stdout": redact_text(stdout or "", os.environ),
+                "stderr": redact_text(stderr or "", os.environ),
                 "timed_out": False,
                 "error": "",
             }
         except subprocess.TimeoutExpired as e:
+            if process is not None:
+                stop_process_tree()
+                stdout, stderr = process.communicate()
+            else:
+                stdout, stderr = e.stdout, e.stderr
             return {
                 "ok": False,
                 "exit_code": 124,
-                "stdout": redact_text(str(e.stdout or ""), os.environ),
-                "stderr": redact_text(str(e.stderr or ""), os.environ),
+                "stdout": redact_text(str(stdout or ""), os.environ),
+                "stderr": redact_text(str(stderr or ""), os.environ),
                 "timed_out": True,
                 "error": f"timed out after {int(timeout_sec)}s",
             }
         except Exception as e:
+            if process is not None:
+                stop_process_tree()
+                process.communicate()
             return {
                 "ok": False,
                 "exit_code": 1,

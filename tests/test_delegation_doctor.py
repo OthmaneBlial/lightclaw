@@ -12,12 +12,17 @@ def test_local_cli_probe_gets_minimal_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", secret)
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     observed = {}
+
+    def fake_popen(_cmd, **kwargs):
+        observed.update(kwargs)
+        return SimpleNamespace(
+            pid=1,
+            returncode=0,
+            communicate=lambda **_kwargs: ("codex 1.0", ""),
+        )
+
     monkeypatch.setattr(
-        "core.bot.delegation.doctor.subprocess.run",
-        lambda *_args, **kwargs: (
-            observed.update(kwargs)
-            or SimpleNamespace(returncode=0, stdout="codex 1.0", stderr="")
-        ),
+        "core.bot.delegation.doctor.subprocess.Popen", fake_popen
     )
     bot = LightClawBot.__new__(LightClawBot)
 
@@ -37,11 +42,13 @@ def test_codex_doctor_redacts_secret_echoed_by_login_probe(tmp_path, monkeypatch
     bot._resolve_codex_auth_path = lambda: auth_path
     monkeypatch.setenv("OPENAI_API_KEY", secret)
     monkeypatch.setattr(
-        "core.bot.delegation.doctor.subprocess.run",
+        "core.bot.delegation.doctor.subprocess.Popen",
         lambda *_args, **_kwargs: SimpleNamespace(
+            pid=1,
             returncode=1,
-            stdout="",
-            stderr=f"Login probe failed: OPENAI_API_KEY={secret}",
+            communicate=lambda **_kwargs: (
+                "", f"Login probe failed: OPENAI_API_KEY={secret}"
+            ),
         ),
     )
 
