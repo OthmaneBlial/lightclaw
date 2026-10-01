@@ -78,7 +78,15 @@ async def stop_process_tree(process, *, force: bool = False, wait_task=None) -> 
             await asyncio.sleep(0.2)
             if process.returncode is None:
                 process.kill()
-    await (wait_task if wait_task is not None else process.wait())
+    waiter = wait_task if wait_task is not None else asyncio.create_task(process.wait())
+    try:
+        await asyncio.wait_for(asyncio.shield(waiter), timeout=0.25)
+    except asyncio.TimeoutError:
+        # asyncio's Process.wait can await inherited pipes, including buffered stdin.
+        process._transport.close()
+        if process.stdin:
+            process.stdin.transport.abort()
+        await waiter
 
 
 class DelegationWorkspaceMixin:

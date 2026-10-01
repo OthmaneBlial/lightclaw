@@ -7,7 +7,6 @@ import json
 import os
 import re
 import secrets
-import signal
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -702,11 +701,7 @@ class DelegationExecutionMixin:
             )
         except asyncio.TimeoutError:
             timed_out = True
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except Exception:
-                proc.kill()
-            await proc.wait()
+            await stop_process_tree(proc, force=True)
             if not streams_task.done():
                 try:
                     await asyncio.wait_for(streams_task, timeout=0.25)
