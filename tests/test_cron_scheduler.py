@@ -540,6 +540,47 @@ async def test_cron_add_preserves_reminders_when_store_would_exceed_read_limit(t
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("existing_chat_id", "expected_count"), [("123", 10), ("999", 11)])
+async def test_cron_add_caps_reminders_per_chat_without_affecting_other_chats(
+    tmp_path, existing_chat_id, expected_count
+):
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    store_path = tmp_path / "jobs.json"
+    bot._cron_jobs_path = lambda: store_path
+    bot._write_cron_store({"jobs": [
+        {
+            "id": f"existing-{index}",
+            "chat_id": existing_chat_id,
+            "mode": "every",
+            "interval_sec": 60,
+            "text": "existing",
+            "next_run_at": time.time() + 60,
+        }
+        for index in range(10)
+    ]})
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=123), message=object())
+
+    await bot.cmd_cron(
+        update,
+        SimpleNamespace(args=["add", "every", "5", "new reminder"], bot=SimpleNamespace()),
+    )
+
+    jobs = bot._read_cron_store()["jobs"]
+    assert len(jobs) == expected_count
+    if existing_chat_id == "123":
+        assert all(job["text"] == "existing" for job in jobs)
+        assert "already has 10 reminders" in bot._reply_logged.await_args.args[1]
+    else:
+        assert jobs[-1]["text"] == "new reminder"
+
+
+@pytest.mark.asyncio
 async def test_cron_delivery_does_not_block_schedule_edits(tmp_path):
     bot = CronHarness()
     bot._cron_lock = asyncio.Lock()
