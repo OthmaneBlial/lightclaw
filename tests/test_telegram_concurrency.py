@@ -240,62 +240,67 @@ async def test_agent_commands_do_not_restore_cleared_memory(tmp_path, route, cle
 
 
 @pytest.mark.asyncio
-async def test_messages_serialize_per_chat_without_blocking_other_chats():
+async def test_messages_serialize_per_forum_topic_without_blocking_other_topics():
     bot = LightClawBot.__new__(LightClawBot)
-    bot._session_id_from_update = lambda update: f"chat-{update.effective_chat.id}"
+    first_topic = "-100:topic:7"
+    other_topic = "-100:topic:8"
     bot._log_user_message = Mock()
     bot._log_bot_message = Mock()
     bot._get_pending_multi_plan = Mock(return_value=None)
-    bot._agent_mode_by_session = {"chat-1": "codex", "chat-2": "codex"}
+    bot._agent_mode_by_session = {first_topic: "codex", other_topic: "codex"}
     bot._llm_backoff_active = Mock(return_value=True)
     bot._send_response = AsyncMock()
     bot._build_single_delegation_memory_entry = Mock(return_value="receipt")
     bot.memory = SimpleNamespace(ingest=Mock())
-    bot._heartbeat_last_chat_id = "chat-1"
+    bot._heartbeat_last_chat_id = first_topic
 
-    active_by_chat: dict[str, int] = {}
-    max_active_by_chat: dict[str, int] = {}
+    active_by_session: dict[str, int] = {}
+    max_active_by_session: dict[str, int] = {}
     max_active_total = 0
-    started_by_chat: dict[str, list[str]] = {}
-    other_chat_started = asyncio.Event()
+    started_by_session: dict[str, list[str]] = {}
+    other_topic_started = asyncio.Event()
 
     async def run_local_agent_task(*, session_id: str, task: str, **_kwargs):
         nonlocal max_active_total
-        assert bot._heartbeat_last_chat_id == "chat-1"
-        active_by_chat[session_id] = active_by_chat.get(session_id, 0) + 1
-        max_active_by_chat[session_id] = max(
-            max_active_by_chat.get(session_id, 0), active_by_chat[session_id]
+        assert bot._heartbeat_last_chat_id == first_topic
+        active_by_session[session_id] = active_by_session.get(session_id, 0) + 1
+        max_active_by_session[session_id] = max(
+            max_active_by_session.get(session_id, 0), active_by_session[session_id]
         )
-        max_active_total = max(max_active_total, sum(active_by_chat.values()))
-        started_by_chat.setdefault(session_id, []).append(task)
-        if session_id == "chat-1":
-            await other_chat_started.wait()
+        max_active_total = max(max_active_total, sum(active_by_session.values()))
+        started_by_session.setdefault(session_id, []).append(task)
+        if session_id == first_topic:
+            await other_topic_started.wait()
         else:
-            other_chat_started.set()
+            other_topic_started.set()
         await asyncio.sleep(0)
-        active_by_chat[session_id] -= 1
+        active_by_session[session_id] -= 1
         return f"completed: {task}"
 
     bot._run_local_agent_task = run_local_agent_task
     context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
 
-    def make_update(chat_id: int):
+    def make_update(chat_id: int, topic_id: int):
         placeholder = SimpleNamespace(edit_text=AsyncMock())
         return SimpleNamespace(
-            effective_chat=SimpleNamespace(id=chat_id),
-            message=SimpleNamespace(reply_text=AsyncMock(return_value=placeholder)),
+            effective_chat=SimpleNamespace(id=chat_id, type="supergroup"),
+            message=SimpleNamespace(
+                message_thread_id=topic_id,
+                reply_text=AsyncMock(return_value=placeholder),
+            ),
         )
 
     await asyncio.gather(
-        bot._process_user_message(make_update(1), context, "first"),
-        bot._process_user_message(make_update(1), context, "second"),
-        bot._process_user_message(make_update(2), context, "other chat"),
+        bot._process_user_message(make_update(-100, 7), context, "first"),
+        bot._process_user_message(make_update(-100, 7), context, "second"),
+        bot._process_user_message(make_update(-100, 8), context, "other topic"),
     )
 
-    assert max_active_by_chat == {"chat-1": 1, "chat-2": 1}
+    assert max_active_by_session == {first_topic: 1, other_topic: 1}
     assert max_active_total == 2
-    assert started_by_chat["chat-1"] == ["first", "second"]
-    assert bot._heartbeat_last_chat_id == "chat-1"
+    assert started_by_session[first_topic] == ["first", "second"]
+    assert started_by_session[other_topic] == ["other topic"]
+    assert bot._heartbeat_last_chat_id == first_topic
 
 
 @pytest.mark.asyncio
