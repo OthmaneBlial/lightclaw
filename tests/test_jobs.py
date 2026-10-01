@@ -76,6 +76,19 @@ def test_jobs_persist_across_restart_with_private_database(tmp_path):
     second.close()
 
 
+def test_list_jobs_can_be_scoped_to_one_telegram_session(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    first = _create(store, tmp_path / "first", session_id="chat-one")
+    _create(store, tmp_path / "second", session_id="chat-two")
+
+    try:
+        jobs = store.list_jobs(session_id="chat-one")
+        assert [job["run_id"] for job in jobs] == [first["run_id"]]
+        assert len(store.list_jobs()) == 2
+    finally:
+        store.close()
+
+
 def test_job_read_uses_empty_values_for_recursively_nested_json(tmp_path, monkeypatch):
     store = JobStore(tmp_path / "jobs.db")
     try:

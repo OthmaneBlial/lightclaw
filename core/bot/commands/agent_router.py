@@ -81,10 +81,33 @@ class CommandsAgentRouterMixin:
         self._log_user_message(session_id, f"/agent {' '.join(args)}".strip())
 
         sub = args[0].lower() if args else "status"
-        if sub in {"list", "ls"}:
-            sub = "status"
 
-        if sub == "status":
+        if sub in {"runs", "jobs"}:
+            jobs = await asyncio.to_thread(
+                self.jobs.list_jobs, session_id=session_id, limit=10
+            )
+            if not jobs:
+                await self._reply_logged(update, "No durable runs for this chat yet.")
+                return
+            lines = ["<b>Recent runs for this chat</b>"]
+            for job in jobs:
+                run_id = _escape_html(str(job.get("run_id") or "unknown"))
+                status = _escape_html(str(job.get("status") or "unknown"))
+                goal = re.sub(
+                    r"\s+", " ", self._visible_review_text(job.get("goal") or "")
+                ).strip()
+                if len(goal) > 120:
+                    goal = goal[:117].rstrip() + "..."
+                lines.append(
+                    f"<code>{run_id}</code> · <b>{status}</b>\n"
+                    f"{_escape_html(goal or 'No task description')}"
+                )
+            await self._reply_logged(
+                update, "\n\n".join(lines), parse_mode=ParseMode.HTML
+            )
+            return
+
+        if sub in {"status", "list", "ls"}:
             await self._reply_logged(
                 update,
                 self._render_agent_status(session_id),

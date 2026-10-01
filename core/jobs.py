@@ -388,6 +388,7 @@ class JobStore:
         *,
         status: str | None = None,
         workspace: str | Path | None = None,
+        session_id: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, object]]:
         clauses: list[str] = []
@@ -398,6 +399,9 @@ class JobStore:
         if workspace is not None:
             clauses.append("workspace = ?")
             params.append(Path(workspace).expanduser().resolve().as_posix())
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            params.append(session_id)
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         query = f"SELECT * FROM jobs{where} ORDER BY created_at DESC LIMIT ?"
         params.append(max(1, min(500, int(limit))))

@@ -13,6 +13,33 @@ from core.bot import LightClawBot
 from core.jobs import JobStateError, JobStore
 
 
+@pytest.mark.asyncio
+async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
+    bot._log_user_message = Mock()
+    bot.jobs = SimpleNamespace(
+        list_jobs=Mock(return_value=[{
+            "run_id": "0123456789abcdef",
+            "status": "stalled",
+            "goal": "Inspect <repo>\u202efiles",
+        }])
+    )
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
+
+    await bot.cmd_agent(update, SimpleNamespace(args=["runs"]))
+
+    bot.jobs.list_jobs.assert_called_once_with(session_id="chat-one", limit=10)
+    rendered = bot._reply_logged.await_args.args[1]
+    assert "0123456789abcdef" in rendered
+    assert "stalled" in rendered
+    assert "&lt;repo&gt;" in rendered
+    assert "\u202e" not in rendered
+
+
 @pytest.mark.parametrize("swap", ["workspace", "file", "existing"])
 def test_agents_plan_preserves_unexpected_existing_paths(tmp_path, swap):
     workspace = tmp_path / "workspace"

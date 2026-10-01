@@ -110,6 +110,7 @@ class DelegationAgentsMixin:
         return (
             "<b>Usage</b>\n"
             "<code>/agent</code> - show status + available local agents\n"
+            "<code>/agent runs</code> - show recent durable runs for this chat\n"
             "<code>/agent doctor</code> - run install/version/auth preflight checks\n"
             "<code>/agent use &lt;codex|claude&gt;</code> - route chat messages to that local agent\n"
             "<code>/agent off</code> - disable delegation mode for this chat\n"

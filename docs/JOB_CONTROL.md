@@ -25,7 +25,7 @@ lightclaw jobs list --status queued --json
 lightclaw jobs status <run-id>
 ```
 
-Telegram `/show` reports active, queued, and stalled counts for the current chat only; it does not expose job goals or other chats' activity.
+Telegram `/agent runs` shows status and bounded goal previews for the ten most recent jobs in the current chat. `/show` gives counts; neither command exposes other chats' activity.
 
 ## Control a job
 
