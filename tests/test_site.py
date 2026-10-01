@@ -115,6 +115,7 @@ def test_readme_and_site_share_the_playful_brand_assets() -> None:
 def test_site_explains_allowlisted_group_chat_boundary() -> None:
     html, _ = _document()
     assert "Allowlisted bots accept commands only in private chats." in html
+    assert "forum topics with a topic ID keep separate sessions and memory" in html
     assert "require explicit public mode and no user allowlist" in html
 
 
@@ -161,6 +162,7 @@ def test_readme_and_site_disclose_persistent_memory_retention_and_controls() -> 
     assert "session summaries" in html and "90 days by default" in html
     assert "MEMORY_RETENTION_DAYS" in html
     assert "<code>/clear</code>" in html and "<code>/wipe_memory</code>" in html
+    assert "current chat or forum-topic session" in html
     assert "initiating Telegram user" in html and "90 seconds" in html
     assert "90 days by default" in llms and "MEMORY_RETENTION_DAYS" in llms
     assert "/clear" in llms and "/wipe_memory" in llms

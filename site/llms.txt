@@ -2,7 +2,7 @@
 
 > LightClaw is an alpha, self-hosted Telegram control surface for reviewed and verified work by local Codex and Claude coding agents. Telegram and configured hosted model providers remain external services. Workspaces and private run receipts stay local by default. The deterministic demo uses fixtures, costs zero, and does not prove live-provider quality. LightClaw never pushes or publishes a demo result.
 
-Allowlisted bots accept commands only in private Telegram chats because group members share session and approval state. Group use requires explicit public mode with no user allowlist.
+Allowlisted bots accept commands only in private Telegram chats. Group members share conversation and approval state within a session; forum topic IDs create separate sessions. Group use requires explicit public mode with no user allowlist.
 
 Plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps.
 
@@ -12,7 +12,7 @@ Memory and job SQLite databases, including existing WAL/SHM sidecars, are restri
 
 Telegram `/agent runs` lists up to ten durable jobs for the current chat, with status and a short goal preview; multi-agent jobs include lane-state counts, and completed runs have a **View diff** button. The SQLite session filter keeps other chats out of the list, and history actions remain available after bot restarts.
 
-Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes one chat; global /wipe_memory erases saved chat memory across chats. A group confirmation lasts 90 seconds and must come from the initiating Telegram user.
+Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes the current chat or forum-topic session; global /wipe_memory erases saved chat memory across chats. A group confirmation lasts 90 seconds and must come from the initiating Telegram user.
 
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 
