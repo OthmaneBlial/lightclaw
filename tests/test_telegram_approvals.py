@@ -1924,6 +1924,7 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
         encoding="utf-8",
     )
     jobs = SimpleNamespace(
+        history_snapshot=Mock(return_value=77),
         list_jobs=Mock(
             return_value=[{"run_id": run_id, "status": "succeeded"}]
         )
@@ -1937,7 +1938,7 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
     bot._reply_logged = AsyncMock()
     message = SimpleNamespace(reply_document=AsyncMock())
     query = SimpleNamespace(
-        data=f"lc:history:diff:1:{bot._run_action_token(run_id)}",
+        data=f"lc:history:diff:1:77:{bot._run_action_token(run_id)}",
         message=message,
         answer=AsyncMock(),
     )
@@ -1950,7 +1951,7 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
     await bot.handle_run_action(update, SimpleNamespace())
 
     jobs.list_jobs.assert_called_once_with(
-        session_id="chat-one", limit=11, offset=10
+        session_id="chat-one", limit=11, offset=10, snapshot_rowid=77
     )
     message.reply_document.assert_awaited_once()
     assert bot._reply_logged.await_count == 1
@@ -1959,7 +1960,9 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
 @pytest.mark.asyncio
 async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
     run_id = "run-0123456789abcdef"
-    jobs = SimpleNamespace(list_jobs=Mock(return_value=[]))
+    jobs = SimpleNamespace(
+        history_snapshot=Mock(return_value=77), list_jobs=Mock(return_value=[])
+    )
     bot = LightClawBot.__new__(LightClawBot)
     bot.jobs = jobs
     bot.is_update_allowed = lambda _update: True
@@ -1980,7 +1983,7 @@ async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
     await bot.handle_run_action(update, SimpleNamespace())
 
     jobs.list_jobs.assert_called_once_with(
-        session_id="chat-two", limit=11, offset=0
+        session_id="chat-two", limit=11, offset=0, snapshot_rowid=77
     )
     message.reply_document.assert_not_awaited()
     assert "no longer on the history page" in bot._reply_logged.await_args.args[1]
@@ -1991,6 +1994,7 @@ async def test_history_page_callback_edits_message_in_place_for_current_chat():
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace()
     bot.jobs = SimpleNamespace(
+        history_snapshot=Mock(return_value=123),
         list_jobs=Mock(
             return_value=[
                 {
@@ -2007,7 +2011,7 @@ async def test_history_page_callback_edits_message_in_place_for_current_chat():
     bot._log_bot_message = Mock()
     bot._reply_logged = AsyncMock()
     query = SimpleNamespace(
-        data="lc:history:page:1",
+        data="lc:history:page:1:123",
         message=SimpleNamespace(),
         answer=AsyncMock(),
         edit_message_text=AsyncMock(),
@@ -2021,14 +2025,46 @@ async def test_history_page_callback_edits_message_in_place_for_current_chat():
     await bot.handle_run_action(update, SimpleNamespace())
 
     bot.jobs.list_jobs.assert_called_once_with(
-        session_id="chat-two", limit=11, offset=10
+        session_id="chat-two", limit=11, offset=10, snapshot_rowid=123
     )
     query.edit_message_text.assert_awaited_once()
     assert "page 2" in query.edit_message_text.await_args.args[0]
     keyboard = query.edit_message_text.await_args.kwargs["reply_markup"]
-    assert keyboard.inline_keyboard[-1][0].callback_data == "lc:history:page:0"
+    assert keyboard.inline_keyboard[-1][0].callback_data == "lc:history:page:0:123"
     bot._reply_logged.assert_not_awaited()
     bot._log_bot_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "callback_data",
+    ["lc:history:page:1:9223372036854775808", "lc:history:page:01:123"],
+)
+async def test_history_page_callback_rejects_invalid_snapshot_and_page(callback_data):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = SimpleNamespace(
+        history_snapshot=Mock(return_value=123), list_jobs=Mock(return_value=[])
+    )
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
+    bot._reply_logged = AsyncMock()
+    query = SimpleNamespace(
+        data=callback_data,
+        message=SimpleNamespace(),
+        answer=AsyncMock(),
+        edit_message_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=8),
+        effective_chat=SimpleNamespace(id=43),
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    bot.jobs.history_snapshot.assert_not_called()
+    bot.jobs.list_jobs.assert_not_called()
+    assert "history page is invalid" in bot._reply_logged.await_args.args[1]
 
 
 @pytest.mark.asyncio

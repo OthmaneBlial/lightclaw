@@ -22,15 +22,15 @@
     },
     {
       "branch_points": 93,
-      "line": 153,
-      "lines": 503,
+      "line": 175,
+      "lines": 507,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "branch_points": 73,
-      "line": 324,
-      "lines": 292,
+      "branch_points": 81,
+      "line": 333,
+      "lines": 315,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -129,8 +129,8 @@
     },
     {
       "branch_points": 93,
-      "line": 153,
-      "lines": 503,
+      "line": 175,
+      "lines": 507,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -163,18 +163,18 @@
       "path": "core/bot/commands/skills.py"
     },
     {
+      "branch_points": 81,
+      "line": 333,
+      "lines": 315,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 50,
       "line": 507,
       "lines": 310,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
-    },
-    {
-      "branch_points": 73,
-      "line": 324,
-      "lines": 292,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 42,
@@ -249,7 +249,7 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 895,
+      "lines": 908,
       "path": "core/jobs.py"
     },
     {
@@ -257,7 +257,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 787,
+      "lines": 819,
       "path": "core/bot/approvals.py"
     },
     {
@@ -265,7 +265,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 714,
+      "lines": 740,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22054,
+  "runtime_lines": 22125,
   "schema_version": 1
 }

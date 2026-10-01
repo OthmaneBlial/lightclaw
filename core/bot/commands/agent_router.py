@@ -67,15 +67,24 @@ class CommandsAgentRouterMixin:
         pending["review_delivered"] = True
 
     async def _load_recent_runs_page(
-        self, session_id: str, page: int
-    ) -> tuple[list[dict[str, object]], bool]:
+        self, session_id: str, page: int, snapshot_rowid: int | None = None
+    ) -> tuple[list[dict[str, object]], bool, int]:
+        if snapshot_rowid is None:
+            snapshot_rowid = await asyncio.to_thread(
+                self.jobs.history_snapshot, session_id
+            )
         jobs = await asyncio.to_thread(
             self.jobs.list_jobs,
             session_id=session_id,
             limit=_RUN_HISTORY_PAGE_SIZE + 1,
             offset=page * _RUN_HISTORY_PAGE_SIZE,
+            snapshot_rowid=snapshot_rowid,
         )
-        return jobs[:_RUN_HISTORY_PAGE_SIZE], len(jobs) > _RUN_HISTORY_PAGE_SIZE
+        return (
+            jobs[:_RUN_HISTORY_PAGE_SIZE],
+            len(jobs) > _RUN_HISTORY_PAGE_SIZE,
+            snapshot_rowid,
+        )
 
     def _render_recent_runs(
         self, jobs: list[dict[str, object]], page: int = 0
@@ -113,7 +122,11 @@ class CommandsAgentRouterMixin:
         return "\n\n".join(lines)
 
     def _recent_runs_keyboard(
-        self, jobs: list[dict[str, object]], page: int = 0, has_more: bool = False
+        self,
+        jobs: list[dict[str, object]],
+        page: int = 0,
+        has_more: bool = False,
+        snapshot_rowid: int | None = None,
     ) -> InlineKeyboardMarkup | None:
         buttons = []
         for job in jobs:
@@ -127,7 +140,10 @@ class CommandsAgentRouterMixin:
                         InlineKeyboardButton(
                             f"View diff · {run_id[-8:]}",
                             callback_data=(
-                                f"lc:history:diff:{page}:"
+                                f"lc:history:diff:{page}:{snapshot_rowid}:"
+                                f"{self._run_action_token(run_id)}"
+                                if snapshot_rowid is not None
+                                else f"lc:history:diff:{page}:"
                                 f"{self._run_action_token(run_id)}"
                             ),
                         )
@@ -135,15 +151,21 @@ class CommandsAgentRouterMixin:
                 )
         navigation = []
         if page:
+            previous = f"lc:history:page:{page - 1}"
+            if snapshot_rowid is not None:
+                previous += f":{snapshot_rowid}"
             navigation.append(
                 InlineKeyboardButton(
-                    "Previous", callback_data=f"lc:history:page:{page - 1}"
+                    "Previous", callback_data=previous
                 )
             )
         if has_more:
+            next_page = f"lc:history:page:{page + 1}"
+            if snapshot_rowid is not None:
+                next_page += f":{snapshot_rowid}"
             navigation.append(
                 InlineKeyboardButton(
-                    "Next", callback_data=f"lc:history:page:{page + 1}"
+                    "Next", callback_data=next_page
                 )
             )
         if navigation:
@@ -169,12 +191,16 @@ class CommandsAgentRouterMixin:
         sub = args[0].lower() if args else "status"
 
         if sub in {"runs", "jobs"}:
-            jobs, has_more = await self._load_recent_runs_page(session_id, 0)
+            jobs, has_more, snapshot_rowid = await self._load_recent_runs_page(
+                session_id, 0
+            )
             await self._reply_logged(
                 update,
                 self._render_recent_runs(jobs),
                 parse_mode=ParseMode.HTML,
-                reply_markup=self._recent_runs_keyboard(jobs, has_more=has_more),
+                reply_markup=self._recent_runs_keyboard(
+                    jobs, has_more=has_more, snapshot_rowid=snapshot_rowid
+                ),
             )
             return
 

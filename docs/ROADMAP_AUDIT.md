@@ -87,6 +87,14 @@ roadmap's “proof over claims” rule.
   local times are rejected without falling back to date-only midnight, and numeric local UTC offsets
   appear in schedule displays. One third-party
   `google-genai` deprecation warning remains.
+- Stable-history snapshot follow-up passed the full local `scripts/quality.py` gate on macOS arm64
+  Python 3.14.7: 867 tests, lint, documentation links, provider artifacts, architecture/runtime
+  budgets, dependency audit, sdist/wheel build, and clean-wheel installation. Run-history callbacks
+  carry a per-chat SQLite rowid watermark, so newer jobs cannot shift open pages or invalidate their
+  diff buttons; reopening `/agent runs` includes new jobs. Cross-session snapshots remain separate,
+  out-of-range callback values are rejected, and page reads still use the session-history index
+  without a temporary sort. The runtime-line cap is 22,125 for this 71-line change, documented in
+  `docs/architecture/core-budget.json`.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24

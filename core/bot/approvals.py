@@ -27,9 +27,18 @@ from .delegation.workspace import await_thread_completion
 
 MAX_REVIEWED_COMMANDS = 6
 MAX_DIFF_PREVIEW_BYTES = 32 * 1024
+_MAX_HISTORY_PAGE = 99999
+_MAX_HISTORY_SNAPSHOT = 9223372036854775807
 _UNSAFE_REVIEW_CONTROLS = re.compile(
     r"[\x00-\x1f\x7f-\x9f\u061c\u200b\u200e\u200f\u202a-\u202e\u2060\u2066-\u206f\ufeff\ud800-\udfff]"
 )
+
+
+def _history_number(value: str, maximum: int) -> int | None:
+    if not re.fullmatch(r"(?:0|[1-9][0-9]{0,18})", value):
+        return None
+    number = int(value)
+    return number if number <= maximum else None
 
 
 class BotApprovalsMixin:
@@ -380,13 +389,21 @@ class BotApprovalsMixin:
 
         if action.startswith("lc:history:"):
             parts = action.split(":")
-            if len(parts) == 4 and parts[2] == "page":
-                if not re.fullmatch(r"(?:0|[1-9][0-9]{0,4})", parts[3]):
+            if parts[2] == "page" and len(parts) in {4, 5}:
+                page = _history_number(parts[3], _MAX_HISTORY_PAGE)
+                snapshot_text = parts[4] if len(parts) == 5 else None
+                snapshot_rowid = (
+                    _history_number(snapshot_text, _MAX_HISTORY_SNAPSHOT)
+                    if snapshot_text is not None
+                    else None
+                )
+                if page is None or (
+                    snapshot_text is not None and snapshot_rowid is None
+                ):
                     await self._reply_logged(proxy, "This history page is invalid.")
                     return
-                page = int(parts[3])
-                jobs, has_more = await self._load_recent_runs_page(
-                    session_id, page
+                jobs, has_more, snapshot_rowid = await self._load_recent_runs_page(
+                    session_id, page, snapshot_rowid
                 )
                 text = redact_text(
                     self._render_recent_runs(jobs, page),
@@ -397,7 +414,10 @@ class BotApprovalsMixin:
                         text,
                         parse_mode=ParseMode.HTML,
                         reply_markup=self._recent_runs_keyboard(
-                            jobs, page=page, has_more=has_more
+                            jobs,
+                            page=page,
+                            has_more=has_more,
+                            snapshot_rowid=snapshot_rowid,
                         ),
                     )
                 except BadRequest as exc:
@@ -410,13 +430,25 @@ class BotApprovalsMixin:
                 return
 
             page = 0
-            if len(parts) == 5 and parts[2] == "diff":
-                if not re.fullmatch(r"(?:0|[1-9][0-9]{0,4})", parts[3]):
+            snapshot_rowid = None
+            if len(parts) == 6 and parts[2] == "diff":
+                page = _history_number(parts[3], _MAX_HISTORY_PAGE)
+                snapshot_rowid = _history_number(
+                    parts[4], _MAX_HISTORY_SNAPSHOT
+                )
+                token = parts[5]
+                if page is None or snapshot_rowid is None:
                     await self._reply_logged(
                         proxy, "This run is no longer on the history page for this chat."
                     )
                     return
-                page = int(parts[3])
+            elif len(parts) == 5 and parts[2] == "diff":
+                page = _history_number(parts[3], _MAX_HISTORY_PAGE)
+                if page is None:
+                    await self._reply_logged(
+                        proxy, "This run is no longer on the history page for this chat."
+                    )
+                    return
                 token = parts[4]
             elif len(parts) == 4 and parts[2] == "diff":
                 token = parts[3]
@@ -429,8 +461,8 @@ class BotApprovalsMixin:
                     proxy, "This run is no longer on the history page for this chat."
                 )
                 return
-            jobs, _has_more = await self._load_recent_runs_page(
-                session_id, page
+            jobs, _has_more, _snapshot_rowid = await self._load_recent_runs_page(
+                session_id, page, snapshot_rowid
             )
             job = next(
                 (

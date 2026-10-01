@@ -108,13 +108,59 @@ def test_list_jobs_offset_is_stable_when_creation_times_tie(tmp_path, monkeypatc
         store.close()
 
 
+def test_history_snapshot_prevents_new_jobs_from_shifting_pages(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.jobs.time.time", lambda: 123.0)
+    store = JobStore(tmp_path / "jobs.db")
+    try:
+        for index in range(12):
+            _create(
+                store,
+                tmp_path / f"repo-{index}",
+                session_id="chat-one",
+            )
+        snapshot = store.history_snapshot("chat-one")
+        original = store.list_jobs(session_id="chat-one")
+        original_page = store.list_jobs(
+            session_id="chat-one", limit=10, offset=0, snapshot_rowid=snapshot
+        )
+        _create(store, tmp_path / "other-chat", session_id="chat-two")
+        assert store.history_snapshot("chat-one") == snapshot
+
+        store.create_job(
+            workspace=tmp_path / "new-repo",
+            session_id="chat-one",
+            goal="new run",
+            approved_scope="src only",
+            risk_level="medium",
+            capability_profile="workspace-write",
+            plan=_plan(),
+            status="queued",
+            run_id="zzzz-new",
+        )
+
+        stable_next_page = store.list_jobs(
+            session_id="chat-one", limit=10, offset=10, snapshot_rowid=snapshot
+        )
+        shifted_next_page = store.list_jobs(session_id="chat-one", limit=10, offset=10)
+
+        assert [job["run_id"] for job in original_page] == [
+            job["run_id"] for job in original[:10]
+        ]
+        assert [job["run_id"] for job in stable_next_page] == [
+            job["run_id"] for job in original[10:]
+        ]
+        assert shifted_next_page[0]["run_id"] == original[9]["run_id"]
+    finally:
+        store.close()
+
+
 def test_job_history_query_uses_session_order_index(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     try:
         plan = store.db.execute(
-            "EXPLAIN QUERY PLAN SELECT * FROM jobs WHERE session_id = ? "
+            "EXPLAIN QUERY PLAN SELECT * FROM jobs WHERE session_id = ? AND rowid <= ? "
             "ORDER BY created_at DESC, run_id DESC LIMIT ? OFFSET ?",
-            ("chat-one", 11, 0),
+            ("chat-one", store.history_snapshot("chat-one"), 11, 0),
         ).fetchall()
 
         assert any(

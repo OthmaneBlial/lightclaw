@@ -396,6 +396,7 @@ class JobStore:
         session_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        snapshot_rowid: int | None = None,
     ) -> list[dict[str, object]]:
         clauses: list[str] = []
         params: list[object] = []
@@ -408,6 +409,9 @@ class JobStore:
         if session_id is not None:
             clauses.append("session_id = ?")
             params.append(session_id)
+        if snapshot_rowid is not None:
+            clauses.append("rowid <= ?")
+            params.append(max(0, int(snapshot_rowid)))
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         query = (
             f"SELECT * FROM jobs{where} "
@@ -418,6 +422,15 @@ class JobStore:
         with self._lock:
             rows = self.db.execute(query, params).fetchall()
             return [self._row_to_job(row) for row in rows]
+
+    def history_snapshot(self, session_id: str) -> int:
+        """Return a high-water mark so new jobs cannot shift an open history page."""
+        with self._lock:
+            row = self.db.execute(
+                "SELECT COALESCE(MAX(rowid), 0) FROM jobs WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            return int(row[0])
 
     def approve(self, run_id: str) -> dict[str, object]:
         return self._transition(run_id, {"awaiting_approval"}, "queued", "approved")
