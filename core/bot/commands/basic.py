@@ -36,9 +36,9 @@ class CommandsBasicMixin:
             "/skills - Manage skills (install/use/create)\n"
             "/agent - Delegate tasks to local coding agents\n"
             "/agent multi - Auto-plan multi-agent run with confirm/edit/cancel\n"
-            "/agent doctor - Check local agent install/auth health\n"
+            "/agent doctor - Check local agent install/auth health (unavailable in public Telegram mode)\n"
             "/mode - File write mode (chat/edit)\n"
-            "/heartbeat - HEARTBEAT.md scheduler (on/off/show)\n"
+            "/heartbeat - HEARTBEAT.md scheduler (on/off/show; unavailable in public Telegram mode)\n"
             "/cron - Minimal scheduler (add/list/remove)\n"
             "/show - Show current config",
             parse_mode=ParseMode.HTML,
@@ -65,9 +65,9 @@ class CommandsBasicMixin:
             "/skills - Install/use/create skills\n"
             "/agent - Delegate tasks to local coding agents\n"
             "/agent multi - Auto-plan multi-agent run with confirm/edit/cancel\n"
-            "/agent doctor - Check local agent install/auth health\n"
+            "/agent doctor - Check local agent install/auth health (unavailable in public Telegram mode)\n"
             "/mode - File write mode (chat/edit)\n"
-            "/heartbeat - HEARTBEAT.md scheduler (on/off/show)\n"
+            "/heartbeat - HEARTBEAT.md scheduler (on/off/show; unavailable in public Telegram mode)\n"
             "/cron - Minimal scheduler (add/list/remove)\n"
             "/show - Show current model, provider, uptime",
             parse_mode=ParseMode.HTML,

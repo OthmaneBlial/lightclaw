@@ -29,6 +29,23 @@ HANDLERS = (
 )
 
 
+@pytest.mark.parametrize("handler_name", ["cmd_start", "cmd_help"])
+async def test_help_marks_publicly_unavailable_commands(handler_name: str):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="chat")
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=123), message=object())
+
+    await getattr(bot, handler_name)(update, SimpleNamespace())
+
+    text = bot._reply_logged.await_args.args[1]
+    lines = {line.split(" - ", 1)[0]: line for line in text.splitlines() if " - " in line}
+    assert "unavailable in public Telegram mode" in lines["/agent doctor"]
+    assert "unavailable in public Telegram mode" in lines["/heartbeat"]
+
+
 @pytest.mark.parametrize("handler_name", HANDLERS)
 async def test_unauthorized_user_cannot_reach_any_telegram_handler(handler_name: str):
     bot = LightClawBot.__new__(LightClawBot)
