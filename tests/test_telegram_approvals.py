@@ -643,6 +643,54 @@ async def test_public_group_run_callbacks_enforce_requester_boundary(action):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("user_id", "preserve_pending"), [(999, True), (123, False)])
+async def test_public_group_clear_preserves_other_members_pending_actions(
+    user_id, preserve_pending
+):
+    bot = LightClawBot.__new__(LightClawBot)
+    session_id = "-456"
+    pending = {session_id: {"user_id": 123}}
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_scope_from_update = AsyncMock(return_value=session_id)
+    bot._log_user_message = Mock()
+    bot._invalidate_active_message_requests = Mock()
+    bot._invalidate_session_summary = Mock()
+    bot._session_summaries = {}
+    bot._pending_wipe_confirm = {session_id: dict(pending[session_id])}
+    bot._pending_multi_plan_by_session = {session_id: dict(pending[session_id])}
+    bot._pending_trusted_agent_run_by_session = {session_id: dict(pending[session_id])}
+    bot._pending_voice_goal_by_session = {session_id: dict(pending[session_id])}
+    bot._voice_request_ids_by_session = {session_id: "voice-request"}
+    bot.memory = SimpleNamespace(
+        clear_session=Mock(),
+        scope_for=Mock(return_value=("group", "/workspace")),
+    )
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=user_id),
+        effective_chat=SimpleNamespace(id=-456, type="supergroup"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_clear(update, SimpleNamespace())
+
+    bot.memory.clear_session.assert_called_once_with(session_id)
+    bot._reply_logged.assert_awaited_once()
+    assert "Other group members' pending actions were not changed." in (
+        bot._reply_logged.await_args.args[1]
+    )
+    for pending_map in (
+        bot._pending_wipe_confirm,
+        bot._pending_multi_plan_by_session,
+        bot._pending_trusted_agent_run_by_session,
+        bot._pending_voice_goal_by_session,
+    ):
+        assert bool(pending_map) is preserve_pending
+    assert bool(bot._voice_request_ids_by_session) is preserve_pending
+
+
+@pytest.mark.asyncio
 async def test_voice_transcription_survives_typing_failure_and_waits_for_approval(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")

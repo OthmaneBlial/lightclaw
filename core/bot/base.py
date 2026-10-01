@@ -636,19 +636,31 @@ class BotBaseMixin:
     def _clear_pending_multi_plan(self, session_id: str) -> dict[str, object] | None:
         return self._pending_multi_plan_by_session.pop(session_id, None)
 
-    def _clear_pending_actions(self, session_id: str | None = None) -> None:
+    def _clear_pending_actions(
+        self,
+        session_id: str | None = None,
+        *,
+        requester_user_id: int | None = None,
+    ) -> None:
         pending_maps = (
             self._pending_wipe_confirm,
             self._pending_multi_plan_by_session,
             self._pending_trusted_agent_run_by_session,
             self._pending_voice_goal_by_session,
-            self._voice_request_ids_by_session,
         )
         for pending in pending_maps:
             if session_id is None:
                 pending.clear()
-            else:
+            elif requester_user_id is None:
                 pending.pop(session_id, None)
+            else:
+                action = pending.get(session_id)
+                if isinstance(action, dict) and action.get("user_id") == requester_user_id:
+                    pending.pop(session_id, None)
+        if session_id is None:
+            self._voice_request_ids_by_session.clear()
+        elif requester_user_id is None or session_id not in self._pending_voice_goal_by_session:
+            self._voice_request_ids_by_session.pop(session_id, None)
 
     async def _reply_logged(
         self,

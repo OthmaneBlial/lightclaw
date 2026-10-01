@@ -87,18 +87,30 @@ class CommandsBasicMixin:
             return
 
         session_id = await self._session_scope_from_update(update)
+        requester_user_id = (
+            update.effective_user.id
+            if update.effective_chat and update.effective_chat.type != "private"
+            else None
+        )
         self._log_user_message(session_id, "/clear")
         self._invalidate_active_message_requests(session_id)
-        self._clear_pending_actions(session_id)
+        self._clear_pending_actions(
+            session_id, requester_user_id=requester_user_id
+        )
         self._invalidate_session_summary(session_id)
         async with self._get_memory_wipe_lock():
             async with self._get_memory_write_lock():
                 await await_thread_completion(self.memory.clear_session, session_id)
                 self._session_summaries.pop(self._summary_key(session_id), None)
+        message = (
+            "🗑️ Conversation cleared. Pending approvals and confirmations you created were discarded."
+        )
+        if requester_user_id is not None:
+            message += "\nOther group members' pending actions were not changed."
         await self._reply_logged(
             update,
-            "🗑️ Conversation cleared. Pending approvals and confirmations were discarded.\n"
-            "Active runs continue; in-flight chat replies may finish but won't be saved. "
+            message
+            + "\nActive runs continue; in-flight chat replies may finish but won't be saved. "
             "Use a run's Cancel button to stop it. "
             "Memories from other chats are preserved."
         )

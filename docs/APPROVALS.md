@@ -38,7 +38,9 @@ In explicitly enabled public group sessions, only the requester can use a plan's
 approve, edit, deny, or cancel controls. A new `/agent multi` request still replaces
 the group's older pending plan. Voice approval and discard controls are bound to the
 user who sent the voice request. Only the requester can cancel a run or accept,
-reject, or retry its result; any group member can view its diff.
+reject, or retry its result; any group member can view its diff. `/clear` clears the
+shared group memory but discards only the caller's pending actions; other members'
+approvals remain active.
 
 `command_succeeds` checks run as host subprocesses after approval. They receive a minimal environment and an in-workspace working directory, but LightClaw does not add an operating-system sandbox around them. Review each command; use OS/container isolation for untrusted repositories.
 
