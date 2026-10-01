@@ -60,11 +60,11 @@ roadmap's “proof over claims” rule.
   The three legacy skill migration cases cover symlink files, symlink swaps, and oversized files.
   The clean venv used the pinned pip from `requirements-pip.txt`; Python 3.10.21's bundled pip
   23.0.1 could not resolve one hashed transitive extra.
-- Latest canonical quality suite at `04de1f5` on 2026-10-01: all 860 tests passed on macOS
-  arm64 with Python 3.14.7; lint, documentation links, architecture/runtime budgets,
-  dependency audit, package build, and clean-wheel installation also passed. The cancel tests
-  verify immediate local cancellation before delayed SQLite persistence, clear reporting when
-  persistence fails, a visible cancel button during preflight and queued/waiting/repair states,
+- Latest canonical quality suite at `89b4ec4` on 2026-10-01: all 860 tests passed on macOS
+  arm64 with Python 3.13.1 and 3.14.7; lint, documentation links, architecture/runtime budgets,
+  dependency audit, package build, and clean-wheel installation passed on both versions. Tests
+  cover immediate local cancellation before delayed SQLite persistence, clear reporting when
+  persistence fails, visible cancel controls during preflight and queued/waiting/repair states,
   and workspace cleanup when preflight fails. Telegram `/agent runs` lists up to ten durable jobs
   in the current chat with escaped bounded goal previews, per-lane state counts, and chat-scoped
   buttons for opening completed-run diffs after restart; the session filter is applied in SQLite,
@@ -74,6 +74,8 @@ roadmap's “proof over claims” rule.
   inherited pipes held by detached descendants, preserve partial output, and reap the probe.
   Git and GitHub artifact commands use the same bounded post-timeout pipe cleanup and preserve
   partial output when detached descendants outlive their process group.
+  Delegated agent shutdown bounds `Process.wait()` and aborts buffered stdin when detached
+  descendants retain inherited pipes, covering Python 3.13's subprocess wait behavior.
   Cron help shows local date/time, Unix seconds, and explicit-offset forms separately; nonexistent
   local times are rejected without falling back to date-only midnight, and numeric local UTC offsets
   appear in schedule displays. One third-party
