@@ -113,8 +113,15 @@ class BotContextMixin:
             if summary and not self._is_provider_error_text(summary):
                 if generation != self._summary_generation_by_session.get(key, 0):
                     return
-                self.memory.set_summary(session_id, summary)
-                self._cache_session_summary(key, summary)
+                async with self._get_memory_write_lock():
+                    if generation != self._summary_generation_by_session.get(key, 0):
+                        return
+                    await await_thread_completion(
+                        self.memory.set_summary, session_id, summary
+                    )
+                    if generation != self._summary_generation_by_session.get(key, 0):
+                        return
+                    self._cache_session_summary(key, summary)
                 self._clear_llm_backoff()
                 if os.getenv("LIGHTCLAW_CHAT_MODE", "").strip() == "1":
                     log.debug(f"[{session_id}] Summarized {len(valid)} messages → {len(summary)} chars")

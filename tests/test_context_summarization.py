@@ -141,6 +141,79 @@ async def test_clear_during_summary_lookup_skips_model_request():
 
 
 @pytest.mark.asyncio
+async def test_clear_waits_for_summary_write_then_removes_it():
+    loop = asyncio.get_running_loop()
+    write_started = asyncio.Event()
+    release_write = threading.Event()
+    operations = []
+    write_threads = []
+
+    def write_summary(*_args):
+        operations.append("write")
+        write_threads.append(threading.get_ident())
+        loop.call_soon_threadsafe(write_started.set)
+        assert release_write.wait(timeout=2)
+
+    def clear_session(_session_id):
+        operations.append("clear")
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"], context_window=128)
+    bot.memory = SimpleNamespace(
+        get_recent=Mock(
+            return_value=[{"role": "user", "content": f"detail {i}"} for i in range(21)]
+        ),
+        scope_for=Mock(return_value=("telegram-user:42", "/workspace")),
+        get_summary=Mock(return_value=""),
+        set_summary=Mock(side_effect=write_summary),
+        clear_session=Mock(side_effect=clear_session),
+    )
+    bot.llm = SimpleNamespace(chat=AsyncMock(return_value="fresh summary"))
+    bot._llm_backoff_until = 0.0
+    bot._summarizing = set()
+    bot._session_summaries = {}
+    bot._summary_generation_by_session = {}
+    bot._pending_wipe_confirm = {}
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_trusted_agent_run_by_session = {}
+    bot._pending_voice_goal_by_session = {}
+    bot._voice_request_ids_by_session = {}
+    bot._session_id_from_update = Mock(return_value="chat-42")
+    bot._log_user_message = Mock()
+    bot._privileged_rate_limited = Mock(return_value=False)
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=42, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    summary_task = asyncio.create_task(bot.maybe_summarize("chat-42"))
+    clear_task = None
+    try:
+        await asyncio.wait_for(write_started.wait(), timeout=2)
+        clear_task = asyncio.create_task(bot.cmd_clear(update, SimpleNamespace()))
+        await asyncio.sleep(0)
+        release_write.set()
+        await clear_task
+        await summary_task
+    finally:
+        release_write.set()
+        if clear_task and not clear_task.done():
+            clear_task.cancel()
+        if not summary_task.done():
+            summary_task.cancel()
+        pending = [summary_task]
+        if clear_task:
+            pending.append(clear_task)
+        await asyncio.gather(*pending, return_exceptions=True)
+
+    assert operations == ["write", "clear"]
+    assert write_threads and write_threads[0] != threading.get_ident()
+    assert bot._session_summaries == {}
+
+
+@pytest.mark.asyncio
 async def test_summary_reads_and_persists_sqlite_summary_across_restart(tmp_path):
     session_id = "chat-42"
     memory = MemoryStore(tmp_path / "memory.db")
