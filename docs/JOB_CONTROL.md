@@ -41,7 +41,7 @@ A lane retry also requires the job itself and the selected lane to be declared r
 
 Resume and retry clear the job's previous `finished_at` until it reaches a terminal state again. The original `started_at` remains available across attempts; events record the individual transitions.
 
-Delegated POSIX processes wait for TERM/KILL cleanup and stream draining before cancellation returns. Repeated cancellation requests do not interrupt that cleanup or a pending process-group registration/unregistration. Detached descendants can still escape the process group.
+Delegation prompts tell agents to keep subprocesses attached and stop temporary servers. Delegated POSIX processes wait for TERM/KILL cleanup and stream draining before cancellation returns; repeated cancellation requests do not interrupt cleanup or process-group registration/unregistration. An agent can ignore the prompt and detach a descendant, which may then outlive timeout or cancellation.
 
 Cancellation also covers agent startup, before the process group is registered. Before output streaming begins, cleanup closes stdin and discards stdout/stderr in bounded chunks rather than retaining unread pipe buffers. Failed process-group registration still forces immediate termination.
 

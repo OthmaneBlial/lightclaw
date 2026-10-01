@@ -385,7 +385,7 @@ class DelegationWorkspaceMixin:
             "- Implement the task directly by creating/editing files in this workspace.\n"
             "- Use paths relative to the current working directory; the approved path label may have moved.\n"
             "- Do not ask for confirmation; make reasonable assumptions and proceed.\n"
-            "- If the task is large, still perform as much as possible in one run.\n"
+            "- If the task is large, do as much as possible in one run; never detach subprocesses or leave test servers running.\n"
             "- Do not dump full source files in the final response.\n"
             "- End with a concise summary of what was created/updated.\n\n"
             "TASK:\n"

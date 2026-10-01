@@ -211,6 +211,7 @@ async def test_agent_startup_cannot_follow_replaced_workspace(tmp_path, monkeypa
         assert result["ok"] is True
         prompt = (tmp_path / "original" / "marker").read_text()
         assert "Workspace root: current working directory (.)" in prompt
+        assert "never detach subprocesses or leave test servers running" in prompt
         assert "fixture" in prompt
     else:
         assert result["ok"] is False
@@ -284,6 +285,11 @@ async def test_prompt_timeout_does_not_wait_for_detached_child_holding_output_pi
         assert task in done, "prompt timeout waited for the detached child's output pipes"
         result = task.result()
         assert result["timed_out"] is True
+        detached_pid = int(pid_path.read_text())
+        try:
+            os.kill(detached_pid, 0)
+        except ProcessLookupError:
+            pytest.fail("a detached child unexpectedly exited with its process group")
     finally:
         if pid_path.exists():
             try:
