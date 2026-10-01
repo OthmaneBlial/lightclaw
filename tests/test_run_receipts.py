@@ -82,6 +82,34 @@ def test_real_delegation_path_emits_private_structured_receipt(
     assert str(Path(bot.config.workspace_path).resolve()) not in result
 
 
+@pytest.mark.asyncio
+async def test_checkpoint_error_keeps_local_path_out_of_result(tmp_path, caplog):
+    workspace = tmp_path / "private-workspace"
+    workspace.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(workspace),
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot._resolve_task_workspace = AsyncMock(return_value=(workspace, False))
+    error = ArtifactError(f"could not write {workspace}/.git/index.lock")
+    bot._prepare_task_workspace_checkpoint = AsyncMock(side_effect=error)
+    bot._invoke_local_agent_streaming = AsyncMock()
+
+    with caplog.at_level(logging.WARNING):
+        result = await bot._run_local_agent_task_impl(
+            "fixture-session", "codex", "run a task", manage_job=False
+        )
+
+    assert str(workspace) not in result
+    assert "local LightClaw log" in result
+    assert str(workspace) in caplog.text
+    bot._invoke_local_agent_streaming.assert_not_awaited()
+
+
 def test_patch_failure_marks_single_agent_job_failed(tmp_path, monkeypatch):
     root = tmp_path / "workspace"
     root.mkdir()

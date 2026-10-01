@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -239,6 +240,38 @@ async def test_handoff_preparation_refuses_a_swapped_workspace(tmp_path, monkeyp
     except OSError:
         pass
     assert not (outside / "handoff").exists()
+    bot._run_local_agent_task.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_multi_checkpoint_error_keeps_local_path_out_of_telegram(tmp_path, caplog):
+    workspace = tmp_path / "private-workspace"
+    workspace.mkdir()
+    error = ArtifactError(f"could not write {workspace}/.git/index.lock")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._begin_multi_run_progress = AsyncMock()
+    bot._create_task_workspace_safely = AsyncMock(return_value=workspace)
+    bot._workspace_rel_label = lambda _workspace: "run-workspaces/task"
+    bot._write_agents_plan_file = Mock()
+    bot._await_multi_preflight_thread = AsyncMock(side_effect=[None, None, error])
+    bot._reply_logged = AsyncMock()
+    bot._run_local_agent_task = AsyncMock()
+
+    with caplog.at_level(logging.WARNING):
+        await bot._execute_multi_agent_plan_impl(
+            SimpleNamespace(),
+            "fixture-session",
+            "goal",
+            [],
+            {},
+            "checkpoint-failure",
+            asyncio.Event(),
+        )
+
+    reply = bot._reply_logged.await_args.args[1]
+    assert str(workspace) not in reply
+    assert "local LightClaw log" in reply
+    assert str(workspace) in caplog.text
     bot._run_local_agent_task.assert_not_awaited()
 
 

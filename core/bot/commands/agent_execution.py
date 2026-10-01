@@ -365,11 +365,11 @@ class CommandsAgentExecutionMixin:
                 run_id,
             )
         except ArtifactError as exc:
+            log.warning("Git checkpoint failed for multi-agent run %s: %s", run_id, exc)
             await self._reply_logged(
                 update,
-                f"🛑 Could not create the isolated Git checkpoint: {_escape_html(str(exc))}\n"
-                f"Owned workspace preserved for inspection: <code>{_escape_html(multi_workspace_label)}</code>",
-                parse_mode=ParseMode.HTML,
+                "🛑 Git checkpoint failed; no workers started. Workspace preserved. "
+                "See the local LightClaw log.",
             )
             return
         before_multi = await self._await_multi_preflight_thread(

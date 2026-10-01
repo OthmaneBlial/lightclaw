@@ -907,8 +907,8 @@ class DelegationExecutionMixin:
                 owns_workspace=owns_workspace,
             )
         except ArtifactError as exc:
-            return f"⚠️ Could not create the isolated Git checkpoint: {exc}\n" \
-                f"Task workspace preserved for inspection: {workspace_label}"
+            log.warning("Git checkpoint failed for delegated run: %s", exc)
+            return "⚠️ Git checkpoint failed; no agent work started. Workspace preserved; see the local LightClaw log."
         for attribute in (
             "_active_run_ids_by_session",
             "_active_run_requesters_by_session",
