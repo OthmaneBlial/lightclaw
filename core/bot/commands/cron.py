@@ -37,7 +37,7 @@ class CommandsCronMixin:
             "<b>Usage</b>\n"
             "<code>/cron list</code> - list jobs for this chat\n"
             "<code>/cron add every &lt;minutes&gt; &lt;message&gt;</code> - recurring job\n"
-            "<code>/cron add at &lt;YYYY-MM-DD HH:MM|timestamp&gt; &lt;message&gt;</code> - one-time job\n"
+            "<code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code> - one-time job\n"
             "<code>/cron remove &lt;id&gt;</code> - delete a job"
         )
 
@@ -50,7 +50,7 @@ class CommandsCronMixin:
     @staticmethod
     def _format_local_datetime(ts: float) -> str:
         value = max(0, int(ts))
-        return time.strftime("%Y-%m-%d %H:%M", time.localtime(value))
+        return time.strftime("%Y-%m-%d %H:%M %z", time.localtime(value))
 
 
     @staticmethod
@@ -359,7 +359,7 @@ class CommandsCronMixin:
                     update,
                     "Usage:\n"
                     "<code>/cron add every &lt;minutes&gt; &lt;message&gt;</code>\n"
-                    "<code>/cron add at &lt;YYYY-MM-DD HH:MM|timestamp&gt; &lt;message&gt;</code>",
+                    "<code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code>",
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -415,7 +415,7 @@ class CommandsCronMixin:
                 if len(args) < 4:
                     await self._reply_logged(
                         update,
-                        "Usage: <code>/cron add at &lt;YYYY-MM-DD HH:MM|timestamp&gt; &lt;message&gt;</code>",
+                        "Usage: <code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code>",
                         parse_mode=ParseMode.HTML,
                     )
                     return
@@ -432,7 +432,7 @@ class CommandsCronMixin:
                 if run_at is None or not text:
                     await self._reply_logged(
                         update,
-                        "Usage: <code>/cron add at &lt;YYYY-MM-DD HH:MM|timestamp&gt; &lt;message&gt;</code>",
+                        "Usage: <code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code>",
                         parse_mode=ParseMode.HTML,
                     )
                     return

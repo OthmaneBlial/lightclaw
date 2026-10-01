@@ -270,6 +270,16 @@ def test_cron_parser_rejects_timestamp_outside_localtime_range():
     assert CommandsCronMixin._parse_cron_at("9" * 100) is None
 
 
+def test_cron_times_show_the_machine_local_utc_offset():
+    timestamp = time.time() + 3600
+    rendered = CommandsCronMixin._format_local_datetime(timestamp)
+    offset = time.strftime("%z", time.localtime(timestamp))
+
+    assert re.fullmatch(r"[+-]\d{4}", offset)
+    assert rendered.endswith(f" {offset}")
+    assert "local time" in CommandsCronMixin._cron_usage_text()
+
+
 def test_cron_store_discards_unrenderable_timestamps_and_intervals(monkeypatch, tmp_path):
     bot = CronHarness()
     bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
