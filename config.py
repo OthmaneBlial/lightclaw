@@ -22,6 +22,8 @@ LATEST_MODEL_DEFAULTS = {
 _MODEL_DEFAULT_SENTINELS = {"", "latest", "auto", "default"}
 DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 CAPABILITY_PROFILES = {"observe", "workspace-write", "trusted-command"}
+MAX_LOCAL_AGENT_TIMEOUT_SEC = 86_400
+MAX_LOCAL_AGENT_PROGRESS_INTERVAL_SEC = 3_600
 
 
 def _config_file_candidates() -> list[Path]:
@@ -204,6 +206,16 @@ class Config:
     groq_api_key: str = ""
 
 
+def normalize_local_agent_timings(config: Config) -> None:
+    config.local_agent_timeout_sec = max(
+        60, min(MAX_LOCAL_AGENT_TIMEOUT_SEC, int(config.local_agent_timeout_sec))
+    )
+    config.local_agent_progress_interval_sec = max(
+        10,
+        min(MAX_LOCAL_AGENT_PROGRESS_INTERVAL_SEC, int(config.local_agent_progress_interval_sec)),
+    )
+
+
 def _resolve_model(provider: str, model: str) -> str:
     """Resolve empty/default model values to provider-specific latest defaults."""
     provider_name = _strip_inline_comment(provider or "").lower()
@@ -309,10 +321,7 @@ def load_config() -> Config:
     cfg.memory_max_db_mb = max(1, min(4_096, int(cfg.memory_max_db_mb)))
     cfg.memory_query_timeout_ms = max(10, min(5_000, int(cfg.memory_query_timeout_ms)))
     cfg.memory_candidate_limit = max(10, min(2_000, int(cfg.memory_candidate_limit)))
-    cfg.local_agent_timeout_sec = max(60, int(cfg.local_agent_timeout_sec))
-    cfg.local_agent_progress_interval_sec = max(
-        10, int(cfg.local_agent_progress_interval_sec)
-    )
+    normalize_local_agent_timings(cfg)
     cfg.local_agent_safety_mode = _strip_inline_comment(
         cfg.local_agent_safety_mode or "strict"
     ).lower()

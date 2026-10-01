@@ -14,7 +14,7 @@ from pathlib import Path
 from telegram import Update
 from telegram.constants import ParseMode
 
-from config import Config, heartbeat_interval_seconds
+from config import Config, heartbeat_interval_seconds, normalize_local_agent_timings
 from memory import MemoryStore
 from providers import LLMClient
 from skills import SkillManager
@@ -34,6 +34,7 @@ class BotBaseMixin:
     def __init__(self, config: Config):
         self.config = config
         self._heartbeat_interval_sec = heartbeat_interval_seconds(config.heartbeat_interval_min)
+        normalize_local_agent_timings(config)
         with ExitStack() as cleanup:
             self.memory = MemoryStore(
                 config.memory_db_path,

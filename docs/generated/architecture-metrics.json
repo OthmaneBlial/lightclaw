@@ -273,7 +273,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 588,
+      "lines": 589,
       "path": "core/bot/base.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21334,
+  "runtime_lines": 21344,
   "schema_version": 1
 }

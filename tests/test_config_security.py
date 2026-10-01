@@ -67,6 +67,16 @@ def test_heartbeat_interval_rejects_runtime_overflow(monkeypatch):
         load_config()
 
 
+def test_local_agent_timing_settings_are_bounded(monkeypatch):
+    monkeypatch.setenv("LOCAL_AGENT_TIMEOUT_SEC", "9" * 400)
+    monkeypatch.setenv("LOCAL_AGENT_PROGRESS_INTERVAL_SEC", "9" * 400)
+
+    cfg = load_config()
+
+    assert cfg.local_agent_timeout_sec == 86_400
+    assert cfg.local_agent_progress_interval_sec == 3_600
+
+
 def test_direct_bot_config_rejects_bad_interval_before_opening_storage(monkeypatch):
     storage = Mock()
     monkeypatch.setattr("core.bot.base.MemoryStore", storage)
@@ -75,6 +85,27 @@ def test_direct_bot_config_rejects_bad_interval_before_opening_storage(monkeypat
         BotBaseMixin(Config(heartbeat_interval_min=10**400))
 
     storage.assert_not_called()
+
+
+def test_direct_bot_config_bounds_agent_timings(monkeypatch):
+    memory = SimpleNamespace(db=SimpleNamespace(close=Mock()))
+    jobs = SimpleNamespace(close=Mock(), recover_stalled=Mock())
+    llm = SimpleNamespace(close=Mock())
+    monkeypatch.setattr("core.bot.base.MemoryStore", Mock(return_value=memory))
+    monkeypatch.setattr("core.bot.base.JobStore", Mock(return_value=jobs))
+    monkeypatch.setattr("core.bot.base.LLMClient", Mock(return_value=llm))
+    monkeypatch.setattr("core.bot.base.SkillManager", Mock(return_value=SimpleNamespace()))
+    monkeypatch.setattr("core.bot.base.load_personality", Mock(return_value=None))
+    config = Config(
+        local_agent_timeout_sec=10**400,
+        local_agent_progress_interval_sec=10**400,
+    )
+
+    bot = BotBaseMixin(config)
+
+    assert config.local_agent_timeout_sec == 86_400
+    assert config.local_agent_progress_interval_sec == 3_600
+    bot.close()
 
 
 def test_deepseek_default_and_cli_choices_use_current_api_ids(monkeypatch):
