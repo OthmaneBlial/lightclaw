@@ -88,7 +88,7 @@ class BotFileOpsMixin:
                 return rel.as_posix()
             except ValueError:
                 pass
-        return workspace.as_posix()
+        return workspace.name or "workspace"
 
     @staticmethod
     def _build_unified_diff(before: str, after: str, rel_path: str) -> str:

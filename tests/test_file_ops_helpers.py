@@ -50,6 +50,18 @@ def test_diff_stats_ignore_file_headers():
     assert BotFileOpsMixin._diff_line_stats(diff) == (2, 1)
 
 
+def test_workspace_display_path_avoids_host_absolute_path(tmp_path, monkeypatch):
+    monkeypatch.delenv("LIGHTCLAW_HOME", raising=False)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path / "projects" / "repo"))
+    assert bot._workspace_display_path() == "repo"
+
+    home = tmp_path / "lightclaw-home"
+    bot.config.workspace_path = str(home / "projects" / "repo")
+    monkeypatch.setenv("LIGHTCLAW_HOME", str(home))
+    assert bot._workspace_display_path() == "projects/repo"
+
+
 @pytest.mark.asyncio
 async def test_edit_with_nul_path_is_rejected_without_crashing(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
