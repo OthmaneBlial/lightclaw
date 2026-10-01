@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import pytest
+from telegram import Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, NetworkError, RetryAfter
 
@@ -29,25 +30,46 @@ class CronHarness(CommandsCronMixin, BotMessagingMixin, BotBaseMixin):
 
 def test_forum_topic_session_ids_and_memory_scope():
     bot = BotBaseMixin.__new__(BotBaseMixin)
-    topic_update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=-100, type="supergroup"),
-        effective_message=SimpleNamespace(message_thread_id=84),
-    )
-    general_update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=-100, type="supergroup"),
-        effective_message=SimpleNamespace(message_thread_id=1),
-    )
-    private_topic_update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=42, type="private"),
-        effective_message=SimpleNamespace(message_thread_id=84),
-    )
-    private_update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=42, type="private"),
-        effective_message=SimpleNamespace(message_thread_id=None),
+    def message_update(chat_id, chat_type, topic_id=None):
+        message = {
+            "message_id": 7,
+            "date": 1,
+            "chat": {"id": chat_id, "type": chat_type},
+            "text": "fixture",
+        }
+        if topic_id is not None:
+            message["message_thread_id"] = topic_id
+        return Update.de_json({"update_id": 1, "message": message}, None)
+
+    topic_update = message_update(-100, "supergroup", 84)
+    general_update = message_update(-100, "supergroup", 1)
+    private_topic_update = message_update(42, "private", 84)
+    private_update = message_update(42, "private")
+    callback_update = Update.de_json(
+        {
+            "update_id": 2,
+            "callback_query": {
+                "id": "query-1",
+                "from": {"id": 42, "is_bot": False, "first_name": "Test"},
+                "chat_instance": "group-instance",
+                "message": {
+                    "message_id": 8,
+                    "date": 1,
+                    "chat": {"id": -100, "type": "supergroup"},
+                    "message_thread_id": 84,
+                    "text": "Approve?",
+                },
+                "data": "run:approve",
+            },
+        },
+        None,
     )
 
     assert bot._session_id_from_update(topic_update) == "-100:topic:84"
     assert bot._session_id_from_update(general_update) == "-100:topic:1"
+    assert bot._session_id_from_update(private_topic_update) == "42:topic:84"
+    assert bot._session_id_from_update(private_update) == "42"
+    assert bot._session_id_from_update(callback_update) == "-100:topic:84"
     assert bot._memory_recall_current_session_only(topic_update)
     assert bot._memory_recall_current_session_only(private_topic_update)
     assert not bot._memory_recall_current_session_only(private_update)
