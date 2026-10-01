@@ -905,6 +905,46 @@ def test_legacy_job_database_migrates_worker_identity_and_requester_columns(tmp_
     store.close()
 
 
+def test_job_database_v2_migration_preserves_worker_identity(tmp_path):
+    database = tmp_path / "jobs-v2.db"
+    now = time.time()
+    connection = sqlite3.connect(database)
+    connection.executescript(
+        """
+        CREATE TABLE jobs (
+            run_id TEXT PRIMARY KEY,
+            schema_version INTEGER NOT NULL,
+            workspace TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            created_at REAL NOT NULL,
+            updated_at REAL NOT NULL,
+            worker_pid INTEGER,
+            worker_start_token TEXT NOT NULL DEFAULT ''
+        );
+        """
+    )
+    connection.execute(
+        "INSERT INTO jobs(run_id, schema_version, workspace, session_id, status, "
+        "created_at, updated_at, worker_start_token) "
+        "VALUES ('v2-run', 2, ?, 'chat-one', 'queued', ?, ?, 'existing-worker-token')",
+        (str(tmp_path / "repo"), now, now),
+    )
+    connection.commit()
+    connection.close()
+
+    store = JobStore(database)
+    migrated = store.db.execute(
+        "SELECT schema_version, worker_start_token, requester_user_id "
+        "FROM jobs WHERE run_id = 'v2-run'"
+    ).fetchone()
+    assert migrated["schema_version"] == 3
+    assert migrated["worker_start_token"] == "existing-worker-token"
+    assert migrated["requester_user_id"] is None
+    store.close()
+
+
 def test_job_diagnostics_refuse_database_symlink(tmp_path):
     database = tmp_path / "jobs.db"
     victim = tmp_path / "victim.db"
