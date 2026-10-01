@@ -151,7 +151,7 @@ class DelegationDoctorMixin:
                 tokens = payload.get("tokens") if isinstance(payload, dict) else {}
                 access_token = tokens.get("access_token") if isinstance(tokens, dict) else ""
                 token_present = isinstance(access_token, str) and bool(access_token.strip())
-            except (OSError, UnicodeError, ValueError):
+            except (OSError, UnicodeError, ValueError, RecursionError):
                 path_parse_error = True
 
             try:
@@ -232,7 +232,7 @@ class DelegationDoctorMixin:
                 data = json.loads(
                     read_text_bounded(settings_path, MAX_AGENT_AUTH_FILE_BYTES)
                 )
-            except (OSError, UnicodeError, ValueError):
+            except (OSError, UnicodeError, ValueError, RecursionError):
                 parse_errors.append(settings_path.as_posix())
                 continue
             env_block = data.get("env") if isinstance(data, dict) else None

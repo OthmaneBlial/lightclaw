@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from types import SimpleNamespace
 
+import pytest
+
 from core.bot import LightClawBot
 
 
@@ -74,3 +76,31 @@ def test_claude_doctor_skips_oversized_settings_file(tmp_path, monkeypatch):
 
     assert status == "warn"
     assert "Could not parse Claude settings" in message
+
+
+@pytest.mark.parametrize("provider", ["codex", "claude"])
+def test_agent_doctor_reports_recursively_nested_json_as_unreadable(
+    tmp_path, monkeypatch, provider
+):
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text("{}", encoding="utf-8")
+    bot = LightClawBot.__new__(LightClawBot)
+
+    def reject_nested_json(_content):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr("core.bot.delegation.doctor.json.loads", reject_nested_json)
+    if provider == "codex":
+        bot._resolve_codex_auth_path = lambda: settings_path
+        bot._run_probe_command = lambda *_args, **_kwargs: {
+            "stdout": "Not logged in", "stderr": "", "timed_out": False,
+        }
+        status, message, _fix = bot._codex_doctor_auth_status()
+    else:
+        bot._resolve_claude_settings_paths = lambda: [settings_path]
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+        status, message, _fix = bot._claude_doctor_auth_status()
+
+    assert status == "warn"
+    assert "Could not parse" in message
