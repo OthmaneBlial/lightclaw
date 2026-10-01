@@ -167,7 +167,7 @@ async def test_clear_drops_inflight_and_queued_chat_history(monkeypatch, clear_k
     bot._filter_recalled_memories = lambda items: items
     bot._clean_orphan_messages = lambda items: items
     bot._filter_recent_context = lambda items: items
-    bot._get_session_summary = Mock(return_value="")
+    bot._get_session_summary = AsyncMock(return_value="")
     bot._get_file_mode = Mock(return_value="chat")
     bot._is_file_intent = Mock(return_value=False)
     bot._process_file_blocks = AsyncMock(return_value=([], "answer"))

@@ -126,7 +126,7 @@ async def test_oversized_heartbeat_file_is_skipped_before_model_call(tmp_path, m
         recall=Mock(return_value=[]), format_memories_for_prompt=Mock(return_value="")
     )
     bot._filter_recalled_memories = lambda memories: memories
-    bot._get_session_summary = lambda _session_id: ""
+    bot._get_session_summary = AsyncMock(return_value="")
     bot.skills = SimpleNamespace(prompt_context=lambda _session_id: "")
     bot.personality = object()
     bot.llm = SimpleNamespace(chat=AsyncMock(return_value="NO_UPDATE"))
@@ -266,7 +266,7 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
     bot._heartbeat_file_path = lambda: heartbeat
     bot._llm_backoff_active = lambda: False
     bot._filter_recalled_memories = lambda memories: memories
-    bot._get_session_summary = lambda _session_id: ""
+    bot._get_session_summary = AsyncMock(return_value="")
     bot.personality = object()
     bot._is_provider_error_text = lambda _response: False
     bot._clear_llm_backoff = Mock()

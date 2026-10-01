@@ -77,6 +77,70 @@ async def test_clear_during_summary_does_not_restore_old_context():
 
 
 @pytest.mark.asyncio
+async def test_clear_during_summary_lookup_skips_model_request():
+    loop = asyncio.get_running_loop()
+    lookup_started = asyncio.Event()
+    release_lookup = threading.Event()
+
+    def get_summary(_session_id):
+        loop.call_soon_threadsafe(lookup_started.set)
+        assert release_lookup.wait(timeout=2)
+        return "old summary"
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"], context_window=128)
+    bot.memory = SimpleNamespace(
+        get_recent=Mock(
+            return_value=[{"role": "user", "content": f"old detail {i}"} for i in range(21)]
+        ),
+        scope_for=Mock(return_value=("telegram-user:42", "/workspace")),
+        get_summary=Mock(side_effect=get_summary),
+        set_summary=Mock(),
+        clear_session=Mock(),
+    )
+    bot.llm = SimpleNamespace(chat=AsyncMock())
+    bot._llm_backoff_until = 0.0
+    bot._summarizing = set()
+    bot._session_summaries = {}
+    bot._summary_generation_by_session = {}
+    bot._pending_wipe_confirm = {}
+    bot._pending_multi_plan_by_session = {}
+    bot._pending_trusted_agent_run_by_session = {}
+    bot._pending_voice_goal_by_session = {}
+    bot._voice_request_ids_by_session = {}
+    bot._session_id_from_update = Mock(return_value="chat-42")
+    bot._log_user_message = Mock()
+    bot._privileged_rate_limited = Mock(return_value=False)
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=42, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    summary_task = asyncio.create_task(bot.maybe_summarize("chat-42"))
+    clear_task = None
+    try:
+        await asyncio.wait_for(lookup_started.wait(), timeout=2)
+        clear_task = asyncio.create_task(bot.cmd_clear(update, SimpleNamespace()))
+        await asyncio.sleep(0)
+        release_lookup.set()
+        await clear_task
+        await summary_task
+    finally:
+        release_lookup.set()
+        if clear_task and not clear_task.done():
+            clear_task.cancel()
+        if not summary_task.done():
+            summary_task.cancel()
+        await asyncio.gather(summary_task, *( [clear_task] if clear_task else [] ), return_exceptions=True)
+
+    bot.llm.chat.assert_not_awaited()
+    bot.memory.clear_session.assert_called_once_with("chat-42")
+    assert bot._session_summaries == {}
+
+
+@pytest.mark.asyncio
 async def test_summary_reads_and_persists_sqlite_summary_across_restart(tmp_path):
     session_id = "chat-42"
     memory = MemoryStore(tmp_path / "memory.db")
@@ -115,12 +179,13 @@ async def test_summary_reads_and_persists_sqlite_summary_across_restart(tmp_path
         restarted_bot = LightClawBot.__new__(LightClawBot)
         restarted_bot.memory = memory
         restarted_bot._session_summaries = {}
-        assert restarted_bot._get_session_summary(session_id) == "Updated durable summary."
+        assert await restarted_bot._get_session_summary(session_id) == "Updated durable summary."
     finally:
         memory.db.close()
 
 
-def test_summary_cache_isolated_by_user_within_shared_group(tmp_path):
+@pytest.mark.asyncio
+async def test_summary_cache_isolated_by_user_within_shared_group(tmp_path):
     session_id = "group-1"
     memory = MemoryStore(tmp_path / "memory.db")
     memory.bind_session(
@@ -134,13 +199,13 @@ def test_summary_cache_isolated_by_user_within_shared_group(tmp_path):
     bot._summarizing = {bot._summary_key(session_id)}
 
     try:
-        assert bot._get_session_summary(session_id) == "private summary for user 42"
+        assert await bot._get_session_summary(session_id) == "private summary for user 42"
         memory.bind_session(
             session_id, user_namespace="telegram-user:99", workspace_namespace=str(tmp_path)
         )
         key_99 = bot._summary_key(session_id)
         assert key_99 not in bot._summarizing
-        assert bot._get_session_summary(session_id) == ""
+        assert await bot._get_session_summary(session_id) == ""
         bot._summarizing.add(key_99)
         bot._invalidate_session_summary(session_id)
         assert bot._summary_generation_by_session[key_99] == 1
@@ -148,13 +213,14 @@ def test_summary_cache_isolated_by_user_within_shared_group(tmp_path):
         memory.bind_session(
             session_id, user_namespace="telegram-user:42", workspace_namespace=str(tmp_path)
         )
-        assert bot._get_session_summary(session_id) == "private summary for user 42"
+        assert await bot._get_session_summary(session_id) == "private summary for user 42"
         assert bot._summary_generation_by_session.get(bot._summary_key(session_id), 0) == 0
     finally:
         memory.db.close()
 
 
-def test_summary_cache_evicts_least_recent_user_scope(tmp_path, monkeypatch):
+@pytest.mark.asyncio
+async def test_summary_cache_evicts_least_recent_user_scope(tmp_path, monkeypatch):
     monkeypatch.setattr("core.bot.context.MAX_CACHED_SESSION_SUMMARIES", 2)
     session_id = "group-1"
     memory = MemoryStore(tmp_path / "memory.db")
@@ -162,30 +228,30 @@ def test_summary_cache_evicts_least_recent_user_scope(tmp_path, monkeypatch):
     bot.memory = memory
     bot._session_summaries = {}
 
-    def store_summary(user_id, value):
+    async def store_summary(user_id, value):
         memory.bind_session(
             session_id, user_namespace=f"telegram-user:{user_id}", workspace_namespace=str(tmp_path)
         )
         memory.set_summary(session_id, value)
-        return bot._get_session_summary(session_id)
+        return await bot._get_session_summary(session_id)
 
     try:
-        assert store_summary(42, "summary A") == "summary A"
+        assert await store_summary(42, "summary A") == "summary A"
         key_42 = bot._summary_key(session_id)
-        assert store_summary(99, "summary B") == "summary B"
+        assert await store_summary(99, "summary B") == "summary B"
         key_99 = bot._summary_key(session_id)
         memory.bind_session(
             session_id, user_namespace="telegram-user:42", workspace_namespace=str(tmp_path)
         )
-        assert bot._get_session_summary(session_id) == "summary A"
-        assert store_summary(17, "summary C") == "summary C"
+        assert await bot._get_session_summary(session_id) == "summary A"
+        assert await store_summary(17, "summary C") == "summary C"
         key_17 = bot._summary_key(session_id)
         assert set(bot._session_summaries) == {key_42, key_17}
 
         memory.bind_session(
             session_id, user_namespace="telegram-user:99", workspace_namespace=str(tmp_path)
         )
-        assert bot._get_session_summary(session_id) == "summary B"
+        assert await bot._get_session_summary(session_id) == "summary B"
         assert set(bot._session_summaries) == {key_17, key_99}
     finally:
         memory.db.close()
@@ -239,13 +305,15 @@ async def test_show_runs_database_and_skill_reads_off_event_loop():
     bot.is_update_allowed = lambda _update: True
     bot._session_id_from_update = lambda _update: "42"
     bot._log_user_message = Mock()
-    bot._get_session_summary = lambda _session_id: ""
+    bot._session_summaries = {}
     bot._agent_mode_by_session = {}
     bot._file_mode_by_session = {}
     bot._get_file_mode = lambda _session_id: "chat"
     bot._get_pending_multi_plan = lambda _session_id: None
     bot.memory = SimpleNamespace(
-        stats=Mock(side_effect=lambda **_kwargs: record_thread({"total_interactions": 0}))
+        stats=Mock(side_effect=lambda **_kwargs: record_thread({"total_interactions": 0})),
+        scope_for=Mock(return_value=("telegram-user:42", "/workspace")),
+        get_summary=Mock(side_effect=lambda _session: record_thread("")),
     )
     bot.skills = SimpleNamespace(
         list_skills=Mock(side_effect=lambda: record_thread([])),
@@ -263,7 +331,7 @@ async def test_show_runs_database_and_skill_reads_off_event_loop():
 
     await bot.cmd_show(update, SimpleNamespace())
 
-    assert len(worker_threads) == 4
+    assert len(worker_threads) == 5
     assert all(thread_id != loop_thread for thread_id in worker_threads)
 
 

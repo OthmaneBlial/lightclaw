@@ -153,7 +153,7 @@ async def test_invalid_skill_state_stops_chat_before_llm_request():
     bot._filter_recalled_memories = lambda memories: memories
     bot._clean_orphan_messages = lambda messages: messages
     bot._filter_recent_context = lambda messages: messages
-    bot._get_session_summary = lambda _session_id: ""
+    bot._get_session_summary = AsyncMock(return_value="")
 
     def invalid_state(_session_id):
         raise SkillError("skills state is invalid; no changes were made")

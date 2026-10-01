@@ -44,7 +44,7 @@ class BotHandlersMixin:
             asyncio.to_thread(self.skills.list_skills),
             asyncio.to_thread(self.jobs.diagnostics, session_id=session_id),
         )
-        summary_status = "✅" if self._get_session_summary(session_id) else "—"
+        summary_status = "✅" if await self._get_session_summary(session_id) else "—"
         try:
             active_skills = await asyncio.to_thread(
                 self.skills.active_records, session_id
@@ -408,7 +408,7 @@ class BotHandlersMixin:
         recent = self._filter_recent_context(recent)
 
         # 4. Get session summary
-        summary = self._get_session_summary(session_id)
+        summary = await self._get_session_summary(session_id)
         try:
             skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
         except SkillError:

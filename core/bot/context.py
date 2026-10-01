@@ -74,7 +74,9 @@ class BotContextMixin:
             return
 
         key = self._summary_key(session_id)
-        existing_summary = self._get_session_summary(session_id)
+        existing_summary = await self._get_session_summary(session_id)
+        if generation != self._summary_generation_by_session.get(key, 0):
+            return
 
         # Build summarization prompt
         prompt = "Provide a concise summary of this conversation, preserving key context and important points.\n"
@@ -118,24 +120,27 @@ class BotContextMixin:
                 self._summary_generation_by_session.get(key, 0) + 1
             )
 
-    def _get_session_summary(self, session_id: str) -> str:
+    async def _get_session_summary(self, session_id: str) -> str:
         """Get the stored summary for a session."""
         key = self._summary_key(session_id)
-        # First check in-memory cache
-        if key in self._session_summaries:
-            summary = self._sanitize_summary_for_prompt(self._session_summaries[key])
+        async with self._get_memory_wipe_lock():
+            # First check in-memory cache
+            if key in self._session_summaries:
+                summary = self._sanitize_summary_for_prompt(self._session_summaries[key])
+                if self._is_provider_error_text(summary):
+                    self._session_summaries.pop(key, None)
+                    return ""
+                self._cache_session_summary(key, summary)
+                return summary
+            # Fall back to memory store
+            summary = self._sanitize_summary_for_prompt(
+                await asyncio.to_thread(self.memory.get_summary, session_id)
+            )
             if self._is_provider_error_text(summary):
-                self._session_summaries.pop(key, None)
                 return ""
-            self._cache_session_summary(key, summary)
+            if summary:
+                self._cache_session_summary(key, summary)
             return summary
-        # Fall back to memory store
-        summary = self._sanitize_summary_for_prompt(self.memory.get_summary(session_id))
-        if self._is_provider_error_text(summary):
-            return ""
-        if summary:
-            self._cache_session_summary(key, summary)
-        return summary
 
     # ── Emergency Context Compression ────────────────────────
 

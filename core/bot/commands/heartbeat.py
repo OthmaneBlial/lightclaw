@@ -155,7 +155,7 @@ class CommandsHeartbeatMixin:
         )
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)
-        summary = self._get_session_summary(session_id)
+        summary = await self._get_session_summary(session_id)
         try:
             skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
         except SkillError as exc:

@@ -924,7 +924,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             recent = bot._clean_orphan_messages(recent)
             recent = bot._filter_recent_context(recent)
 
-            summary = bot._get_session_summary(session_id)
+            summary = await bot._get_session_summary(session_id)
             skills_text = await asyncio.to_thread(bot.skills.prompt_context, session_id)
             file_mode = bot._get_file_mode(session_id)
 
