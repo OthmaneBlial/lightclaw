@@ -1,6 +1,6 @@
 # Roadmap Evidence Audit
 
-**Audit date:** 2026-09-30
+**Audit date:** 2026-10-01
 **Result:** repository-controlled implementation is complete; 11 live release/adoption
 evidence gates remain open.
 
@@ -95,6 +95,11 @@ roadmap's “proof over claims” rule.
   out-of-range callback values are rejected, and page reads still use the session-history index
   without a temporary sort. The runtime-line cap is 22,125 for this 71-line change, documented in
   `docs/architecture/core-budget.json`.
+- Latest canonical `scripts/quality.py` run at `5936b48` passed on macOS arm64 Python 3.14.7:
+  868 tests, lint, documentation links, provider artifacts, architecture/runtime budgets, locked
+  dependency resolution, dependency audit, sdist/wheel build, and clean-wheel installation. The
+  added regression case checks that a chat cannot open another chat's run through either the
+  legacy history callback or the snapshot-cursor callback.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
