@@ -20,6 +20,7 @@ from ..fs import open_regular_file_at
 from ..jobs import JobStateError
 from ..markdown import _escape_html
 from ..receipts import read_receipt
+from .delegation.workspace import await_thread_completion
 
 MAX_REVIEWED_COMMANDS = 6
 MAX_DIFF_PREVIEW_BYTES = 32 * 1024
@@ -518,7 +519,7 @@ class BotApprovalsMixin:
             await self._reply_logged(update, "No completed run receipt is available.")
             return
         try:
-            receipt = read_receipt(receipt_value)
+            receipt = await await_thread_completion(read_receipt, receipt_value)
         except ValueError:
             await self._reply_logged(update, "The local run receipt is unavailable.")
             return
@@ -583,25 +584,27 @@ class BotApprovalsMixin:
                 review_lines.extend(["", "Patch is unavailable or could not be opened safely."])
                 await self._reply_logged(update, "\n".join(review_lines))
                 return
-            if patch_size <= MAX_DIFF_PREVIEW_BYTES:
-                try:
-                    patch_bytes = patch_handle.read(MAX_DIFF_PREVIEW_BYTES + 1)
-                    if len(patch_bytes) > MAX_DIFF_PREVIEW_BYTES:
-                        raise ValueError("patch grew beyond preview limit")
-                    patch = patch_bytes.decode("utf-8")
-                    review_lines.extend(
-                        ["", "Patch preview (first text hunk):", self._mobile_diff_preview(patch)]
-                    )
-                except (OSError, UnicodeError, ValueError):
-                    review_lines.extend(["", "Inline preview unavailable; full patch attached."])
-                finally:
-                    patch_handle.seek(0)
-            else:
-                review_lines.extend(
-                    ["", "Patch exceeds the inline preview limit; full patch attached."]
-                )
-            review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
             try:
+                if patch_size <= MAX_DIFF_PREVIEW_BYTES:
+                    try:
+                        patch_bytes = await await_thread_completion(
+                            patch_handle.read, MAX_DIFF_PREVIEW_BYTES + 1
+                        )
+                        if len(patch_bytes) > MAX_DIFF_PREVIEW_BYTES:
+                            raise ValueError("patch grew beyond preview limit")
+                        patch = patch_bytes.decode("utf-8")
+                        review_lines.extend(
+                            ["", "Patch preview (first text hunk):", self._mobile_diff_preview(patch)]
+                        )
+                    except (OSError, UnicodeError, ValueError):
+                        review_lines.extend(["", "Inline preview unavailable; full patch attached."])
+                    finally:
+                        await await_thread_completion(patch_handle.seek, 0)
+                else:
+                    review_lines.extend(
+                        ["", "Patch exceeds the inline preview limit; full patch attached."]
+                    )
+                review_lines.append("Full patch attached below; nothing has been accepted or pushed.")
                 await self._reply_logged(update, "\n".join(review_lines))
                 try:
                     with patch_handle:

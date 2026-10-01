@@ -57,7 +57,7 @@
     },
     {
       "branch_points": 54,
-      "line": 320,
+      "line": 321,
       "lines": 194,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -199,7 +199,7 @@
     },
     {
       "branch_points": 54,
-      "line": 320,
+      "line": 321,
       "lines": 194,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -261,7 +261,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 658,
+      "lines": 661,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21560,
+  "runtime_lines": 21563,
   "schema_version": 1
 }

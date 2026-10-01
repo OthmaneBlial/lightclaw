@@ -12,6 +12,7 @@ import pytest
 from telegram import InputFile
 from telegram.error import NetworkError
 
+import core.bot.approvals as approvals
 from config import Config
 from core.bot import LightClawBot
 from core.jobs import JobStore
@@ -1619,7 +1620,19 @@ async def test_result_decision_stays_bound_to_its_run_during_session_change(tmp_
 
 
 @pytest.mark.asyncio
-async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
+async def test_view_diff_sends_compact_summary_before_patch(tmp_path, monkeypatch):
+    loop_thread = threading.get_ident()
+    worker_threads = {}
+    run_in_thread = approvals.await_thread_completion
+
+    async def track_thread(function, *args, **kwargs):
+        def record_thread(*inner_args, **inner_kwargs):
+            worker_threads[function.__name__] = threading.get_ident()
+            return function(*inner_args, **inner_kwargs)
+
+        return await run_in_thread(record_thread, *args, **kwargs)
+
+    monkeypatch.setattr(approvals, "await_thread_completion", track_thread)
     patch_path = tmp_path / "changes.patch"
     patch_content = (
         "diff --git a/file b/file\n"
@@ -1673,6 +1686,8 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path):
 
     await bot._send_last_run_diff(update, "456", "run-18")
 
+    assert {"read_receipt", "read", "seek"} <= worker_threads.keys()
+    assert all(thread_id != loop_thread for thread_id in worker_threads.values())
     assert [kind for kind, _ in events] == ["summary", "patch"]
     assert "10 files changed, 7 insertions(+), 2 deletions(-)" in events[0][1]
     assert "src/main.py" in events[0][1]
