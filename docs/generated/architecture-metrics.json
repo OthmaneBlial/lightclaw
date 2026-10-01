@@ -14,18 +14,18 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
+      "branch_points": 94,
+      "line": 250,
+      "lines": 509,
+      "name": "_process_file_blocks",
+      "path": "core/bot/file_ops.py"
+    },
+    {
       "branch_points": 93,
       "line": 67,
       "lines": 495,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
-    },
-    {
-      "branch_points": 93,
-      "line": 250,
-      "lines": 459,
-      "name": "_process_file_blocks",
-      "path": "core/bot/file_ops.py"
     },
     {
       "branch_points": 72,
@@ -121,18 +121,18 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
+      "branch_points": 94,
+      "line": 250,
+      "lines": 509,
+      "name": "_process_file_blocks",
+      "path": "core/bot/file_ops.py"
+    },
+    {
       "branch_points": 93,
       "line": 67,
       "lines": 495,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
-    },
-    {
-      "branch_points": 93,
-      "line": 250,
-      "lines": 459,
-      "name": "_process_file_blocks",
-      "path": "core/bot/file_ops.py"
     },
     {
       "branch_points": 71,
@@ -237,7 +237,7 @@
       "path": "skills.py"
     },
     {
-      "lines": 1038,
+      "lines": 1088,
       "path": "core/bot/file_ops.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21466,
+  "runtime_lines": 21516,
   "schema_version": 1
 }

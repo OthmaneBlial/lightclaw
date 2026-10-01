@@ -292,8 +292,22 @@ class BotFileOpsMixin:
         def success_count() -> int:
             return sum(1 for op in operations if op.action != "error")
 
-        def write_workspace_file(raw_path: str, content: str, auto_generated: bool = False) -> str:
-            target, rel_path, path_err = self._resolve_workspace_path(raw_path)
+        async def substitute_async(pattern, text: str, replacement) -> str:
+            parts: list[str] = []
+            offset = 0
+            for match in pattern.finditer(text):
+                parts.append(text[offset : match.start()])
+                parts.append(await replacement(match))
+                offset = match.end()
+            parts.append(text[offset:])
+            return "".join(parts)
+
+        async def write_workspace_file(
+            raw_path: str, content: str, auto_generated: bool = False
+        ) -> str:
+            target, rel_path, path_err = await await_thread_completion(
+                self._resolve_workspace_path, raw_path
+            )
             display_path = rel_path or raw_path.strip().replace("\x00", "?") or "unknown"
             if path_err or target is None or rel_path is None:
                 operations.append(FileOperationResult("error", display_path, path_err or "invalid path"))
@@ -306,9 +320,11 @@ class BotFileOpsMixin:
                 )
                 return f"[Save blocked: {rel_path}]"
 
-            workspace = Path(self.config.workspace_path).resolve()
+            workspace = await await_thread_completion(
+                Path(self.config.workspace_path).resolve
+            )
             try:
-                before = _read_chat_file(workspace, rel_path)
+                before = await _read_chat_file_async(workspace, rel_path)
             except FileNotFoundError:
                 before = None
             except Exception as e:
@@ -316,7 +332,13 @@ class BotFileOpsMixin:
                 return f"[Save failed: {rel_path}]"
 
             try:
-                _write_workspace_text(workspace, rel_path, content, expected_content=before)
+                await await_thread_completion(
+                    _write_workspace_text,
+                    workspace,
+                    rel_path,
+                    content,
+                    expected_content=before,
+                )
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Save failed: {rel_path}]"
@@ -485,11 +507,13 @@ class BotFileOpsMixin:
 
             return assembled, False
 
-        def apply_edit_block(match: re.Match) -> str:
+        async def apply_edit_block(match: re.Match) -> str:
             raw_path = match.group("path").strip()
             edit_body = match.group("body").strip("\n")
 
-            target, rel_path, path_err = self._resolve_workspace_path(raw_path)
+            target, rel_path, path_err = await await_thread_completion(
+                self._resolve_workspace_path, raw_path
+            )
             display_path = rel_path or raw_path.replace("\x00", "?") or "unknown"
             if path_err or target is None or rel_path is None:
                 operations.append(FileOperationResult("error", display_path, path_err or "invalid path"))
@@ -502,9 +526,11 @@ class BotFileOpsMixin:
                 )
                 return f"[Edit blocked: {rel_path}]"
 
-            workspace = Path(self.config.workspace_path).resolve()
+            workspace = await await_thread_completion(
+                Path(self.config.workspace_path).resolve
+            )
             try:
-                before = _read_chat_file(workspace, rel_path)
+                before = await _read_chat_file_async(workspace, rel_path)
             except FileNotFoundError:
                 operations.append(FileOperationResult("error", rel_path, "file not found"))
                 return f"[Edit failed: {rel_path}]"
@@ -512,7 +538,9 @@ class BotFileOpsMixin:
                 operations.append(FileOperationResult("error", rel_path, f"failed to read file: {e}"))
                 return f"[Edit failed: {rel_path}]"
 
-            after, apply_err = self._apply_search_replace_hunks(before, edit_body)
+            after, apply_err = await await_thread_completion(
+                self._apply_search_replace_hunks, before, edit_body
+            )
             if apply_err:
                 operations.append(FileOperationResult("error", rel_path, apply_err))
                 return f"[Edit failed: {rel_path}]"
@@ -522,7 +550,13 @@ class BotFileOpsMixin:
                 return f"[No changes: {rel_path}]"
 
             try:
-                _write_workspace_text(workspace, rel_path, after, expected_content=before)
+                await await_thread_completion(
+                    _write_workspace_text,
+                    workspace,
+                    rel_path,
+                    after,
+                    expected_content=before,
+                )
             except Exception as e:
                 operations.append(FileOperationResult("error", rel_path, f"failed to write file: {e}"))
                 return f"[Edit failed: {rel_path}]"
@@ -533,20 +567,24 @@ class BotFileOpsMixin:
             return f"[File edited: {rel_path}]"
 
         if allow_file_writes:
-            cleaned_response = re.sub(edit_pattern, apply_edit_block, cleaned_response)
+            cleaned_response = await substitute_async(
+                edit_pattern, cleaned_response, apply_edit_block
+            )
 
         pattern_named = re.compile(
             r"```([a-zA-Z0-9_+\-]+):([^\n`]+)\s*\n([\s\S]*?)```",
             re.MULTILINE,
         )
 
-        def apply_named_file_block(match: re.Match) -> str:
+        async def apply_named_file_block(match: re.Match) -> str:
             raw_path = match.group(2).strip()
             content = match.group(3).strip()
-            return write_workspace_file(raw_path, content)
+            return await write_workspace_file(raw_path, content)
 
         if allow_file_writes:
-            cleaned_response = re.sub(pattern_named, apply_named_file_block, cleaned_response)
+            cleaned_response = await substitute_async(
+                pattern_named, cleaned_response, apply_named_file_block
+            )
 
         # Common malformed style: ```index.html ... ```
         pattern_filename_fence = re.compile(
@@ -554,26 +592,30 @@ class BotFileOpsMixin:
             re.MULTILINE,
         )
 
-        def apply_filename_fence_block(match: re.Match) -> str:
+        async def apply_filename_fence_block(match: re.Match) -> str:
             raw_path = match.group("path").strip()
             content = match.group("body").strip()
-            return write_workspace_file(raw_path, content)
+            return await write_workspace_file(raw_path, content)
 
         if allow_file_writes:
-            cleaned_response = re.sub(pattern_filename_fence, apply_filename_fence_block, cleaned_response)
+            cleaned_response = await substitute_async(
+                pattern_filename_fence, cleaned_response, apply_filename_fence_block
+            )
 
         pattern_file_label = re.compile(
             r"File:\s*([^\n`]+)\s*\n```([a-zA-Z0-9_+\-]+)?\s*\n?([\s\S]*?)```",
             re.IGNORECASE,
         )
 
-        def apply_file_label_block(match: re.Match) -> str:
+        async def apply_file_label_block(match: re.Match) -> str:
             raw_path = match.group(1).strip()
             content = match.group(3).strip()
-            return write_workspace_file(raw_path, content)
+            return await write_workspace_file(raw_path, content)
 
         if allow_file_writes:
-            cleaned_response = re.sub(pattern_file_label, apply_file_label_block, cleaned_response)
+            cleaned_response = await substitute_async(
+                pattern_file_label, cleaned_response, apply_file_label_block
+            )
 
         file_counter = 1
         pattern_auto = re.compile(r"```([a-zA-Z0-9_+\-]+)?\s*\n([\s\S]*?)```")
@@ -585,7 +627,7 @@ class BotFileOpsMixin:
             lowered = content.lower()
             return any(h in lowered for h in hints)
 
-        def apply_auto_block(match: re.Match) -> str:
+        async def apply_auto_block(match: re.Match) -> str:
             nonlocal file_counter
             lang = (match.group(1) or "txt").strip().lower()
             content = match.group(2).strip()
@@ -599,10 +641,12 @@ class BotFileOpsMixin:
             ext = lang_extensions.get(lang, ".txt")
             filename = f"output_{int(time.time())}_{file_counter}{ext}"
             file_counter += 1
-            return write_workspace_file(filename, content, auto_generated=True)
+            return await write_workspace_file(filename, content, auto_generated=True)
 
         if allow_file_writes:
-            cleaned_response = re.sub(pattern_auto, apply_auto_block, cleaned_response)
+            cleaned_response = await substitute_async(
+                pattern_auto, cleaned_response, apply_auto_block
+            )
 
         # Salvage malformed/unclosed named fence: ```html:index.html ...EOF
         if allow_file_writes and success_count() == 0:
@@ -622,9 +666,11 @@ class BotFileOpsMixin:
                         partial_content=content,
                     )
                     if completed:
-                        marker = write_workspace_file(raw_path, completed_content)
+                        marker = await write_workspace_file(raw_path, completed_content)
                     else:
-                        _, rel_path, _ = self._resolve_workspace_path(raw_path)
+                        _, rel_path, _ = await await_thread_completion(
+                            self._resolve_workspace_path, raw_path
+                        )
                         display_path = rel_path or raw_path.replace("\x00", "?") or "unknown"
                         operations.append(
                             FileOperationResult(
@@ -658,7 +704,9 @@ class BotFileOpsMixin:
                         partial_content=content,
                     )
                     if completed:
-                        marker = write_workspace_file(filename, completed_content, auto_generated=True)
+                        marker = await write_workspace_file(
+                            filename, completed_content, auto_generated=True
+                        )
                     else:
                         operations.append(
                             FileOperationResult(
@@ -692,7 +740,9 @@ class BotFileOpsMixin:
                         )
                         marker = "[Save failed: index.html]"
                     else:
-                        marker = write_workspace_file("index.html", html, auto_generated=True)
+                        marker = await write_workspace_file(
+                            "index.html", html, auto_generated=True
+                        )
                     intro = cleaned_response[:html_start].strip()
                     cleaned_response = (f"{intro}\n\n{marker}" if intro else marker).strip()
 

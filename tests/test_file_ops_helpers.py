@@ -123,6 +123,50 @@ async def test_file_edit_preserves_concurrent_user_change(tmp_path, monkeypatch)
     assert target.read_text(encoding="utf-8") == "concurrent user change"
 
 
+@pytest.mark.asyncio
+async def test_file_block_reads_and_writes_run_off_event_loop(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    existing = workspace / "notes.txt"
+    existing.write_text("before", encoding="utf-8")
+    loop_thread = threading.get_ident()
+    resolve_threads = []
+    read_threads = []
+    write_threads = []
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    resolve = bot._resolve_workspace_path
+    read_file = file_ops._read_chat_file
+    write_file = file_ops._write_workspace_text
+
+    def track_resolve(*args, **kwargs):
+        resolve_threads.append(threading.get_ident())
+        return resolve(*args, **kwargs)
+
+    def track_read(*args, **kwargs):
+        read_threads.append(threading.get_ident())
+        return read_file(*args, **kwargs)
+
+    def track_write(*args, **kwargs):
+        write_threads.append(threading.get_ident())
+        return write_file(*args, **kwargs)
+
+    bot._resolve_workspace_path = track_resolve
+    monkeypatch.setattr(file_ops, "_read_chat_file", track_read)
+    monkeypatch.setattr(file_ops, "_write_workspace_text", track_write)
+
+    operations, _ = await bot._process_file_blocks(
+        f"```edit:notes.txt\n{_hunk('before', 'after')}\n```\n"
+        "```txt:new.txt\ncreated\n```"
+    )
+
+    assert [operation.action for operation in operations] == ["edited", "created"]
+    assert existing.read_text(encoding="utf-8") == "after"
+    assert (workspace / "new.txt").read_text(encoding="utf-8") == "created"
+    for threads in (resolve_threads, read_threads, write_threads):
+        assert threads and all(thread_id != loop_thread for thread_id in threads)
+
+
 def test_response_compaction_keeps_plain_text_and_removes_markers_and_code():
     response = "[File updated: app.py]\nImplemented the fix.\n\n```python\nprint('hidden')\n```\n\nNext step."
     assert BotFileOpsMixin._compact_response_for_file_ops(response) == (
