@@ -37,6 +37,8 @@ LightClaw already contains much of this engine. The opportunity is to make it sa
 
 ## Audited baseline
 
+This table records the 2026-08-24 project snapshot. It is historical; see the [current roadmap evidence audit](docs/ROADMAP_AUDIT.md) for implementation status and remaining release/adoption gates.
+
 ### What is already strong
 
 - A focused Telegram-first interface plus local terminal chat.
