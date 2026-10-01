@@ -177,6 +177,16 @@ class DelegationWorkspaceMixin:
             if store is not None:
                 await self._cancel_durable_delegation(store, session_id, run_id)
             raise
+        except Exception as exc:
+            if store is not None:
+                await self._finalize_durable_delegation(
+                    store,
+                    run_id,
+                    {"ok": False, "stderr": type(exc).__name__},
+                )
+                if self._active_run_ids_by_session.get(session_id) == run_id:
+                    self._active_run_ids_by_session.pop(session_id, None)
+            raise
 
     async def _cancel_durable_delegation(
         self,

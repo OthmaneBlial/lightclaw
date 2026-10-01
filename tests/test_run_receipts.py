@@ -276,6 +276,60 @@ async def test_snapshot_failure_cancels_claimed_job_without_launching_agent(
 
 
 @pytest.mark.asyncio
+async def test_post_run_snapshot_failure_fails_job_and_clears_active_run(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+    snapshot_count = 0
+
+    def fail_final_snapshot(_workspace):
+        nonlocal snapshot_count
+        snapshot_count += 1
+        if snapshot_count == 2:
+            raise OSError("final snapshot unavailable")
+        return {}
+
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    monkeypatch.setattr(bot, "_snapshot_workspace_state", fail_final_snapshot, raising=False)
+    bot._invoke_local_agent_streaming = AsyncMock(
+        return_value={
+            "ok": True,
+            "exit_code": 0,
+            "stdout": "",
+            "stderr": "",
+            "summary": "Agent completed",
+            "elapsed": 0.25,
+            "timed_out": False,
+        }
+    )
+    try:
+        with pytest.raises(OSError, match="final snapshot unavailable"):
+            await bot._run_local_agent_task("456", "codex", "finish after snapshot")
+
+        job = bot.jobs.list_jobs()[0]
+        assert job["status"] == "failed"
+        assert job["lanes"][0]["status"] == "failed"
+        assert bot._active_run_ids_by_session == {}
+        assert bot._active_run_tasks_by_session == {}
+    finally:
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
 async def test_sqlite_error_after_single_run_claim_cancels_durable_job(
     tmp_path, monkeypatch
 ):
