@@ -17,6 +17,7 @@ from ...fs import FileTooLargeError, read_text_bounded
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import build_system_prompt, runtime_root_from_workspace
+from ..delegation.workspace import await_thread_completion
 from ..messaging import _TelegramHTMLChunker
 
 MAX_HEARTBEAT_BYTES = 64 * 1024
@@ -48,15 +49,14 @@ class CommandsHeartbeatMixin:
         return f"{value // 3600}h"
 
 
-    def _render_heartbeat_status(self) -> str:
+    def _render_heartbeat_status(self, heartbeat_path: Path, heartbeat_file_exists: bool) -> str:
         interval_min = max(5, int(self._heartbeat_interval_sec // 60))
         mode = "on" if self._heartbeat_enabled else "off"
         task_state = (
             "running" if self._heartbeat_task and not self._heartbeat_task.done() else "stopped"
         )
         target = self._heartbeat_last_chat_id or "none"
-        heartbeat_path = self._heartbeat_file_path()
-        exists = "yes" if heartbeat_path.exists() else "no"
+        exists = "yes" if heartbeat_file_exists else "no"
         last_run = "never"
         if self._heartbeat_last_run_at > 0:
             last_run = f"{self._format_elapsed(time.time() - self._heartbeat_last_run_at)} ago"
@@ -116,15 +116,16 @@ class CommandsHeartbeatMixin:
             await self._run_heartbeat_once_impl(bot, session_id, clear_event)
 
     async def _run_heartbeat_once_impl(self, bot, session_id: str, clear_event: asyncio.Event):
-        heartbeat_path = self._heartbeat_file_path()
-        if not heartbeat_path.exists():
-            return
+        heartbeat_path = await await_thread_completion(self._heartbeat_file_path)
 
         try:
-            heartbeat_body = read_text_bounded(
+            heartbeat_body = (await await_thread_completion(
+                read_text_bounded,
                 heartbeat_path,
                 MAX_HEARTBEAT_BYTES,
-            ).strip()
+            )).strip()
+        except FileNotFoundError:
+            return
         except FileTooLargeError:
             log.warning(
                 "[%s] HEARTBEAT.md exceeds the 64 KiB limit; scheduled run skipped",
@@ -310,9 +311,11 @@ class CommandsHeartbeatMixin:
         sub = (args[0].strip().lower() if args else "show")
 
         if sub in {"show", "status"}:
+            heartbeat_path = await await_thread_completion(self._heartbeat_file_path)
+            heartbeat_file_exists = await await_thread_completion(heartbeat_path.exists)
             await self._reply_logged(
                 update,
-                self._render_heartbeat_status(),
+                self._render_heartbeat_status(heartbeat_path, heartbeat_file_exists),
                 parse_mode=ParseMode.HTML,
             )
             return
@@ -361,10 +364,11 @@ class CommandsHeartbeatMixin:
             self._heartbeat_enabled = True
             await self._ensure_heartbeat_task(context.bot)
 
-            heartbeat_path = self._heartbeat_file_path()
+            heartbeat_path = await await_thread_completion(self._heartbeat_file_path)
+            heartbeat_file_exists = await await_thread_completion(heartbeat_path.exists)
             file_hint = (
                 f"Found <code>{_escape_html(heartbeat_path.as_posix())}</code>."
-                if heartbeat_path.exists()
+                if heartbeat_file_exists
                 else (
                     f"No <code>{_escape_html(heartbeat_path.as_posix())}</code> yet. "
                     "Create it to define heartbeat behavior."

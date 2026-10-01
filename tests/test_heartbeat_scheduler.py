@@ -10,6 +10,7 @@ from telegram.error import NetworkError
 
 from config import Config
 from core.bot import LightClawBot
+from core.bot.commands import heartbeat as heartbeat_commands
 from memory import MemoryStore
 
 
@@ -118,6 +119,15 @@ async def test_heartbeat_target_and_scope_change_only_on_explicit_enable(
 async def test_oversized_heartbeat_file_is_skipped_before_model_call(tmp_path, monkeypatch):
     heartbeat = tmp_path / "HEARTBEAT.md"
     heartbeat.write_bytes(b"x" * (64 * 1024 + 1))
+    loop_thread = threading.get_ident()
+    read_threads = []
+    read_text = heartbeat_commands.read_text_bounded
+
+    def record_read_thread(*args, **kwargs):
+        read_threads.append(threading.get_ident())
+        return read_text(*args, **kwargs)
+
+    monkeypatch.setattr(heartbeat_commands, "read_text_bounded", record_read_thread)
     bot = LightClawBot.__new__(LightClawBot)
     bot._heartbeat_file_path = lambda: heartbeat
     bot._llm_backoff_active = lambda: False
@@ -139,6 +149,59 @@ async def test_oversized_heartbeat_file_is_skipped_before_model_call(tmp_path, m
     await bot._run_heartbeat_once(None, "123")
 
     bot.llm.chat.assert_not_awaited()
+    assert read_threads and all(thread_id != loop_thread for thread_id in read_threads)
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_status_resolves_and_checks_file_off_event_loop(tmp_path, monkeypatch):
+    heartbeat = tmp_path / "HEARTBEAT.md"
+    heartbeat.write_text("Check releases")
+    loop_thread = threading.get_ident()
+    path_threads = []
+    exists_threads = []
+    path_exists = type(heartbeat).exists
+
+    def heartbeat_path():
+        path_threads.append(threading.get_ident())
+        return heartbeat
+
+    def record_exists_thread(path):
+        if path == heartbeat:
+            exists_threads.append(threading.get_ident())
+        return path_exists(path)
+
+    monkeypatch.setattr(type(heartbeat), "exists", record_exists_thread)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    bot._heartbeat_enabled = False
+    bot._heartbeat_interval_sec = 300
+    bot._heartbeat_task = None
+    bot._heartbeat_last_chat_id = ""
+    bot._heartbeat_last_run_at = 0
+    bot._heartbeat_file_path = heartbeat_path
+
+    await bot.cmd_heartbeat(
+        SimpleNamespace(
+            effective_user=SimpleNamespace(id=123), message=SimpleNamespace()
+        ),
+        SimpleNamespace(args=["show"]),
+    )
+
+    assert path_threads and all(thread_id != loop_thread for thread_id in path_threads)
+    assert exists_threads and all(thread_id != loop_thread for thread_id in exists_threads)
+    assert "exists: yes" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_missing_heartbeat_file_is_skipped(tmp_path):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._heartbeat_file_path = lambda: tmp_path / "missing.md"
+
+    await bot._run_heartbeat_once_impl(None, "123", asyncio.Event())
 
 
 @pytest.mark.asyncio

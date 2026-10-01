@@ -212,9 +212,9 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "branch_points": 31,
+      "branch_points": 30,
       "line": 118,
-      "lines": 174,
+      "lines": 175,
       "name": "_run_heartbeat_once_impl",
       "path": "core/bot/commands/heartbeat.py"
     }
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21436,
+  "runtime_lines": 21440,
   "schema_version": 1
 }
