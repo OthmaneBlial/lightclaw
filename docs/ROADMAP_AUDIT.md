@@ -53,18 +53,19 @@ roadmap's “proof over claims” rule.
   Python 3.10.21, 3.11.16, 3.12.14, 3.13.1, and 3.14.7. Python 3.10–3.13 emitted three
   third-party deprecation warnings each; Python 3.14 emitted four from `python-telegram-bot`
   and `google-genai`.
-- Latest canonical quality suite at `c5fa6f4` on 2026-10-01: all 847 tests passed on macOS
+- Python 3.10 canonical quality at `c5fa6f4` on 2026-10-01: all 847 tests passed on macOS
   arm64 with Python 3.10.21; lint, documentation links, provider matrix, architecture/runtime
   budgets, locked dependency resolution, runtime footprint, skill validation, showcase replay,
   launch evidence, dependency audit, package build, and clean-wheel installation also passed.
   The three legacy skill migration cases cover symlink files, symlink swaps, and oversized files.
   The clean venv used the pinned pip from `requirements-pip.txt`; Python 3.10.21's bundled pip
   23.0.1 could not resolve one hashed transitive extra.
-- Latest canonical quality suite at `c0ae46e` on 2026-10-01: all 849 tests passed on macOS
+- Latest canonical quality suite at `284c29d` on 2026-10-01: all 849 tests passed on macOS
   arm64 with Python 3.14.7; lint, documentation links, architecture/runtime budgets,
   dependency audit, package build, and clean-wheel installation also passed. The added cancel
-  tests verify that a local run stops while durable SQLite cancellation is delayed and that a
-  persistence failure is reported. One third-party `google-genai` deprecation warning remains.
+  tests verify immediate local cancellation before delayed SQLite persistence, clear reporting
+  when persistence fails, and a visible cancel button across queued, waiting, and repair states.
+  One third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
