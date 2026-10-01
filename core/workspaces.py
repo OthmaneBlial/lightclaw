@@ -149,7 +149,7 @@ def _resolve_owned_task_at(
         raise WorkspaceSafetyError("task ownership record is unreadable") from exc
     try:
         metadata = json.loads(raw_metadata)
-    except ValueError as exc:
+    except (ValueError, RecursionError) as exc:
         raise WorkspaceSafetyError("task ownership record is unreadable") from exc
     if not isinstance(metadata, dict) or metadata.get("owner") != "lightclaw":
         raise WorkspaceSafetyError("task ownership record is invalid")

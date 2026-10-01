@@ -249,6 +249,25 @@ def test_undo_rejects_oversized_task_ownership_record(tmp_path: Path):
     assert owned.is_dir()
 
 
+def test_undo_rejects_recursively_nested_task_ownership_record(tmp_path: Path, monkeypatch):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    owned = root / "20260823_120000_safe-task"
+    owned.mkdir()
+    register_task_workspace(root, owned, "safe task")
+    metadata_path = root / ".lightclaw-meta" / f"{owned.name}.json"
+    metadata_path.write_text("{}", encoding="utf-8")
+
+    def reject_nested_json(_content):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr("core.workspaces.json.loads", reject_nested_json)
+    with pytest.raises(WorkspaceSafetyError, match="ownership record is unreadable"):
+        undo_owned_task(root, owned.name, apply=True)
+
+    assert owned.is_dir()
+
+
 def test_workspace_root_refuses_filesystem_root_and_symlink(tmp_path: Path):
     with pytest.raises(WorkspaceSafetyError, match="filesystem root"):
         validate_workspace_root(Path(Path.cwd().anchor))
