@@ -2282,6 +2282,13 @@ async def test_queued_history_cancel_is_private_only_and_refreshes_status(tmp_pa
 
     bot._reply_logged.reset_mock()
     update.effective_chat.type = "private"
+    bot._session_scope_from_update = AsyncMock(return_value="chat-two")
+    await bot.handle_run_action(update, SimpleNamespace())
+    assert store.get_job(job["run_id"])["status"] == "queued"
+    assert "no longer available" in bot._reply_logged.await_args.args[1]
+
+    bot._reply_logged.reset_mock()
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
     await bot.handle_run_action(update, SimpleNamespace())
     canceled = store.get_job(job["run_id"])
     assert canceled["status"] == "canceled"
