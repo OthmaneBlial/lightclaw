@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shlex
 import stat
 import subprocess
@@ -421,7 +422,7 @@ def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeyp
         _git(root, "init", "-b", "main")
     (workspace / "inside.txt").write_text("approved")
     (outside / "outside.txt").write_text("private")
-    run = subprocess.run
+    run = artifact_module._run_bounded_process
     launches = 0
 
     def swap():
@@ -440,9 +441,9 @@ def test_artifact_git_cannot_stage_files_in_replaced_workspace(tmp_path, monkeyp
         with pytest.raises(ArtifactError):
             artifact_module._git(workspace, "add", "-A")
     else:
-        monkeypatch.setattr(subprocess, "run", swapped_launch)
+        monkeypatch.setattr(artifact_module, "_run_bounded_process", swapped_launch)
         result = artifact_module._git(workspace, "add", "-A")
-        monkeypatch.setattr(subprocess, "run", run)
+        monkeypatch.setattr(artifact_module, "_run_bounded_process", run)
         assert result.returncode == 0
     assert _git(outside, "diff", "--cached", "--name-only") == ""
     if phase == "launch":
@@ -1333,7 +1334,7 @@ def test_pr_creation_keeps_body_private_and_preserves_outside_files(tmp_path, mo
         (root / ".git").mkdir(parents=True)
     sentinel = outside / ".git" / "lightclaw-pr-body.md"
     sentinel.write_text("unrelated private file")
-    run = subprocess.run
+    run = artifact_module._run_bounded_process
     bodies = []
     permissions = []
 
@@ -1360,13 +1361,13 @@ def test_pr_creation_keeps_body_private_and_preserves_outside_files(tmp_path, mo
         return run([*command[:command.index("gh")], *local_command], **kwargs)
 
     monkeypatch.setattr(artifact_module, "_require_git", fake_git)
-    monkeypatch.setattr(subprocess, "run", fake_gh)
+    monkeypatch.setattr(artifact_module, "_run_bounded_process", fake_gh)
     preview = {
         "run_id": "fixture", "workspace": str(workspace), "branch": "fixture",
         "body": "reviewed body", "ready_to_publish": True,
     }
     if outcome != "success":
-        error = "fixture rejected" if outcome == "failure" else "creation could not run"
+        error = "fixture rejected" if outcome == "failure" else "creation timed out"
         with pytest.raises(ArtifactError, match=error):
             publish_pull_request(preview, confirmation="fixture")
     else:
@@ -1393,12 +1394,47 @@ def test_pr_creation_rejects_replaced_workspace_before_push(tmp_path, monkeypatc
         assert command[:3] == ["gh", "auth", "status"], "replaced workspace must not run Git"
         return subprocess.CompletedProcess(command, 0, "", "")
 
-    monkeypatch.setattr(subprocess, "run", auth_only)
+    monkeypatch.setattr(artifact_module, "_run_bounded_process", auth_only)
     with pytest.raises(ArtifactError, match="git command could not run"):
         publish_pull_request({
             "run_id": "fixture", "workspace": str(workspace), "branch": "fixture",
             "body": "reviewed body", "ready_to_publish": True,
         }, confirmation="fixture")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="process groups are POSIX-only")
+def test_artifact_timeout_kills_entire_process_group(tmp_path):
+    import sys
+    import time
+
+    marker = tmp_path / "child-survived-timeout"
+    child_code = (
+        "import pathlib,time; time.sleep(1.5); "
+        f"pathlib.Path({str(marker)!r}).write_text('alive')"
+    )
+    parent_code = (
+        "import subprocess,sys,time; "
+        f"subprocess.Popen([sys.executable,'-c',{child_code!r}]); "
+        "time.sleep(30)"
+    )
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        artifact_module._run_bounded_process(
+            [sys.executable, "-c", parent_code], timeout=1
+        )
+    time.sleep(1)
+    assert not marker.exists()
+
+
+def test_pr_auth_timeout_is_reported_as_artifact_error(monkeypatch):
+    preview = {"run_id": "fixture", "ready_to_publish": True}
+
+    def timeout(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+    monkeypatch.setattr(artifact_module, "_run_bounded_process", timeout)
+    with pytest.raises(ArtifactError, match="authentication check timed out"):
+        publish_pull_request(preview, confirmation="fixture")
 
 
 def test_pr_preview_rejects_oversized_receipt(tmp_path, monkeypatch):

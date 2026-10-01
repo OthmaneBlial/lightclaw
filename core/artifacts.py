@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import signal
 import stat
 import subprocess
 import tempfile
@@ -26,6 +27,41 @@ from .security import delegated_process_env, redact_text
 
 class ArtifactError(ValueError):
     """Raised when an artifact operation cannot be proven safe."""
+
+
+def _run_bounded_process(
+    command: list[str],
+    *,
+    timeout: int,
+    env: dict[str, str] | None = None,
+    pass_fds: tuple[int, ...] = (),
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        pass_fds=pass_fds,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        start_new_session=os.name == "posix",
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        if os.name == "posix":
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        elif process.poll() is None:
+            process.kill()
+        stdout, stderr = process.communicate()
+        raise subprocess.TimeoutExpired(
+            command, timeout, output=stdout, stderr=stderr
+        ) from exc
+    return subprocess.CompletedProcess(
+        command, process.wait(), stdout, stderr
+    )
 
 
 def _check_artifact_git_metadata(root_fd: int) -> None:
@@ -103,13 +139,10 @@ def _git(
                     ".",
                     *git_args,
                 ) as (command, pass_fds):
-                    return subprocess.run(
+                    return _run_bounded_process(
                         command,
                         pass_fds=pass_fds,
-                        text=True,
-                        capture_output=True,
                         timeout=timeout,
-                        check=False,
                         env=delegated_process_env(),
                     )
 
@@ -861,14 +894,12 @@ def publish_pull_request(
     branch = str(preview.get("branch") or "")
     base = str(preview.get("base") or "main")
     title = str(preview.get("title") or "LightClaw result")
-    auth = subprocess.run(
-        ["gh", "auth", "status"],
-        text=True,
-        capture_output=True,
-        check=False,
-        timeout=20,
-        env=delegated_process_env(),
-    )
+    try:
+        auth = _run_bounded_process(
+            ["gh", "auth", "status"], timeout=20, env=delegated_process_env()
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ArtifactError("GitHub CLI authentication check timed out") from exc
     if auth.returncode != 0:
         raise ArtifactError("gh CLI is not authenticated")
     _require_git(root, "push", "--set-upstream", "origin", branch, timeout=180)
@@ -890,16 +921,15 @@ def publish_pull_request(
                 "--body-file",
                 body_file.as_posix(),
             ) as (command, pass_fds):
-                created = subprocess.run(
+                created = _run_bounded_process(
                     command,
                     pass_fds=pass_fds,
-                    text=True,
-                    capture_output=True,
-                    check=False,
                     timeout=120,
                     env=delegated_process_env(),
                 )
-        except (OSError, subprocess.TimeoutExpired) as exc:
+        except subprocess.TimeoutExpired as exc:
+            raise ArtifactError("GitHub pull request creation timed out") from exc
+        except OSError as exc:
             raise ArtifactError("GitHub pull request creation could not run") from exc
     if created.returncode != 0:
         raise ArtifactError(redact_text(created.stderr or created.stdout).strip()[-800:])

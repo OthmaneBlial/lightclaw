@@ -28,7 +28,7 @@ def test_git_checkpoint_uses_secret_free_environment(
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "telegram-secret")
     monkeypatch.setenv("LIGHTCLAW_TEST_SECRET", "provider-secret")
     run = Mock(return_value=subprocess.CompletedProcess([], 1, "", ""))
-    monkeypatch.setattr("core.artifacts.subprocess.run", run)
+    monkeypatch.setattr("core.artifacts._run_bounded_process", run)
 
     assert capture_git_checkpoint(tmp_path)["is_git"] is False
 

@@ -78,7 +78,7 @@
     },
     {
       "branch_points": 50,
-      "line": 458,
+      "line": 491,
       "lines": 310,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
@@ -164,7 +164,7 @@
     },
     {
       "branch_points": 50,
-      "line": 458,
+      "line": 491,
       "lines": 310,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 937,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 939,
+      "path": "core/artifacts.py"
     },
     {
-      "lines": 909,
-      "path": "core/artifacts.py"
+      "lines": 937,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
       "lines": 881,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21613,
+  "runtime_lines": 21643,
   "schema_version": 1
 }
