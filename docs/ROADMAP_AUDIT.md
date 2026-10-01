@@ -120,6 +120,12 @@ roadmap's “proof over claims” rule.
   privacy regression now restricts public-group memory recall, interaction counts, and heartbeat context to
   that group session; private chats retain cross-chat recall. Runtime-line cap: 22,213. The same
   third-party `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `3a8bf5b` passed on macOS arm64 Python 3.14.7:
+  897 tests and all local quality, audit, packaging, and clean-wheel checks. Result acceptance now
+  verifies the exact reviewed patch, branch, and checkpoint, refuses post-review edits, and safely
+  retries an already-created matching commit if durable job-state recording failed. Git content
+  filters remain disabled during verification. Runtime-line cap: 22,323; the existing third-party
+  `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
