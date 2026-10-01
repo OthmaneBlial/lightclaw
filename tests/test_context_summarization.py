@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -214,6 +215,49 @@ async def test_show_reports_persisted_summary_after_restart():
     await bot.cmd_show(update, SimpleNamespace())
 
     assert "<b>Session summary:</b> ✅" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_show_runs_database_and_skill_reads_off_event_loop():
+    loop_thread = threading.get_ident()
+    worker_threads = []
+
+    def record_thread(result):
+        worker_threads.append(threading.get_ident())
+        return result
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config()
+    bot.start_time = 0.0
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "42"
+    bot._log_user_message = Mock()
+    bot._get_session_summary = lambda _session_id: ""
+    bot._agent_mode_by_session = {}
+    bot._file_mode_by_session = {}
+    bot._get_file_mode = lambda _session_id: "chat"
+    bot._get_pending_multi_plan = lambda _session_id: None
+    bot.memory = SimpleNamespace(
+        stats=Mock(side_effect=lambda **_kwargs: record_thread({"total_interactions": 0}))
+    )
+    bot.skills = SimpleNamespace(
+        list_skills=Mock(side_effect=lambda: record_thread([])),
+        active_records=Mock(side_effect=lambda _session: record_thread([])),
+    )
+    bot.jobs = SimpleNamespace(
+        diagnostics=Mock(side_effect=lambda **_kwargs: record_thread({"counts": {}}))
+    )
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=42, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_show(update, SimpleNamespace())
+
+    assert len(worker_threads) == 4
+    assert all(thread_id != loop_thread for thread_id in worker_threads)
 
 
 @pytest.mark.asyncio

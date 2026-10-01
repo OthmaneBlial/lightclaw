@@ -39,11 +39,16 @@ class BotHandlersMixin:
         hours, remainder = divmod(uptime, 3600)
         minutes, seconds = divmod(remainder, 60)
 
-        stats = self.memory.stats(session_id=session_id)
+        stats, installed_skills, job_diagnostics = await asyncio.gather(
+            asyncio.to_thread(self.memory.stats, session_id=session_id),
+            asyncio.to_thread(self.skills.list_skills),
+            asyncio.to_thread(self.jobs.diagnostics, session_id=session_id),
+        )
         summary_status = "✅" if self._get_session_summary(session_id) else "—"
-        installed_skills = self.skills.list_skills()
         try:
-            active_skills = self.skills.active_records(session_id)
+            active_skills = await asyncio.to_thread(
+                self.skills.active_records, session_id
+            )
             skills_status = f"{len(active_skills)} active / {len(installed_skills)} installed"
         except SkillError:
             skills_status = "unavailable; check skills_state.json"
@@ -51,7 +56,6 @@ class BotHandlersMixin:
         file_mode = self._get_file_mode(session_id)
         pending_multi = self._get_pending_multi_plan(session_id)
         multi_defaults = ", ".join(self.config.local_agent_multi_default_agents)
-        job_diagnostics = self.jobs.diagnostics(session_id=session_id)
         job_counts = job_diagnostics.get("counts", {})
         queue_count = int(job_counts.get("queued", 0)) if isinstance(job_counts, dict) else 0
         active_count = (
