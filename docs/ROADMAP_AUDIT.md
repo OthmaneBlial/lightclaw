@@ -144,6 +144,11 @@ roadmap's “proof over claims” rule.
   955 tests and all local quality, audit, package-build, and clean-wheel checks. Worker dependency
   normalization has direct edge-case coverage, and the multi-agent executor is 668 lines; runtime
   cap: 22,664. One existing third-party `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `c14165f` passed on macOS arm64 Python 3.14.7:
+  955 tests and all local quality, audit, package-build, and clean-wheel checks. `/agent` routing
+  fell from 537 lines and 100 branch points to 318 lines and 52; its multi-agent handler is 209
+  lines and 48 branches. Runtime usage is 22,654 of the existing 22,664-line cap. One existing
+  third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
