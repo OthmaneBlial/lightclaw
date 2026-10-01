@@ -374,6 +374,33 @@ def test_concurrent_stall_recovery_writes_one_event_across_connections(tmp_path)
             store.close()
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="requires Darwin proc_pidinfo")
+def test_macos_process_start_tokens_distinguish_processes_with_microseconds():
+    processes = []
+    try:
+        for _ in range(2):
+            processes.append(
+                subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(5)"],
+                    start_new_session=True,
+                )
+            )
+        tokens = [JobStore._process_start_token(process.pid) for process in processes]
+        assert len(set(tokens)) == len(processes)
+        for token in tokens:
+            seconds, microseconds = token.split(":")
+            assert int(seconds) > 0
+            assert len(microseconds) == 6
+            assert 0 <= int(microseconds) < 1_000_000
+    finally:
+        for process in processes:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+
+
 @pytest.mark.skipif(os.name != "posix", reason="delegated process groups require POSIX")
 @pytest.mark.parametrize("operation", ["recovery", "resume", "cancel", "retry"])
 def test_stale_job_control_cannot_stop_a_resumed_run(tmp_path, monkeypatch, operation):

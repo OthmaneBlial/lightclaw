@@ -249,12 +249,12 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 861,
-      "path": "memory.py"
+      "lines": 881,
+      "path": "core/jobs.py"
     },
     {
-      "lines": 846,
-      "path": "core/jobs.py"
+      "lines": 861,
+      "path": "memory.py"
     },
     {
       "lines": 774,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21299,
+  "runtime_lines": 21334,
   "schema_version": 1
 }

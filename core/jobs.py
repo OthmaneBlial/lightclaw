@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import os
 import signal
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -26,6 +28,37 @@ class JobStateError(ValueError):
 
 class JobConflictError(JobStateError):
     """Raised when workspace or lane ownership conflicts."""
+
+
+# Mirrors Darwin's public proc_bsdinfo layout; MAXCOMLEN is 16.
+class _DarwinProcBSDInfo(ctypes.Structure):
+    _fields_ = [
+        ("_prefix", ctypes.c_uint32 * 12),
+        ("_names", ctypes.c_char * 48),
+        ("_tail", ctypes.c_uint32 * 6),
+        ("start_seconds", ctypes.c_uint64),
+        ("start_microseconds", ctypes.c_uint64),
+    ]
+
+
+def _darwin_process_start_token(pid: int) -> str:
+    try:
+        proc_pidinfo = ctypes.CDLL("/usr/lib/libproc.dylib").proc_pidinfo
+        proc_pidinfo.argtypes = [
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_uint64,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        proc_pidinfo.restype = ctypes.c_int
+        info = _DarwinProcBSDInfo()
+        size = ctypes.sizeof(info)
+        if proc_pidinfo(pid, 3, 0, ctypes.byref(info), size) != size:
+            return ""
+        return f"{info.start_seconds}:{info.start_microseconds:06d}"
+    except (AttributeError, OSError):
+        return ""
 
 
 def _json(value: object) -> str:
@@ -484,6 +517,8 @@ class JobStore:
 
     @staticmethod
     def _process_start_token(pid: int) -> str:
+        if sys.platform == "darwin":
+            return _darwin_process_start_token(pid)
         stat_path = Path(f"/proc/{pid}/stat")
         try:
             if stat_path.is_file():
