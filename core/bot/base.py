@@ -271,6 +271,18 @@ class BotBaseMixin:
         user = getattr(update, "effective_user", None)
         return bool(user and pending.get("user_id") == user.id)
 
+    def _pending_action_is_owned_by_other(
+        self, update: Update, pending: dict[str, object] | None
+    ) -> bool:
+        return bool(
+            pending
+            and (
+                pending.get("transcribing") is True
+                or not self._pending_confirmation_expired(pending)
+            )
+            and not self._is_pending_requester(update, pending)
+        )
+
     def _access_policy_label(self) -> str:
         return access_policy_label(
             self.config.telegram_allowed_users,

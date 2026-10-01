@@ -583,6 +583,15 @@ class CommandsAgentRouterMixin:
                 return
 
             if sub == "trusted":
+                if self._pending_action_is_owned_by_other(
+                    update,
+                    self._pending_trusted_agent_run_by_session.get(session_id),
+                ):
+                    await self._reply_logged(
+                        update,
+                        "Only the requester can replace this pending trusted run.",
+                    )
+                    return
                 now = time.time()
                 task = self._visible_review_text(task)
                 approval_id = secrets.token_hex(8)

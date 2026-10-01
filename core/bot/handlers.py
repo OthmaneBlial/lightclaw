@@ -120,12 +120,25 @@ class BotHandlersMixin:
             return
         session_id = await self._session_scope_from_update(update)
         async with self._memory_request_guard(session_id):
+            if self._pending_action_is_owned_by_other(
+                update, self._pending_voice_goal_by_session.get(session_id)
+            ):
+                await self._reply_logged(
+                    update,
+                    "Only the requester can replace this pending voice request.",
+                )
+                return
             voice_requests = getattr(self, "_voice_request_ids_by_session", None)
             if voice_requests is None:
                 voice_requests = self._voice_request_ids_by_session = {}
             request_id = secrets.token_hex(8)
             voice_requests[session_id] = request_id
-            self._pending_voice_goal_by_session.pop(session_id, None)
+            pending_transcription = {
+                "user_id": update.effective_user.id,
+                "transcribing": True,
+                "request_id": request_id,
+            }
+            self._pending_voice_goal_by_session[session_id] = pending_transcription
             try:
                 chat_id = update.effective_chat.id if update.effective_chat else 0
 
@@ -204,6 +217,8 @@ class BotHandlersMixin:
             finally:
                 if voice_requests.get(session_id) == request_id:
                     voice_requests.pop(session_id, None)
+                    if self._pending_voice_goal_by_session.get(session_id) is pending_transcription:
+                        self._pending_voice_goal_by_session.pop(session_id, None)
 
     # ── Photo Handler ─────────────────────────────────────────
 

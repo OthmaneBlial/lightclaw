@@ -1204,6 +1204,13 @@ async def test_trusted_confirmation_requires_requesting_group_user_and_runs_once
         requester, SimpleNamespace(args=["trusted", "codex", "inspect", "external", "files"])
     )
     pending = dict(bot._pending_trusted_agent_run_by_session["-7"])
+    await bot.cmd_agent(
+        update(99),
+        SimpleNamespace(args=["trusted", "codex", "replace", "the", "review"]),
+    )
+    assert bot._pending_trusted_agent_run_by_session["-7"] == pending
+    assert "only the requester" in bot._reply_logged.await_args.args[1].lower()
+
     confirm = SimpleNamespace(args=["trusted", "confirm", pending["approval_id"]])
 
     await bot.cmd_agent(update(99), confirm)

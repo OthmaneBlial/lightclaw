@@ -119,11 +119,11 @@ def test_site_explains_allowlisted_group_chat_boundary() -> None:
     assert "Allowlisted bots accept commands only in private chats." in html
     assert "Forum topics with a topic ID keep separate sessions and memory" in html
     assert "Public groups require explicit public mode and no user allowlist." in html
-    assert "Only the requester can use plan, voice, or trusted-run controls" in html
+    assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in html
     assert "all group members can view run diffs" in html
-    assert "Only the requester can use plan, voice, or trusted-run controls" in llms
+    assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in llms
     assert "all group members can view run diffs" in llms
-    assert "Only the requester can use plan, voice, or trusted-run controls" in readme
+    assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in readme
 
 
 def test_site_discloses_credential_context_guards() -> None:

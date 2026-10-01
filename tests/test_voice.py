@@ -289,6 +289,72 @@ async def test_latest_voice_request_keeps_approval_when_transcriptions_finish_ou
 
 
 @pytest.mark.asyncio
+async def test_group_member_cannot_supersede_another_users_voice_request(monkeypatch):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(groq_api_key="fixture")
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="-7")
+    bot._pending_voice_goal_by_session = {}
+    bot._privileged_request_times = {}
+    bot._reply_logged = AsyncMock()
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def transcribe_request(_audio, _key):
+        started.set()
+        await release.wait()
+        return "requester's voice task"
+
+    transcribe = AsyncMock(side_effect=transcribe_request)
+    monkeypatch.setattr("core.bot.handlers.transcribe_voice", transcribe)
+
+    def make_update(user_id):
+        voice_file = SimpleNamespace(
+            file_size=None,
+            download_as_bytearray=AsyncMock(return_value=bytearray(b"audio")),
+        )
+        voice = SimpleNamespace(file_size=None, get_file=AsyncMock(return_value=voice_file))
+        return SimpleNamespace(
+            effective_user=SimpleNamespace(id=user_id),
+            effective_chat=SimpleNamespace(id=-7, type="group"),
+            message=SimpleNamespace(voice=voice, caption=""),
+        )
+
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+    owner_update = make_update(42)
+    other_update = make_update(99)
+    owner_task = asyncio.create_task(bot.handle_voice(owner_update, context))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=1)
+        active_request_id = bot._voice_request_ids_by_session["-7"]
+        await bot.handle_voice(other_update, context)
+        assert bot._voice_request_ids_by_session["-7"] == active_request_id
+        other_update.message.voice.get_file.assert_not_awaited()
+
+        release.set()
+        await asyncio.wait_for(owner_task, timeout=1)
+        pending = bot._pending_voice_goal_by_session["-7"]
+        assert pending["user_id"] == 42
+
+        await bot.handle_voice(other_update, context)
+        assert bot._pending_voice_goal_by_session["-7"] is pending
+        other_update.message.voice.get_file.assert_not_awaited()
+        assert pending["transcription"] == "requester's voice task"
+    finally:
+        release.set()
+        if not owner_task.done():
+            owner_task.cancel()
+        await asyncio.gather(owner_task, return_exceptions=True)
+
+    assert not bot._voice_request_ids_by_session
+    transcribe.assert_awaited_once()
+    assert bot._reply_logged.await_count == 3
+    messages = [call.args[1].lower() for call in bot._reply_logged.await_args_list]
+    assert "only the requester" in messages[0]
+    assert "only the requester" in messages[2]
+
+
+@pytest.mark.asyncio
 async def test_clear_revokes_pending_actions_and_discards_inflight_voice(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
