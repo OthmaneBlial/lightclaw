@@ -261,6 +261,46 @@ async def test_show_runs_database_and_skill_reads_off_event_loop():
 
 
 @pytest.mark.asyncio
+async def test_memory_diagnostic_commands_query_sqlite_off_event_loop():
+    loop_thread = threading.get_ident()
+    query_threads = []
+
+    def record_query(result):
+        query_threads.append(threading.get_ident())
+        return result
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config()
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "42"
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    bot.memory = SimpleNamespace(
+        stats=Mock(side_effect=lambda **_kwargs: record_query({
+            "total_interactions": 0,
+            "unique_sessions": 0,
+            "retrieval": "lexical",
+            "database_bytes": 0,
+            "max_database_bytes": 1_000_000,
+            "last_query_ms": 0,
+            "query_timeout_ms": 100,
+        })),
+        recall=Mock(side_effect=lambda *_args, **_kwargs: record_query([])),
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=42, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_memory(update, SimpleNamespace(args=[]))
+    await bot.cmd_recall(update, SimpleNamespace(args=["fixture query"]))
+
+    assert len(query_threads) == 2
+    assert all(thread_id != loop_thread for thread_id in query_threads)
+
+
+@pytest.mark.asyncio
 async def test_confirmed_global_wipe_revokes_pending_actions_across_chats():
     bot = LightClawBot.__new__(LightClawBot)
     bot.is_update_allowed = lambda _update: True

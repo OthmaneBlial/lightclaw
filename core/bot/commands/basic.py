@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 
 from telegram import Update
@@ -173,7 +174,7 @@ class CommandsBasicMixin:
 
         session_id = self._session_id_from_update(update)
         self._log_user_message(session_id, "/memory")
-        stats = self.memory.stats(session_id=session_id)
+        stats = await asyncio.to_thread(self.memory.stats, session_id=session_id)
         await self._reply_logged(
             update,
             f"🧠 <b>Memory Stats</b>\n\n"
@@ -203,7 +204,9 @@ class CommandsBasicMixin:
             )
             return
 
-        memories = self.memory.recall(query, top_k=5, session_id=session_id)
+        memories = await asyncio.to_thread(
+            self.memory.recall, query, top_k=5, session_id=session_id
+        )
         if not memories:
             await self._reply_logged(update, "🔍 No matching memories found.")
             return
