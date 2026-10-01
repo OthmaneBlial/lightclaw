@@ -261,7 +261,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 661,
+      "lines": 673,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21563,
+  "runtime_lines": 21575,
   "schema_version": 1
 }

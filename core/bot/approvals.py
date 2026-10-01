@@ -559,13 +559,25 @@ class BotApprovalsMixin:
         patch_size: int | None = None
         if patch_path and update.message:
             patch_fd: int | None = None
-            try:
+
+            def open_patch():
                 workspace = Path(self.config.workspace_path).expanduser().resolve()
                 relative_patch = patch_path.absolute().relative_to(workspace)
-                patch_fd, patch_stat = open_regular_file_at(workspace, relative_patch)
+                opened_fd, opened_stat = open_regular_file_at(workspace, relative_patch)
+                opened_patch_fds.append(opened_fd)
+                return opened_fd, opened_stat
+
+            opened_patch_fds: list[int] = []
+            try:
+                patch_fd, patch_stat = await await_thread_completion(open_patch)
                 patch_handle = os.fdopen(patch_fd, "rb")
                 patch_fd = None
+                opened_patch_fds.clear()
                 patch_size = patch_stat.st_size
+            except asyncio.CancelledError:
+                if opened_patch_fds:
+                    os.close(opened_patch_fds.pop())
+                raise
             except (OSError, RuntimeError, ValueError):
                 if patch_fd is not None:
                     os.close(patch_fd)

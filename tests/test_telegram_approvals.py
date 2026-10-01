@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sqlite3
 import stat
 import threading
@@ -1686,7 +1687,7 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path, monkeypatc
 
     await bot._send_last_run_diff(update, "456", "run-18")
 
-    assert {"read_receipt", "read", "seek"} <= worker_threads.keys()
+    assert {"read_receipt", "open_patch", "read", "seek"} <= worker_threads.keys()
     assert all(thread_id != loop_thread for thread_id in worker_threads.values())
     assert [kind for kind, _ in events] == ["summary", "patch"]
     assert "10 files changed, 7 insertions(+), 2 deletions(-)" in events[0][1]
@@ -1701,6 +1702,47 @@ async def test_view_diff_sends_compact_summary_before_patch(tmp_path, monkeypatc
     assert bot._mobile_diff_preview(
         "diff --git a/logo.png b/logo.png\nGIT binary patch\ndata"
     ) == "No text hunk; full patch attached."
+
+
+@pytest.mark.asyncio
+async def test_view_diff_closes_patch_fd_when_cancelled_while_opening(tmp_path, monkeypatch):
+    patch_path = tmp_path / "changes.patch"
+    patch_path.write_text("diff --git a/file b/file\n", encoding="utf-8")
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_text(
+        json.dumps({"run_id": "run-19", "artifacts": [str(patch_path)]}),
+        encoding="utf-8",
+    )
+    open_started = threading.Event()
+    open_release = threading.Event()
+    opened_fds = []
+    original_open = approvals.open_regular_file_at
+
+    def delayed_open(root, relative):
+        open_started.set()
+        open_release.wait()
+        result = original_open(root, relative)
+        opened_fds.append(result[0])
+        return result
+
+    monkeypatch.setattr(approvals, "open_regular_file_at", delayed_open)
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot._last_run_receipts_by_session = {"456": str(receipt_path)}
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(message=SimpleNamespace(reply_document=AsyncMock()))
+
+    task = asyncio.create_task(bot._send_last_run_diff(update, "456", "run-19"))
+    try:
+        assert await asyncio.to_thread(open_started.wait, 5)
+        task.cancel()
+    finally:
+        open_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(opened_fds) == 1
+    with pytest.raises(OSError):
+        os.fstat(opened_fds[0])
 
 
 @pytest.mark.asyncio
