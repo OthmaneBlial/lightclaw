@@ -392,6 +392,9 @@ async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(
         assert [lane["attempt"] for lane in job["lanes"]] == (
             [2, 0] if acceptance_fails else [2, 1]
         )
+        final_message = bot._send_response.await_args.args[2]
+        assert "Receipt:" in final_message
+        assert str(Path(bot.config.workspace_path).resolve()) not in final_message
         receipt = json.loads(Path(bot._last_run_receipts_by_session["fixture-session"]).read_text())
         assert receipt["retries"] == 1
         if acceptance_fails:

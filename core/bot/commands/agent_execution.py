@@ -966,8 +966,8 @@ class CommandsAgentExecutionMixin:
             write_receipt, receipt, receipt_output
         )
         final_lines.append("")
-        final_lines.append(f"🧾 Receipt: `{receipt_markdown.as_posix()}`")
-        final_lines.append(f"JSON: `{receipt_json.as_posix()}`")
+        final_lines.append(f"🧾 Receipt: `{self._workspace_rel_label(receipt_markdown)}`")
+        final_lines.append(f"JSON: `{self._workspace_rel_label(receipt_json)}`")
         self._last_run_ids_by_session[session_id] = run_id
         self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
         requesters = getattr(self, "_last_run_requesters_by_session", None)

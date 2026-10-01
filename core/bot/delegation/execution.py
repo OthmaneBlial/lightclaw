@@ -1273,7 +1273,7 @@ class DelegationExecutionMixin:
 
         if receipt_paths:
             lines.append("")
-            lines.append(f"🧾 Receipt: `{receipt_paths[1].as_posix()}`")
+            lines.append(f"🧾 Receipt: `{self._workspace_rel_label(receipt_paths[1])}`")
 
         log.info("Local agent run finished")
         if self._active_run_ids_by_session.get(session_id) == run_id:

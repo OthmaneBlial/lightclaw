@@ -79,6 +79,7 @@ def test_real_delegation_path_emits_private_structured_receipt(
     assert "[REDACTED]" in receipt["original_goal"]
     assert "sk-receipt-fixture" not in receipt_path.read_text(encoding="utf-8")
     assert "Receipt:" in result
+    assert str(Path(bot.config.workspace_path).resolve()) not in result
 
 
 def test_patch_failure_marks_single_agent_job_failed(tmp_path, monkeypatch):
