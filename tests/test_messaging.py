@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from datetime import timedelta
@@ -246,18 +247,58 @@ async def test_long_response_artifact_write_runs_off_event_loop(tmp_path, monkey
     bot = MessagingHarness()
     bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
     loop_thread = threading.get_ident()
-    worker_threads = []
+    worker_threads = {}
     write_artifact = bot._write_long_response_artifact
+    open_artifact = bot._open_long_response_artifact
 
     def track_write(text):
-        worker_threads.append(threading.get_ident())
+        worker_threads["write"] = threading.get_ident()
         return write_artifact(text)
 
+    def track_open(path):
+        worker_threads["open"] = threading.get_ident()
+        return open_artifact(path)
+
     monkeypatch.setattr(bot, "_write_long_response_artifact", track_write)
+    monkeypatch.setattr(bot, "_open_long_response_artifact", track_open)
+    message = SimpleNamespace(reply_document=AsyncMock())
 
-    await bot._send_response(None, SimpleNamespace(message=None), "evidence\n" * 1000)
+    await bot._send_response(None, SimpleNamespace(message=message), "evidence\n" * 1000)
 
-    assert worker_threads and all(thread != loop_thread for thread in worker_threads)
+    assert {"write", "open"} <= worker_threads.keys()
+    assert all(thread_id != loop_thread for thread_id in worker_threads.values())
+
+
+@pytest.mark.asyncio
+async def test_long_response_open_closes_handle_when_cancelled(tmp_path, monkeypatch):
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
+    open_started = threading.Event()
+    open_release = threading.Event()
+    opened_handles = []
+    open_artifact = bot._open_long_response_artifact
+
+    def delayed_open(path):
+        open_started.set()
+        open_release.wait()
+        result = open_artifact(path)
+        opened_handles.append(result[0])
+        return result
+
+    monkeypatch.setattr(bot, "_open_long_response_artifact", delayed_open)
+    message = SimpleNamespace(reply_document=AsyncMock())
+    task = asyncio.create_task(
+        bot._send_response(None, SimpleNamespace(message=message), "evidence\n" * 1000)
+    )
+    try:
+        assert await asyncio.to_thread(open_started.wait, 5)
+        task.cancel()
+    finally:
+        open_release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(opened_handles) == 1
+    assert opened_handles[0].closed
 
 
 @pytest.mark.asyncio

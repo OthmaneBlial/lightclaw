@@ -143,8 +143,20 @@ class BotMessagingMixin:
             if placeholder:
                 await self._try_send(placeholder.edit_text, summary)
             if update.message:
+                opened_handles = []
+
+                def open_artifact():
+                    handle, size = self._open_long_response_artifact(artifact)
+                    opened_handles.append(handle)
+                    return handle, size
+
                 try:
-                    artifact_handle, artifact_size = self._open_long_response_artifact(artifact)
+                    artifact_handle, artifact_size = await await_thread_completion(open_artifact)
+                    opened_handles.clear()
+                except asyncio.CancelledError:
+                    for handle in opened_handles:
+                        handle.close()
+                    raise
                 except (OSError, RuntimeError, ValueError):
                     artifact_handle, artifact_size = None, None
                 if artifact_handle is None or artifact_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
