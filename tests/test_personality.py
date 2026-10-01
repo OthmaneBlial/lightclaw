@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from core import personality
 from core.constants import FALLBACK_IDENTITY
 from core.personality import load_personality, resolve_runtime_path
 
@@ -39,16 +42,34 @@ def test_unreadable_runtime_file_falls_back_without_exposing_contents(tmp_path, 
     unreadable = runtime_root / "IDENTITY.md"
     unreadable.write_text("private content must not escape", encoding="utf-8")
     (workspace / "IDENTITY.md").write_text("Legacy identity", encoding="utf-8")
-    def read_bounded(path, *_args, **_kwargs):
-        if path == unreadable:
-            raise PermissionError("fixture unreadable file")
-        return path.read_text(encoding="utf-8")
+    read_bounded_at = personality.read_text_bounded_at
 
-    monkeypatch.setattr("core.personality.read_text_bounded", read_bounded)
+    def read_bounded(root, relative, *_args, **_kwargs):
+        if Path(root) / relative == unreadable:
+            raise PermissionError("fixture unreadable file")
+        return read_bounded_at(root, relative, *_args, **_kwargs)
+
+    monkeypatch.setattr("core.personality.read_text_bounded_at", read_bounded)
 
     result = load_personality(str(workspace))
     assert result == "Legacy identity"
     assert "private content" not in result
+
+
+def test_personality_rejects_symlinked_profile_and_falls_back_safely(tmp_path):
+    runtime_root = tmp_path / "runtime"
+    workspace = runtime_root / "workspace"
+    runtime_root.mkdir()
+    workspace.mkdir()
+    outside_secret = tmp_path / "credentials.json"
+    outside_secret.write_text('{"api_key":"must-not-enter-the-prompt"}', encoding="utf-8")
+    (runtime_root / "IDENTITY.md").symlink_to(outside_secret)
+    (workspace / "IDENTITY.md").write_text("Safe legacy identity", encoding="utf-8")
+
+    result = load_personality(str(workspace))
+
+    assert result == "Safe legacy identity"
+    assert "must-not-enter-the-prompt" not in result
 
 
 def test_oversized_runtime_personality_falls_back_to_legacy(tmp_path, monkeypatch, caplog):
