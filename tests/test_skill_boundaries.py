@@ -13,6 +13,7 @@ import skills as skills_module
 from core.bot import LightClawBot
 from lightclaw_cli import build_parser
 from skills import (
+    MAX_DOWNLOAD_BYTES,
     MAX_SKILL_TEXT_BYTES,
     SkillError,
     SkillManager,
@@ -177,6 +178,50 @@ def test_legacy_skill_migration_skips_unsafe_instruction_file(tmp_path, monkeypa
     )
 
     assert not (directory / "skill.json").exists()
+
+
+@pytest.mark.parametrize("unsafe_file", ["symlink", "oversized"])
+def test_legacy_skill_copy_skips_symlinked_or_oversized_files(tmp_path, unsafe_file):
+    runtime = tmp_path / "runtime"
+    workspace = runtime / "workspace"
+    directory = workspace / "skills" / "local" / "legacy-skill"
+    directory.mkdir(parents=True)
+    skill_path = directory / "SKILL.md"
+    if unsafe_file == "symlink":
+        secret = tmp_path / "outside.txt"
+        secret.write_text("private content", encoding="utf-8")
+        skill_path.symlink_to(secret)
+    else:
+        skill_path.write_bytes(b"x" * (MAX_DOWNLOAD_BYTES + 1))
+
+    SkillManager(
+        workspace_path=str(workspace),
+        skills_state_path=str(runtime / "skills_state.json"),
+    )
+
+    copied = runtime / "skills" / "local" / "legacy-skill" / "SKILL.md"
+    assert not copied.exists()
+
+
+def test_legacy_skill_copy_preserves_regular_files(tmp_path):
+    runtime = tmp_path / "runtime"
+    workspace = runtime / "workspace"
+    directory = workspace / "skills" / "local" / "legacy-skill"
+    directory.mkdir(parents=True)
+    skill = directory / "SKILL.md"
+    asset = directory / "example.bin"
+    skill.write_text("# Legacy skill\n", encoding="utf-8")
+    asset.write_bytes(b"legacy asset")
+
+    SkillManager(
+        workspace_path=str(workspace),
+        skills_state_path=str(runtime / "skills_state.json"),
+    )
+
+    copied = runtime / "skills" / "local" / "legacy-skill"
+    assert (copied / "SKILL.md").read_bytes() == skill.read_bytes()
+    assert (copied / "example.bin").read_bytes() == asset.read_bytes()
+    assert (copied / "skill.json").is_file()
 
 
 @pytest.mark.parametrize(

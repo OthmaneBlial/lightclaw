@@ -10,6 +10,7 @@ Features:
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import io
 import json
@@ -27,7 +28,12 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-from core.fs import FileTooLargeError, open_regular_file_at, read_json_object
+from core.fs import (
+    FileTooLargeError,
+    open_directory_at,
+    open_regular_file_at,
+    read_json_object,
+)
 from core.fs import atomic_write_json as _atomic_write_json
 from core.fs import atomic_write_text as _atomic_write_text
 
@@ -387,16 +393,55 @@ class SkillManager:
 
     def _ensure_dirs(self):
         # Backward compatibility: migrate legacy workspace/skills into runtime-root skills.
-        if self.legacy_skills_root and self.legacy_skills_root.exists():
+        if (
+            self.legacy_skills_root
+            and self.legacy_skills_root.exists()
+            and not self.legacy_skills_root.is_symlink()
+        ):
+            root_fd = open_directory_at(
+                self.runtime_root, ("skills",), create=True, private=True
+            )
+            os.close(root_fd)
             for src in self.legacy_skills_root.rglob("*"):
                 if not src.is_file():
                     continue
                 rel = src.relative_to(self.legacy_skills_root)
-                dst = self.skills_root / rel
-                if dst.exists():
+                try:
+                    source_fd, _ = open_regular_file_at(self.legacy_skills_root, rel)
+                    with os.fdopen(source_fd, "rb") as source:
+                        content = source.read(MAX_DOWNLOAD_BYTES + 1)
+                except OSError as exc:
+                    if exc.errno not in {
+                        errno.ELOOP,
+                        errno.ENOTDIR,
+                        errno.ENOENT,
+                        errno.EINVAL,
+                    }:
+                        raise
                     continue
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
+                if len(content) > MAX_DOWNLOAD_BYTES:
+                    continue
+                destination_fd = open_directory_at(
+                    self.skills_root, rel.parts[:-1], create=True, private=True
+                )
+                try:
+                    try:
+                        target_fd = os.open(
+                            rel.name,
+                            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                            0o600,
+                            dir_fd=destination_fd,
+                        )
+                    except FileExistsError:
+                        continue
+                    try:
+                        with os.fdopen(target_fd, "wb") as target:
+                            target.write(content)
+                    except BaseException:
+                        os.unlink(rel.name, dir_fd=destination_fd)
+                        raise
+                finally:
+                    os.close(destination_fd)
 
         self.hub_dir.mkdir(parents=True, exist_ok=True)
         self.local_dir.mkdir(parents=True, exist_ok=True)

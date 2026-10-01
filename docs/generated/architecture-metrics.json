@@ -99,7 +99,7 @@
     },
     {
       "branch_points": 43,
-      "line": 158,
+      "line": 164,
       "lines": 73,
       "name": "validate_skill_manifest",
       "path": "skills.py"
@@ -225,12 +225,12 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1288,
-      "path": "core/bot/delegation/planning.py"
+      "lines": 1302,
+      "path": "skills.py"
     },
     {
-      "lines": 1257,
-      "path": "skills.py"
+      "lines": 1288,
+      "path": "core/bot/delegation/planning.py"
     },
     {
       "lines": 1253,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21709,
+  "runtime_lines": 21754,
   "schema_version": 1
 }
