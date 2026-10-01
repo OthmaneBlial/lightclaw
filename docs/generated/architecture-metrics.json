@@ -7,13 +7,6 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
-      "branch_points": 100,
-      "line": 67,
-      "lines": 518,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
       "branch_points": 99,
       "line": 251,
       "lines": 699,
@@ -26,6 +19,13 @@
       "lines": 509,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
+    },
+    {
+      "branch_points": 93,
+      "line": 100,
+      "lines": 502,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 72,
@@ -121,18 +121,18 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 100,
-      "line": 67,
-      "lines": 518,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
       "branch_points": 94,
       "line": 250,
       "lines": 509,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
+    },
+    {
+      "branch_points": 93,
+      "line": 100,
+      "lines": 502,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 71,
@@ -265,7 +265,7 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 643,
+      "lines": 660,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21830,
+  "runtime_lines": 21847,
   "schema_version": 1
 }

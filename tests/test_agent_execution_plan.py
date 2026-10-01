@@ -25,6 +25,7 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
             "run_id": "0123456789abcdef",
             "status": "stalled",
             "goal": "Inspect <repo>\u202efiles",
+            "lanes": [{"status": "succeeded"}, {"status": "running"}],
         }])
     )
     bot._reply_logged = AsyncMock()
@@ -37,6 +38,7 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
     assert "0123456789abcdef" in rendered
     assert "stalled" in rendered
     assert "&lt;repo&gt;" in rendered
+    assert "Lanes: 1 running · 1 succeeded" in rendered
     assert "\u202e" not in rendered
 
 

@@ -64,6 +64,39 @@ class CommandsAgentRouterMixin:
         pending["review_message_id"] = getattr(sent, "message_id", None)
         pending["review_delivered"] = True
 
+    def _render_recent_runs(self, jobs: list[dict[str, object]]) -> str:
+        if not jobs:
+            return "No durable runs for this chat yet."
+        lines = ["<b>Recent runs for this chat</b>"]
+        for job in jobs:
+            run_id = _escape_html(str(job.get("run_id") or "unknown"))
+            status = _escape_html(str(job.get("status") or "unknown"))
+            goal = re.sub(
+                r"\s+", " ", self._visible_review_text(job.get("goal") or "")
+            ).strip()
+            if len(goal) > 120:
+                goal = goal[:117].rstrip() + "..."
+            lines.append(
+                f"<code>{run_id}</code> · <b>{status}</b>\n"
+                f"{_escape_html(goal or 'No task description')}"
+            )
+            lanes = job.get("lanes")
+            lane_counts: dict[str, int] = {}
+            if isinstance(lanes, list):
+                for lane in lanes:
+                    if isinstance(lane, dict):
+                        lane_status = self._visible_review_text(
+                            lane.get("status") or "unknown"
+                        )
+                        lane_counts[lane_status] = lane_counts.get(lane_status, 0) + 1
+            if lane_counts:
+                progress = " · ".join(
+                    f"{count} {_escape_html(lane_status)}"
+                    for lane_status, count in sorted(lane_counts.items())
+                )
+                lines.append(f"Lanes: {progress}")
+        return "\n\n".join(lines)
+
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
@@ -86,24 +119,8 @@ class CommandsAgentRouterMixin:
             jobs = await asyncio.to_thread(
                 self.jobs.list_jobs, session_id=session_id, limit=10
             )
-            if not jobs:
-                await self._reply_logged(update, "No durable runs for this chat yet.")
-                return
-            lines = ["<b>Recent runs for this chat</b>"]
-            for job in jobs:
-                run_id = _escape_html(str(job.get("run_id") or "unknown"))
-                status = _escape_html(str(job.get("status") or "unknown"))
-                goal = re.sub(
-                    r"\s+", " ", self._visible_review_text(job.get("goal") or "")
-                ).strip()
-                if len(goal) > 120:
-                    goal = goal[:117].rstrip() + "..."
-                lines.append(
-                    f"<code>{run_id}</code> · <b>{status}</b>\n"
-                    f"{_escape_html(goal or 'No task description')}"
-                )
             await self._reply_logged(
-                update, "\n\n".join(lines), parse_mode=ParseMode.HTML
+                update, self._render_recent_runs(jobs), parse_mode=ParseMode.HTML
             )
             return
 
