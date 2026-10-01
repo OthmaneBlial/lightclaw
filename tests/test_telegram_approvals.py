@@ -1500,7 +1500,7 @@ async def test_cancelled_multi_workspace_creation_removes_late_owned_directory(
 
 
 @pytest.mark.asyncio
-async def test_failed_multi_workspace_preflight_removes_unannounced_workspace(tmp_path):
+async def test_failed_multi_workspace_preflight_removes_unclaimed_workspace(tmp_path):
     root = tmp_path / "workspace"
     root.mkdir()
     bot = LightClawBot.__new__(LightClawBot)
@@ -1531,6 +1531,7 @@ async def test_failed_multi_workspace_preflight_removes_unannounced_workspace(tm
     assert len(metadata) == 1
     assert json.loads(metadata[0].read_text(encoding="utf-8"))["state"] == "undone"
     assert "No agent was started" in bot._reply_logged.await_args.args[1]
+    assert not bot._active_run_ids_by_session
     bot.jobs.close()
 
 

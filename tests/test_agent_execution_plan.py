@@ -59,6 +59,7 @@ async def test_handoff_preparation_refuses_a_swapped_workspace(tmp_path, monkeyp
 
     bot._write_agents_plan_file = swap_after_plan
     monkeypatch.setattr("core.bot.commands.agent_execution.initialize_artifact_repository", refuse_checkpoint)
+    bot._active_run_ids_by_session = {}
     try:
         await bot._execute_multi_agent_plan(
             SimpleNamespace(), "fixture", "approved goal", [], {"workers": []}, "fixture-run"
@@ -67,6 +68,69 @@ async def test_handoff_preparation_refuses_a_swapped_workspace(tmp_path, monkeyp
         pass
     assert not (outside / "handoff").exists()
     bot._run_local_agent_task.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cancel_button_stops_multi_agent_workspace_preparation():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "multi-preflight-fixture"
+    started = asyncio.Event()
+    stopped = asyncio.Event()
+    reply = SimpleNamespace(edit_text=AsyncMock())
+    bot._utc_now = lambda: "2026-10-01T00:00:00Z"
+    bot._reply_logged = AsyncMock(return_value=reply)
+    bot._active_run_ids_by_session = {}
+    bot._active_run_tasks_by_session = {}
+    bot._session_scope_from_update = AsyncMock(return_value="456")
+    bot.is_update_allowed = lambda _update: True
+    bot.jobs = SimpleNamespace(
+        request_cancel=Mock(side_effect=JobStateError("job not created yet"))
+    )
+
+    async def prepare_workspace(_goal):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            stopped.set()
+            raise
+
+    bot._create_task_workspace_safely = prepare_workspace
+    run = asyncio.create_task(
+        bot._execute_multi_agent_plan_impl(
+            update=SimpleNamespace(),
+            session_id="456",
+            goal="fixture run",
+            workers=[("builder", "codex"), ("reviewer", "claude")],
+            plan_payload={"workers": []},
+            run_id=run_id,
+            clear_event=asyncio.Event(),
+        )
+    )
+    bot._active_run_tasks_by_session["456"] = run
+    await started.wait()
+
+    progress_call = bot._reply_logged.await_args
+    markup = progress_call.kwargs["reply_markup"]
+    assert markup.inline_keyboard[0][0].text == "Cancel run"
+
+    query = SimpleNamespace(
+        data=f"lc:run:cancel:{bot._run_action_token(run_id)}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    with pytest.raises(asyncio.CancelledError):
+        await run
+    assert stopped.is_set()
+    bot._active_run_ids_by_session.pop("456", None)
 
 
 @pytest.mark.asyncio
@@ -207,6 +271,7 @@ async def test_goal_json_fence_cannot_replace_approved_worker_contracts(tmp_path
     bot._create_task_workspace = lambda _goal: workspace
     bot._workspace_rel_label = lambda _workspace: "task-workspace"
     bot._snapshot_workspace_state = lambda _workspace: {}
+    bot._active_run_ids_by_session = {}
     bot._reply_logged = AsyncMock(side_effect=reply)
     monkeypatch.setattr(
         "core.bot.commands.agent_execution.initialize_artifact_repository",

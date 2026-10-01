@@ -208,7 +208,12 @@ class CommandsAgentExecutionMixin:
             raise
         except Exception:
             if getattr(self, "_active_run_ids_by_session", {}).get(session_id) == run_id:
-                raise
+                try:
+                    await asyncio.to_thread(self.jobs.get_job, run_id)
+                except JobStateError:
+                    pass
+                else:
+                    raise
             log.exception("Multi-agent run failed before worker execution")
             await self._reply_logged(
                 update,
@@ -221,6 +226,13 @@ class CommandsAgentExecutionMixin:
         if self._active_run_ids_by_session.get(session_id) == run_id:
             self._active_run_ids_by_session.pop(session_id, None)
 
+    async def _begin_multi_run_progress(self, update, session_id: str, run_id: str):
+        self._active_run_ids_by_session[session_id] = run_id
+        return await self._reply_logged(
+            update,
+            "⏳ Approved multi-agent run in progress. Preparation may take a moment.",
+            reply_markup=self._inline_cancel_keyboard(run_id),
+        )
 
     async def _execute_multi_agent_plan(
         self,
@@ -248,6 +260,7 @@ class CommandsAgentExecutionMixin:
     ):
         run_started_clock = time.monotonic()
         run_started_at = self._utc_now()
+        await self._begin_multi_run_progress(update, session_id, run_id)
         multi_workspace = await self._create_task_workspace_safely(goal)
         multi_workspace_label = self._workspace_rel_label(multi_workspace)
         agents_path = await self._await_multi_preflight_thread(
@@ -398,8 +411,6 @@ class CommandsAgentExecutionMixin:
                 parse_mode=ParseMode.HTML,
             )
             return
-        self._active_run_ids_by_session[session_id] = run_id
-
         multi_execution_task = asyncio.current_task()
 
         async def _multi_job_heartbeat() -> None:
