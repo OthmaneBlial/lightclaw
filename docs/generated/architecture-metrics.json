@@ -63,9 +63,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 52,
+      "branch_points": 53,
       "line": 202,
-      "lines": 323,
+      "lines": 330,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -85,7 +85,7 @@
     },
     {
       "branch_points": 48,
-      "line": 526,
+      "line": 533,
       "lines": 209,
       "name": "_cmd_agent_multi",
       "path": "core/bot/commands/agent_router.py"
@@ -163,9 +163,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 52,
+      "branch_points": 53,
       "line": 202,
-      "lines": 323,
+      "lines": 330,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -193,7 +193,7 @@
     {
       "branch_points": 31,
       "line": 373,
-      "lines": 239,
+      "lines": 237,
       "name": "_cmd_cron",
       "path": "core/bot/commands/cron.py"
     },
@@ -206,7 +206,7 @@
     },
     {
       "branch_points": 48,
-      "line": 526,
+      "line": 533,
       "lines": 209,
       "name": "_cmd_agent_multi",
       "path": "core/bot/commands/agent_router.py"
@@ -261,7 +261,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 793,
+      "lines": 800,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -277,10 +277,10 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "lines": 611,
+      "lines": 609,
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22843,
+  "runtime_lines": 22848,
   "schema_version": 1
 }
