@@ -314,15 +314,14 @@ class BotBaseMixin:
             return session_id
 
         user_namespace = f"telegram-user:{user.id}"
-
-        def bind_scope() -> None:
-            bind_session(
-                session_id,
-                user_namespace=user_namespace,
-                workspace_namespace=Path(str(workspace_path)).expanduser().resolve().as_posix(),
-            )
-
-        await await_thread_completion(bind_scope)
+        scope = {
+            "user_namespace": user_namespace,
+            "workspace_namespace": Path(str(workspace_path)).expanduser().resolve().as_posix(),
+        }
+        activate_scope = getattr(memory, "activate_scope", None)
+        if callable(activate_scope):
+            activate_scope(session_id, **scope)
+        await await_thread_completion(bind_session, session_id, **scope)
         return session_id
 
     @staticmethod

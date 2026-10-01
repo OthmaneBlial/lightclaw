@@ -87,6 +87,57 @@ async def test_session_scope_binding_runs_off_event_loop(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_concurrent_group_updates_keep_memory_scopes_per_user(tmp_path):
+    store = MemoryStore(str(tmp_path / "memory.db"))
+    workspace = str(tmp_path.resolve())
+    session_id = "-100"
+    store.ingest(
+        "user", "private marker phrase cobalt", session_id,
+        user_namespace="telegram-user:1", workspace_namespace=workspace,
+    )
+    store.ingest(
+        "user", "private marker phrase amber", session_id,
+        user_namespace="telegram-user:2", workspace_namespace=workspace,
+    )
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=workspace,
+        telegram_allowed_users=[],
+        telegram_public_bot_ack=True,
+    )
+    bot.memory = store
+
+    def update(user_id):
+        return SimpleNamespace(
+            effective_user=SimpleNamespace(id=user_id),
+            effective_chat=SimpleNamespace(id=-100, type="group"),
+        )
+
+    first_bound = asyncio.Event()
+    second_bound = asyncio.Event()
+
+    async def first_user():
+        session = await bot._session_scope_from_update(update(1))
+        first_bound.set()
+        await second_bound.wait()
+        return await asyncio.to_thread(store.recall, "private marker phrase", session_id=session)
+
+    async def second_user():
+        await first_bound.wait()
+        session = await bot._session_scope_from_update(update(2))
+        second_bound.set()
+        return await asyncio.to_thread(store.recall, "private marker phrase", session_id=session)
+
+    try:
+        first, second = await asyncio.gather(first_user(), second_user())
+        assert [record.content for record in first] == ["private marker phrase cobalt"]
+        assert [record.content for record in second] == ["private marker phrase amber"]
+    finally:
+        store.db.close()
+
+
+@pytest.mark.asyncio
 async def test_clear_during_initial_memory_write_prevents_agent_start():
     loop = asyncio.get_running_loop()
     write_started = asyncio.Event()

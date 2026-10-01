@@ -255,6 +255,25 @@ class MemoryStore:
             raise ValueError(f"{label} must be a non-empty bounded string")
         return cleaned
 
+    def _activate_context_scope(self, session: str, user: str, workspace: str) -> None:
+        active = dict(self._context_scopes.get() or {})
+        active[session] = (user, workspace)
+        self._context_scopes.set(active)
+
+    def activate_scope(
+        self,
+        session_id: str,
+        *,
+        user_namespace: str,
+        workspace_namespace: str,
+    ) -> tuple[str, str]:
+        """Set the private scope in the current async context without database I/O."""
+        session = self._clean_namespace(session_id, "session id")
+        user = self._clean_namespace(user_namespace, "user namespace")
+        workspace = self._clean_namespace(workspace_namespace, "workspace namespace")
+        self._activate_context_scope(session, user, workspace)
+        return user, workspace
+
     def bind_session(
         self,
         session_id: str,
@@ -266,9 +285,7 @@ class MemoryStore:
         session = self._clean_namespace(session_id, "session id")
         user = self._clean_namespace(user_namespace, "user namespace")
         workspace = self._clean_namespace(workspace_namespace, "workspace namespace")
-        active = dict(self._context_scopes.get() or {})
-        active[session] = (user, workspace)
-        self._context_scopes.set(active)
+        self._activate_context_scope(session, user, workspace)
         with self._lock, self.db:
             self.db.execute(
                 "INSERT INTO memory_scopes(session_id, user_namespace, workspace_namespace, updated) "
