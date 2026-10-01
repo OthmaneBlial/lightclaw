@@ -131,6 +131,11 @@ roadmap's “proof over claims” rule.
   clean-wheel checks. Session state, approvals, work serialization, and memory are topic-scoped;
   cron, heartbeat, and typing updates target the originating topic. Runtime-line cap: 22,364; one
   existing third-party `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `e07636e` passed on macOS arm64 Python 3.14.7:
+  951 tests, lint, documentation links, provider artifacts, architecture/runtime budgets, locked
+  dependency resolution, dependency audit, sdist/wheel build, and clean-wheel installation. Cron
+  reminders are capped at ten per Telegram chat/topic; runtime-line cap: 22,617. One existing
+  third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
