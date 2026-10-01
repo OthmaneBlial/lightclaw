@@ -18,6 +18,7 @@ from ..artifacts import ArtifactError, accept_artifact, reject_artifact
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
 from ..fs import open_regular_file_at
 from ..jobs import JobStateError
+from ..logging_setup import log
 from ..markdown import _escape_html
 from ..receipts import read_receipt
 from .delegation.workspace import await_thread_completion
@@ -445,13 +446,27 @@ class BotApprovalsMixin:
                     proxy, "This cancel button belongs to a run that is no longer active."
                 )
                 return
+            task = self._active_run_tasks_by_session.get(session_id)
+            stopping_locally = bool(
+                task and task is not asyncio.current_task() and not task.done()
+            )
+            if stopping_locally:
+                self._cancel_task_once(task)
             try:
                 await asyncio.to_thread(self.jobs.request_cancel, run_id)
             except JobStateError:
                 pass
-            task = self._active_run_tasks_by_session.get(session_id)
-            if task and task is not asyncio.current_task():
-                self._cancel_task_once(task)
+            except Exception:
+                log.exception("Could not persist cancellation request for run %s", run_id)
+                message = (
+                    "Local stop started, but the job state could not be saved. "
+                    "Check the run status and retry if it remains active."
+                    if stopping_locally
+                    else "Could not save the cancellation. Check job storage and try again."
+                )
+                await self._reply_logged(proxy, message)
+                return
+            if stopping_locally:
                 await self._reply_logged(proxy, "Cancellation requested; stopping the delegated process tree.")
             else:
                 await self._reply_logged(proxy, "No active run to cancel.")

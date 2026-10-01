@@ -1187,6 +1187,96 @@ async def test_active_cancel_button_requests_the_matching_run():
 
 
 @pytest.mark.asyncio
+async def test_cancel_button_stops_local_run_while_sqlite_write_waits():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "active-run"
+    bot.is_update_allowed = lambda _update: True
+    bot._active_run_ids_by_session = {"456": run_id}
+    bot._reply_logged = AsyncMock()
+    run_started = asyncio.Event()
+    local_cancelled = asyncio.Event()
+    request_started = threading.Event()
+    release_request = threading.Event()
+
+    async def active_run():
+        run_started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            local_cancelled.set()
+            raise
+
+    def slow_request(candidate):
+        assert candidate == run_id
+        request_started.set()
+        release_request.wait(timeout=5)
+
+    task = asyncio.create_task(active_run())
+    bot._active_run_tasks_by_session = {"456": task}
+    bot.jobs = SimpleNamespace(request_cancel=slow_request)
+    await run_started.wait()
+
+    query = SimpleNamespace(
+        data=f"lc:run:cancel:{bot._run_action_token(run_id)}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+    callback = asyncio.create_task(bot.handle_run_action(update, SimpleNamespace()))
+    assert await asyncio.to_thread(request_started.wait, 2)
+
+    stopped_before_store = False
+    try:
+        await asyncio.wait_for(local_cancelled.wait(), timeout=0.2)
+        stopped_before_store = True
+    except asyncio.TimeoutError:
+        pass
+    finally:
+        release_request.set()
+
+    await callback
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert stopped_before_store
+
+
+@pytest.mark.asyncio
+async def test_cancel_button_reports_durable_store_error_after_local_stop():
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "active-run"
+    bot.is_update_allowed = lambda _update: True
+    bot._active_run_ids_by_session = {"456": run_id}
+    bot._reply_logged = AsyncMock()
+    task = asyncio.create_task(asyncio.Event().wait())
+    bot._active_run_tasks_by_session = {"456": task}
+    bot.jobs = SimpleNamespace(
+        request_cancel=Mock(side_effect=OSError("job storage unavailable"))
+    )
+    query = SimpleNamespace(
+        data=f"lc:run:cancel:{bot._run_action_token(run_id)}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=123),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert "could not be saved" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
 async def test_duplicate_cancel_does_not_interrupt_run_cleanup():
     bot = LightClawBot.__new__(LightClawBot)
     run_id = "active-run"

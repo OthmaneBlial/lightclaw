@@ -56,9 +56,9 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "branch_points": 54,
-      "line": 321,
-      "lines": 194,
+      "branch_points": 56,
+      "line": 322,
+      "lines": 208,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -198,9 +198,9 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "branch_points": 54,
-      "line": 321,
-      "lines": 194,
+      "branch_points": 56,
+      "line": 322,
+      "lines": 208,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -261,7 +261,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 673,
+      "lines": 688,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21754,
+  "runtime_lines": 21769,
   "schema_version": 1
 }
