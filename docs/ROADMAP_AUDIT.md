@@ -63,16 +63,19 @@ roadmap's “proof over claims” rule.
 - Previous cross-version canonical suite at `89b4ec4` on 2026-10-01: all 860 tests passed on
   macOS arm64 with Python 3.12.5, 3.13.1, and 3.14.7; lint, documentation links, architecture/runtime
   budgets, dependency audit, package build, and clean-wheel installation passed on all three versions.
-- The current pagination commit `007e41c` passed the full local `scripts/quality.py` gate on macOS
-  arm64 Python 3.14.7: 863 tests, lint, documentation links, provider artifacts, architecture/runtime
-  budgets, dependency audit, sdist/wheel build, and clean-wheel installation. Python 3.10 is unavailable;
-  its last full run is recorded above.
+- Pagination commit `007e41c` passed the full local `scripts/quality.py` gate on macOS arm64 Python
+  3.14.7: 863 tests, lint, documentation links, provider artifacts, architecture/runtime budgets,
+  dependency audit, sdist/wheel build, and clean-wheel installation.
+- History-index follow-up `baec299` passed the same full gate on Python 3.14.7: 864 tests and the
+  complete package checks. Its query-plan regression confirms page reads use the composite index
+  without a temporary sort. Python 3.10 is unavailable; its last full run is recorded above.
   Tests cover immediate local cancellation before delayed SQLite persistence, clear reporting when
   persistence fails, visible cancel controls during preflight and queued/waiting/repair states,
   and workspace cleanup when preflight fails. Telegram `/agent runs` lists ten durable jobs per
   page in the current chat with escaped bounded goal previews, per-lane state counts, and chat- and
   page-scoped buttons for opening completed-run diffs after restart; the session filter is applied
-  in SQLite, and receipt reads are pinned below the configured workspace. Agent timeout cleanup gives output
+  in SQLite with a matching session-history index, and receipt reads are pinned below the configured
+  workspace. Agent timeout cleanup gives output
   streams a 250ms drain window, then cancels readers instead of waiting for detached descendants
   holding inherited pipes. Synchronous doctor probes also cap post-timeout pipe draining, close
   inherited pipes held by detached descendants, preserve partial output, and reap the probe.
