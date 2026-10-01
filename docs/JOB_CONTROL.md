@@ -51,7 +51,7 @@ Multi-agent preparation creates `AGENTS.md` atomically through the existing work
 
 ## Scheduled Telegram updates and reminders
 
-`/heartbeat on [minutes]` starts the single global heartbeat scheduler for the chat that enables it (minimum five minutes). Intervals too large for the runtime are rejected without changing an existing schedule; `HEARTBEAT_INTERVAL_MIN` is validated at startup too. Ordinary messages and `/heartbeat show` do not change that destination. Running `/heartbeat on` again explicitly changes the destination and user memory scope and restarts the interval. `/heartbeat off` stops it. `HEARTBEAT.md` remains a host-wide file; authorized users share control of this scheduler.
+`/heartbeat` is available only in allowlisted private-chat mode. Public mode cannot inspect or control the process-wide scheduler or host-wide `HEARTBEAT.md`. In allowlisted mode, `/heartbeat on [minutes]` starts the single global scheduler for the chat that enables it (minimum five minutes). Intervals too large for the runtime are rejected without changing an existing schedule; `HEARTBEAT_INTERVAL_MIN` is validated at startup too. Ordinary messages and `/heartbeat show` do not change that destination. Running `/heartbeat on` again explicitly changes the destination and user memory scope and restarts the interval. `/heartbeat off` stops it. Authorized users share control of this scheduler.
 
 Personality, heartbeat, and agent authentication text reads accept regular files and configured file aliases. Named pipes and other special files are rejected without waiting for their contents, preventing these reads from blocking the bot.
 

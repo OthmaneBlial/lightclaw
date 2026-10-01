@@ -301,6 +301,12 @@ class CommandsHeartbeatMixin:
             return
         if not self.is_update_allowed(update):
             return
+        if self.config.telegram_public_bot_ack:
+            await self._reply_logged(
+                update,
+                "Heartbeat scheduling is available only in allowlisted private-chat mode.",
+            )
+            return
         if self._privileged_rate_limited(update.effective_user.id, "heartbeat", limit=10):
             await self._reply_logged(
                 update,

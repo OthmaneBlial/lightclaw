@@ -15,8 +15,37 @@ from memory import MemoryStore
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("args", [["show"], ["on"], ["off"]])
+async def test_public_mode_cannot_inspect_or_control_host_heartbeat(args):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_public_bot_ack=True)
+    bot.is_update_allowed = lambda _update: True
+    bot._reply_logged = AsyncMock()
+    bot._heartbeat_enabled = True
+    bot._heartbeat_interval_sec = 300
+    bot._heartbeat_last_chat_id = "42"
+    bot._heartbeat_file_path = Mock()
+    bot._stop_heartbeat_task = Mock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=99),
+        effective_chat=SimpleNamespace(id=99, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_heartbeat(update, SimpleNamespace(args=args))
+
+    assert bot._heartbeat_enabled
+    assert bot._heartbeat_interval_sec == 300
+    assert bot._heartbeat_last_chat_id == "42"
+    bot._heartbeat_file_path.assert_not_called()
+    bot._stop_heartbeat_task.assert_not_called()
+    assert "only in allowlisted private-chat mode" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
 async def test_overflowing_heartbeat_interval_preserves_existing_schedule(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_public_bot_ack=False)
     bot.is_update_allowed = lambda _update: True
     bot._privileged_rate_limited = lambda *_args, **_kwargs: False
     bot._session_id_from_update = lambda _update: "99"
@@ -51,7 +80,9 @@ async def test_heartbeat_target_and_scope_change_only_on_explicit_enable(
     tmp_path, monkeypatch, chat_ids
 ):
     bot = LightClawBot.__new__(LightClawBot)
-    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot.config = SimpleNamespace(
+        workspace_path=str(tmp_path), telegram_public_bot_ack=False
+    )
     bot.memory = MemoryStore(tmp_path / "memory.db")
     bot.is_update_allowed = lambda _update: True
     bot._privileged_rate_limited = lambda *_args, **_kwargs: False
@@ -172,6 +203,7 @@ async def test_heartbeat_status_resolves_and_checks_file_off_event_loop(tmp_path
 
     monkeypatch.setattr(type(heartbeat), "exists", record_exists_thread)
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_public_bot_ack=False)
     bot.is_update_allowed = lambda _update: True
     bot._privileged_rate_limited = lambda *_args, **_kwargs: False
     bot._session_id_from_update = lambda _update: "123"

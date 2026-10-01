@@ -2,7 +2,7 @@
 
 > LightClaw is an alpha, self-hosted Telegram control surface for reviewed and verified work by local Codex and Claude coding agents. Telegram and configured hosted model providers remain external services. Workspaces and private run receipts stay local by default. The deterministic demo uses fixtures, costs zero, and does not prove live-provider quality. LightClaw never pushes or publishes a demo result.
 
-Allowlisted bots accept commands only in private Telegram chats. Public groups require explicit public mode and no user allowlist. Conversation and memory are shared within each session. Only the requester can use or replace a pending plan, voice request, or trusted-run review, cancel active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topic IDs create separate sessions.
+Allowlisted bots accept commands only in private Telegram chats. Public groups require explicit public mode and no user allowlist. Conversation and memory are shared within each session; public mode disables process-wide /heartbeat controls. Only the requester can use or replace a pending plan, voice request, or trusted-run review, cancel active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topic IDs create separate sessions.
 
 Plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps.
 
