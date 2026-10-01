@@ -12,6 +12,7 @@ from ..fs import FileTooLargeError, atomic_write_text_at, read_text_bounded_at
 from ..logging_setup import log
 from ..security import has_sensitive_content, is_sensitive_path
 from ..types import FileOperationResult
+from .delegation.workspace import await_thread_completion
 
 MAX_CHAT_FILE_BYTES = 2 * 1024 * 1024
 _CHAT_FILE_LIMIT_MESSAGE = (
@@ -24,6 +25,10 @@ def _read_chat_file(workspace: Path, relative: str) -> str:
         return read_text_bounded_at(workspace, relative, MAX_CHAT_FILE_BYTES)
     except FileTooLargeError as exc:
         raise FileTooLargeError(_CHAT_FILE_LIMIT_MESSAGE) from exc
+
+
+async def _read_chat_file_async(workspace: Path, relative: str) -> str:
+    return await await_thread_completion(_read_chat_file, workspace, relative)
 
 
 def _write_workspace_text(
@@ -724,17 +729,21 @@ class BotFileOpsMixin:
         if not retryable_errors:
             return [], ""
 
-        workspace = Path(self.config.workspace_path).resolve()
+        workspace = await await_thread_completion(
+            Path(self.config.workspace_path).resolve
+        )
         snippets: list[str] = []
         retry_paths: list[str] = []
         for op in retryable_errors:
-            target, rel_path, path_err = self._resolve_workspace_path(op.path)
+            target, rel_path, path_err = await await_thread_completion(
+                self._resolve_workspace_path, op.path
+            )
             if path_err or target is None or rel_path is None:
                 continue
             if is_sensitive_path(rel_path):
                 continue
             try:
-                content = _read_chat_file(workspace, rel_path)
+                content = await _read_chat_file_async(workspace, rel_path)
             except Exception:
                 continue
             if has_sensitive_content(content):
@@ -807,20 +816,26 @@ class BotFileOpsMixin:
         prior_model_response: str,
     ) -> tuple[list[FileOperationResult], str]:
         """Force a file operation pass when the model returned prose/no-op."""
-        target_files = self._collect_workspace_candidates(user_text, session_id, limit=4)
+        target_files = await await_thread_completion(
+            self._collect_workspace_candidates, user_text, session_id, limit=4
+        )
         snippets: list[str] = []
         sensitive_files_omitted = False
         oversized_files: list[str] = []
-        workspace = Path(self.config.workspace_path).resolve()
+        workspace = await await_thread_completion(
+            Path(self.config.workspace_path).resolve
+        )
         for rel_path in target_files:
             if is_sensitive_path(rel_path):
                 sensitive_files_omitted = True
                 continue
-            target, _, err = self._resolve_workspace_path(rel_path)
+            target, _, err = await await_thread_completion(
+                self._resolve_workspace_path, rel_path
+            )
             if err or target is None:
                 continue
             try:
-                content = _read_chat_file(workspace, rel_path)
+                content = await _read_chat_file_async(workspace, rel_path)
             except FileTooLargeError:
                 oversized_files.append(rel_path)
                 continue
@@ -922,9 +937,13 @@ class BotFileOpsMixin:
             seen_paths.add(path)
             ordered_html_paths.append(path)
 
-        workspace = Path(self.config.workspace_path).resolve()
+        workspace = await await_thread_completion(
+            Path(self.config.workspace_path).resolve
+        )
         for rel_path in ordered_html_paths:
-            target, _, err = self._resolve_workspace_path(rel_path)
+            target, _, err = await await_thread_completion(
+                self._resolve_workspace_path, rel_path
+            )
             if err or target is None:
                 continue
 
@@ -934,7 +953,7 @@ class BotFileOpsMixin:
 
             for attempt in range(1, max_attempts + 1):
                 try:
-                    content = _read_chat_file(workspace, rel_path)
+                    content = await _read_chat_file_async(workspace, rel_path)
                 except FileTooLargeError as exc:
                     repair_skipped = True
                     repair_ops.append(FileOperationResult("error", rel_path, str(exc)))
@@ -998,7 +1017,7 @@ class BotFileOpsMixin:
                     repair_ops.extend(ops)
 
                 try:
-                    updated = _read_chat_file(workspace, rel_path)
+                    updated = await _read_chat_file_async(workspace, rel_path)
                 except Exception:
                     updated = ""
                 if updated and not self._is_incomplete_html_text(updated):

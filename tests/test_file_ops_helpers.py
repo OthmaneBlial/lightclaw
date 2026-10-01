@@ -1,3 +1,4 @@
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -173,14 +174,40 @@ async def test_credential_files_and_contents_never_enter_automatic_edit_context(
 
 
 @pytest.mark.asyncio
-async def test_force_file_ops_skips_oversized_files_without_sending_them_to_model(tmp_path):
+async def test_force_file_ops_skips_oversized_files_without_sending_them_to_model(
+    tmp_path, monkeypatch
+):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "large.txt").write_bytes(b"private source" * (MAX_CHAT_FILE_BYTES // 10))
+    loop_thread = threading.get_ident()
+    candidate_threads = []
+    resolve_threads = []
+    read_threads = []
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(workspace_path=str(workspace))
-    bot._collect_workspace_candidates = lambda *_args, **_kwargs: ["large.txt"]
+    bot._last_file_by_session = {}
+    collect_candidates = bot._collect_workspace_candidates
+    resolve_path = bot._resolve_workspace_path
+
+    def track_candidates(*args, **kwargs):
+        candidate_threads.append(threading.get_ident())
+        return collect_candidates(*args, **kwargs)
+
+    def track_resolve(*args, **kwargs):
+        resolve_threads.append(threading.get_ident())
+        return resolve_path(*args, **kwargs)
+
+    read_file = file_ops._read_chat_file
+
+    def track_read(*args, **kwargs):
+        read_threads.append(threading.get_ident())
+        return read_file(*args, **kwargs)
+
+    bot._collect_workspace_candidates = track_candidates
+    bot._resolve_workspace_path = track_resolve
     bot.llm = SimpleNamespace(chat=AsyncMock())
+    monkeypatch.setattr(file_ops, "_read_chat_file", track_read)
 
     operations, message = await bot._force_file_ops_pass(
         "chat-1", "edit large.txt", "No changes yet."
@@ -189,6 +216,9 @@ async def test_force_file_ops_skips_oversized_files_without_sending_them_to_mode
     assert operations == []
     assert "2 MiB chat-edit limit" in message
     bot.llm.chat.assert_not_awaited()
+    assert candidate_threads and all(thread_id != loop_thread for thread_id in candidate_threads)
+    assert resolve_threads and all(thread_id != loop_thread for thread_id in resolve_threads)
+    assert read_threads and all(thread_id != loop_thread for thread_id in read_threads)
 
 
 @pytest.mark.asyncio
@@ -270,10 +300,20 @@ async def test_model_file_writes_are_atomic_and_preserve_existing_mode(tmp_path,
 
 
 @pytest.mark.asyncio
-async def test_failed_sensitive_edit_is_not_retried_with_file_contents(tmp_path):
+async def test_failed_sensitive_edit_is_not_retried_with_file_contents(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / ".env").write_text("OPENAI_API_KEY=env-secret\n", encoding="utf-8")
+    (workspace / "notes.md").write_text("OPENAI_API_KEY=content-secret\n", encoding="utf-8")
+    loop_thread = threading.get_ident()
+    read_threads = []
+    read_file = file_ops._read_chat_file
+
+    def track_read(*args, **kwargs):
+        read_threads.append(threading.get_ident())
+        return read_file(*args, **kwargs)
+
+    monkeypatch.setattr(file_ops, "_read_chat_file", track_read)
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(workspace_path=str(workspace))
     bot.llm = SimpleNamespace(chat=AsyncMock())
@@ -281,21 +321,34 @@ async def test_failed_sensitive_edit_is_not_retried_with_file_contents(tmp_path)
     operations, cleaned = await bot._retry_failed_edits(
         "update .env",
         "failed edit",
-        [FileOperationResult("error", ".env", "SEARCH text not found")],
+        [
+            FileOperationResult("error", ".env", "SEARCH text not found"),
+            FileOperationResult("error", "notes.md", "SEARCH text not found"),
+        ],
     )
 
     assert operations == []
     assert cleaned == ""
     bot.llm.chat.assert_not_awaited()
+    assert read_threads and all(thread_id != loop_thread for thread_id in read_threads)
 
 
 @pytest.mark.asyncio
-async def test_html_repair_does_not_resend_detectable_credentials(tmp_path):
+async def test_html_repair_does_not_resend_detectable_credentials(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     (workspace / "index.html").write_text(
         "<html><body>API_KEY=html-secret", encoding="utf-8"
     )
+    loop_thread = threading.get_ident()
+    read_threads = []
+    read_file = file_ops._read_chat_file
+
+    def track_read(*args, **kwargs):
+        read_threads.append(threading.get_ident())
+        return read_file(*args, **kwargs)
+
+    monkeypatch.setattr(file_ops, "_read_chat_file", track_read)
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(workspace_path=str(workspace))
     bot.llm = SimpleNamespace(chat=AsyncMock())
@@ -308,3 +361,4 @@ async def test_html_repair_does_not_resend_detectable_credentials(tmp_path):
     assert repairs[0].action == "error"
     assert "may contain credentials" in repairs[0].detail
     bot.llm.chat.assert_not_awaited()
+    assert read_threads and all(thread_id != loop_thread for thread_id in read_threads)
