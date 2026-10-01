@@ -20,7 +20,7 @@ class CommandsBasicMixin:
         if not self.is_update_allowed(update):
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         self._log_user_message(session_id, "/start")
         await self._reply_logged(
             update,
@@ -51,7 +51,7 @@ class CommandsBasicMixin:
         if not self.is_update_allowed(update):
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         self._log_user_message(session_id, "/help")
         await self._reply_logged(
             update,
@@ -86,7 +86,7 @@ class CommandsBasicMixin:
             )
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         self._log_user_message(session_id, "/clear")
         self._invalidate_active_message_requests(session_id)
         self._clear_pending_actions(session_id)
@@ -111,7 +111,7 @@ class CommandsBasicMixin:
         if not self.is_update_allowed(update):
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         args = [a.strip().lower() for a in (context.args or []) if a.strip()]
         self._log_user_message(session_id, f"/wipe_memory {' '.join(args)}".strip())
 
@@ -175,7 +175,7 @@ class CommandsBasicMixin:
         if not self.is_update_allowed(update):
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         self._log_user_message(session_id, "/memory")
         stats = await asyncio.to_thread(self.memory.stats, session_id=session_id)
         await self._reply_logged(
@@ -197,7 +197,7 @@ class CommandsBasicMixin:
             return
 
         query = " ".join(context.args) if context.args else ""
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         self._log_user_message(session_id, f"/recall {query}".strip())
         if not query:
             await self._reply_logged(
@@ -230,7 +230,7 @@ class CommandsBasicMixin:
         if not self.is_update_allowed(update):
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         raw = " ".join(context.args or []).strip().lower()
         self._log_user_message(session_id, f"/mode {raw}".strip())
 

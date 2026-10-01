@@ -32,7 +32,7 @@ class BotHandlersMixin:
         if not self.is_update_allowed(update):
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         self._log_user_message(session_id, "/show")
 
         uptime = int(time.time() - self.start_time)
@@ -114,7 +114,7 @@ class BotHandlersMixin:
                 update, "⚠️ Too many voice transcriptions. Retry in about one minute."
             )
             return
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         async with self._memory_request_guard(session_id):
             voice_requests = getattr(self, "_voice_request_ids_by_session", None)
             if voice_requests is None:
@@ -243,7 +243,7 @@ class BotHandlersMixin:
     async def _process_user_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_text: str
     ):
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         async with self._memory_request_guard(session_id) as clear_event:
             locks = getattr(self, "_session_message_locks", None)
             if locks is None:

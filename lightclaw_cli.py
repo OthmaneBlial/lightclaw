@@ -891,6 +891,11 @@ def cmd_chat(args: argparse.Namespace) -> int:
         # This terminal-only bot trusts local stdin and keeps its CLI memory namespace.
         bot.is_update_allowed = lambda _update: True
         bot._session_id_from_update = lambda _update: session_id
+
+        async def _terminal_session_scope(_update):
+            return session_id
+
+        bot._session_scope_from_update = _terminal_session_scope
         bot._set_file_mode(session_id, "chat")
 
         print("")

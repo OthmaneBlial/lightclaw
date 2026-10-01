@@ -325,7 +325,7 @@ class BotApprovalsMixin:
             await query.answer("Not authorized", show_alert=True)
             return
         await query.answer()
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         action = str(query.data or "")
         proxy = self._callback_proxy(update)
 

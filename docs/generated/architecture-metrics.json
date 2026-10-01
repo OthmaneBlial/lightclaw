@@ -51,7 +51,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 338,
+      "lines": 343,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -151,7 +151,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 338,
+      "lines": 343,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -178,7 +178,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1670,
+      "line": 1675,
       "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -221,7 +221,7 @@
   ],
   "largest_modules": [
     {
-      "lines": 1928,
+      "lines": 1933,
       "path": "lightclaw_cli.py"
     },
     {
@@ -273,7 +273,7 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 595,
+      "lines": 616,
       "path": "core/bot/base.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21533,
+  "runtime_lines": 21560,
   "schema_version": 1
 }

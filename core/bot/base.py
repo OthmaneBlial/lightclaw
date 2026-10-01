@@ -24,6 +24,7 @@ from ..jobs import JobStore
 from ..logging_setup import log
 from ..personality import load_personality
 from ..security import access_policy_label, is_sensitive_path, redact_text
+from .delegation.workspace import await_thread_completion
 
 # ponytail: bounded in-process LRU; use shared storage if public traffic exceeds this ceiling.
 MAX_PRIVILEGED_RATE_LIMIT_KEYS = 4096
@@ -288,16 +289,36 @@ class BotBaseMixin:
 
     def _session_id_from_update(self, update: Update | None) -> str:
         if update and update.effective_chat:
-            session_id = str(update.effective_chat.id)
-            if update.effective_user and hasattr(self, "memory") and hasattr(self, "config"):
-                workspace = Path(str(self.config.workspace_path)).expanduser().resolve().as_posix()
-                self.memory.bind_session(
-                    session_id,
-                    user_namespace=f"telegram-user:{update.effective_user.id}",
-                    workspace_namespace=workspace,
-                )
-            return session_id
+            return str(update.effective_chat.id)
         return "unknown"
+
+    async def _session_scope_from_update(self, update: Update | None) -> str:
+        session_id = self._session_id_from_update(update)
+        user = getattr(update, "effective_user", None)
+        chat = getattr(update, "effective_chat", None)
+        memory = getattr(self, "memory", None)
+        bind_session = getattr(memory, "bind_session", None)
+        workspace_path = getattr(getattr(self, "config", None), "workspace_path", None)
+        if (
+            not update
+            or not user
+            or not chat
+            or not callable(bind_session)
+            or workspace_path is None
+        ):
+            return session_id
+
+        user_namespace = f"telegram-user:{user.id}"
+
+        def bind_scope() -> None:
+            bind_session(
+                session_id,
+                user_namespace=user_namespace,
+                workspace_namespace=Path(str(workspace_path)).expanduser().resolve().as_posix(),
+            )
+
+        await await_thread_completion(bind_scope)
+        return session_id
 
     @staticmethod
     def _trim_for_log(text: str, max_chars: int = 8000) -> str:

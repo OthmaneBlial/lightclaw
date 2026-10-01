@@ -335,7 +335,7 @@ class CommandsCronMixin:
             )
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         args = context.args or []
         self._log_user_message(session_id, f"/cron {' '.join(args)}".strip())
 

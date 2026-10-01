@@ -115,7 +115,7 @@ class CommandsSkillsMixin:
             )
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         args = context.args or []
         self._log_user_message(session_id, f"/skills {' '.join(args)}".strip())
         sub = args[0].lower() if args else "list"

@@ -59,6 +59,34 @@ async def test_memory_ingestion_runs_off_loop_and_skips_after_clear():
 
 
 @pytest.mark.asyncio
+async def test_session_scope_binding_runs_off_event_loop(tmp_path):
+    loop_thread = threading.get_ident()
+    binding = {}
+
+    def bind_session(session_id, *, user_namespace, workspace_namespace):
+        binding.update(
+            thread=threading.get_ident(),
+            session_id=session_id,
+            user_namespace=user_namespace,
+            workspace_namespace=workspace_namespace,
+        )
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot.memory = SimpleNamespace(bind_session=bind_session)
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=456),
+    )
+
+    assert await bot._session_scope_from_update(update) == "456"
+    assert binding["thread"] != loop_thread
+    assert binding["session_id"] == "456"
+    assert binding["user_namespace"] == "telegram-user:42"
+    assert binding["workspace_namespace"] == str(tmp_path.resolve())
+
+
+@pytest.mark.asyncio
 async def test_clear_during_initial_memory_write_prevents_agent_start():
     loop = asyncio.get_running_loop()
     write_started = asyncio.Event()
@@ -130,7 +158,7 @@ async def test_agent_commands_do_not_restore_cleared_memory(tmp_path, route, cle
         effective_chat=SimpleNamespace(id=456, type="private"),
         message=SimpleNamespace(),
     )
-    bot._session_id_from_update(update)
+    await bot._session_scope_from_update(update)
     bot.memory.ingest("user", "old private goal", "456")
     bot.memory.ingest("user", "other chat history", "other-chat")
     if clear_kind == "global":

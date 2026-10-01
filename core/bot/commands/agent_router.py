@@ -38,7 +38,7 @@ class CommandsAgentRouterMixin:
         approval_id: str,
         approval_blocked: bool,
     ) -> None:
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         pending = self._pending_multi_plan_by_session.get(session_id)
         if not pending or pending.get("approval_id") != approval_id:
             return
@@ -76,7 +76,7 @@ class CommandsAgentRouterMixin:
             )
             return
 
-        session_id = self._session_id_from_update(update)
+        session_id = await self._session_scope_from_update(update)
         args = context.args or []
         self._log_user_message(session_id, f"/agent {' '.join(args)}".strip())
 

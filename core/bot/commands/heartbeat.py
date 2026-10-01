@@ -358,6 +358,7 @@ class CommandsHeartbeatMixin:
                 await self._reply_logged(update, "That heartbeat interval is too large. Schedule unchanged.")
                 return
 
+            await self._session_scope_from_update(update)
             self._heartbeat_interval_sec = interval_sec
             self._stop_heartbeat_task()
             self._heartbeat_last_chat_id = session_id
