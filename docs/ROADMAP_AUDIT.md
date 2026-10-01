@@ -60,13 +60,14 @@ roadmap's “proof over claims” rule.
   The three legacy skill migration cases cover symlink files, symlink swaps, and oversized files.
   The clean venv used the pinned pip from `requirements-pip.txt`; Python 3.10.21's bundled pip
   23.0.1 could not resolve one hashed transitive extra.
-- Latest canonical quality suite at `fa92609` on 2026-10-01: all 851 tests passed on macOS
+- Latest canonical quality suite at `c5a155b` on 2026-10-01: all 851 tests passed on macOS
   arm64 with Python 3.14.7; lint, documentation links, architecture/runtime budgets,
-  dependency audit, package build, and clean-wheel installation also passed. The added cancel
-  tests verify immediate local cancellation before delayed SQLite persistence, clear reporting
-  when persistence fails, a visible cancel button during preflight and queued/waiting/repair
-  states, workspace cleanup when preflight fails, and numeric local timezone offsets for cron
-  schedule displays. One third-party `google-genai` deprecation warning remains.
+  dependency audit, package build, and clean-wheel installation also passed. The cancel tests
+  verify immediate local cancellation before delayed SQLite persistence, clear reporting when
+  persistence fails, a visible cancel button during preflight and queued/waiting/repair states,
+  and workspace cleanup when preflight fails. Cron help shows local date/time and Unix timestamp
+  forms separately, and schedule displays include the numeric local UTC offset. One third-party
+  `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
