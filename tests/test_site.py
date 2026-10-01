@@ -116,6 +116,8 @@ def test_site_explains_allowlisted_group_chat_boundary() -> None:
     html, _ = _document()
     llms = (SITE / "llms.txt").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    install = (ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+    threat_model = (ROOT / "docs" / "THREAT_MODEL.md").read_text(encoding="utf-8")
     assert "Allowlisted bots accept commands only in private chats." in html
     assert "Forum topics with a topic ID keep separate sessions and memory" in html
     assert "Public groups require explicit public mode and no user allowlist." in html
@@ -148,11 +150,9 @@ def test_site_explains_allowlisted_group_chat_boundary() -> None:
     )
     assert "cancel queued or active runs" in readme
     assert "requesters can cancel queued runs from group or private history" in readme
-    assert (
-        "global `/wipe_memory`, process-wide `/heartbeat`, and shared skill-catalog changes are disabled in public mode"
-        in readme
-    )
-    assert "shared skill-catalog changes are disabled in public mode" in readme
+    public_copy = (html, llms, readme, install, threat_model)
+    assert all("/agent doctor" in text for text in public_copy)
+    assert all("host authentication status and local paths" in text for text in public_copy)
     public_copy = (html, llms, readme)
     assert all(
         "Host CLI retries require a resumable job and an idempotent, resumable lane" in text
