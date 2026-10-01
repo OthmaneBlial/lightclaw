@@ -25,7 +25,7 @@ from ..delegation.workspace import await_thread_completion
 from ..messaging import _TelegramHTMLChunker
 
 MAX_CRON_STORE_BYTES = 1024 * 1024
-MAX_CRON_JOBS_PER_CHAT = 10
+MAX_CRON_JOBS_PER_SESSION = 10
 _CRON_AT_USAGE = (
     "<code>/cron add at YYYY-MM-DD HH:MM &lt;message&gt;</code> (one-time, local time)\n"
     "<code>/cron add at &lt;timestamp&gt; &lt;message&gt;</code> (one-time, Unix seconds)\n"
@@ -489,22 +489,22 @@ class CommandsCronMixin:
                 return
 
             assert job is not None
-            at_chat_limit = False
+            at_session_limit = False
             async with self._cron_lock:
                 store = await await_thread_completion(self._read_cron_store)
                 jobs = list(store.get("jobs", []))
-                # ponytail: 1 MiB bounds this scan; add per-chat counts if that limit grows.
-                at_chat_limit = sum(
+                # ponytail: 1 MiB bounds this scan; add per-session counts if that limit grows.
+                at_session_limit = sum(
                     str(existing.get("chat_id")) == session_id for existing in jobs
-                ) >= MAX_CRON_JOBS_PER_CHAT
-                if not at_chat_limit:
+                ) >= MAX_CRON_JOBS_PER_SESSION
+                if not at_session_limit:
                     jobs.append(job)
                     await await_thread_completion(self._write_cron_store, {"jobs": jobs})
 
-            if at_chat_limit:
+            if at_session_limit:
                 await self._reply_logged(
                     update,
-                    f"This chat already has {MAX_CRON_JOBS_PER_CHAT} reminders. Remove one before adding another.",
+                    f"This session already has {MAX_CRON_JOBS_PER_SESSION} reminders. Remove one before adding another.",
                 )
                 return
 
