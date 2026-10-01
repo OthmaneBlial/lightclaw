@@ -104,7 +104,7 @@ def test_readme_and_site_share_the_playful_brand_assets() -> None:
     assert '<meta name="theme-color" content="#fff2bd"' in html
     assert "--paper: #fff2bd" in css
     assert "--coral: #ff694f" in css
-    assert "class=\"top-ribbon\"" in html
+    assert 'class="top-ribbon"' in html
     assert "✨" in html and "🧪" in readme
     assert "assets/social-preview.png" in readme
     assert (ROOT / "assets" / "social-preview.png").read_bytes() == (
@@ -120,23 +120,45 @@ def test_site_explains_allowlisted_group_chat_boundary() -> None:
     assert "Forum topics with a topic ID keep separate sessions and memory" in html
     assert "Public groups require explicit public mode and no user allowlist." in html
     assert "public mode disables process-wide <code>/heartbeat</code> controls" in html
-    assert "shared skill-catalog changes" in html and "host-local skill content stays private" in html
-    assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in html
+    assert (
+        "shared skill-catalog changes" in html and "host-local skill content stays private" in html
+    )
+    assert (
+        "Only the requester can use or replace a pending plan, voice request, or trusted-run review"
+        in html
+    )
     assert "cancel queued or active runs" in html
     assert "requester-only cancellation of queued runs in group or private chats" in html
     assert "all group members can view run diffs" in html
-    assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in llms
+    assert (
+        "Only the requester can use or replace a pending plan, voice request, or trusted-run review"
+        in llms
+    )
     assert "cancel queued or active runs" in llms
     assert "original requester can cancel queued jobs from group or private history" in llms
     assert "Older group jobs without a saved requester remain CLI-only" in llms
     assert "public mode disables process-wide /heartbeat controls" in llms
-    assert "shared skill-catalog changes" in llms and "host-local skill content stays private" in llms
+    assert (
+        "shared skill-catalog changes" in llms and "host-local skill content stays private" in llms
+    )
     assert "all group members can view run diffs" in llms
-    assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in readme
+    assert (
+        "Only the requester can use or replace a pending plan, voice request, or trusted-run review"
+        in readme
+    )
     assert "cancel queued or active runs" in readme
     assert "requesters can cancel queued runs from group or private history" in readme
-    assert "global `/wipe_memory`, process-wide `/heartbeat`, and shared skill-catalog changes are disabled in public mode" in readme
+    assert (
+        "global `/wipe_memory`, process-wide `/heartbeat`, and shared skill-catalog changes are disabled in public mode"
+        in readme
+    )
     assert "shared skill-catalog changes are disabled in public mode" in readme
+    public_copy = (html, llms, readme)
+    assert all(
+        "Host CLI retries require a resumable job and an idempotent, resumable lane" in text
+        for text in public_copy
+    )
+    assert all("accept, reject, and retry results" not in text for text in public_copy)
 
 
 def test_site_discloses_credential_context_guards() -> None:
