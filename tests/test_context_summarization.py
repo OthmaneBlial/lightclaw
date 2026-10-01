@@ -16,6 +16,8 @@ from memory import MemoryStore
 async def test_clear_during_summary_does_not_restore_old_context():
     started = asyncio.Event()
     finish = asyncio.Event()
+    loop_thread = threading.get_ident()
+    recent_threads = []
 
     async def summarize(*args, **kwargs):
         started.set()
@@ -24,13 +26,16 @@ async def test_clear_during_summary_does_not_restore_old_context():
 
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = Config(telegram_allowed_users=["42"], context_window=128)
+
+    def get_recent(*_args, **_kwargs):
+        recent_threads.append(threading.get_ident())
+        return [
+            {"role": "user", "content": f"old detail {index}"}
+            for index in range(21)
+        ]
+
     bot.memory = SimpleNamespace(
-        get_recent=Mock(
-            return_value=[
-                {"role": "user", "content": f"old detail {index}"}
-                for index in range(21)
-            ]
-        ),
+        get_recent=Mock(side_effect=get_recent),
         scope_for=Mock(return_value=("telegram-user:42", "/workspace")),
         get_summary=Mock(return_value=""),
         set_summary=Mock(),
@@ -64,6 +69,8 @@ async def test_clear_during_summary_does_not_restore_old_context():
         finish.set()
     await task
 
+    assert len(recent_threads) == 1
+    assert recent_threads[0] != loop_thread
     assert ("chat-42", "telegram-user:42", "/workspace") not in bot._session_summaries
     assert bot._summary_generation_by_session == {}
     bot.memory.clear_session.assert_called_once_with("chat-42")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 from ..logging_setup import log
@@ -33,7 +34,7 @@ class BotContextMixin:
         if self._llm_backoff_active():
             return
 
-        recent = self.memory.get_recent(session_id, limit=100)
+        recent = await asyncio.to_thread(self.memory.get_recent, session_id, limit=100)
         recent = self._filter_recent_context(recent)
         token_estimate = self.estimate_tokens(recent)
         threshold = self.config.context_window * 75 // 100
