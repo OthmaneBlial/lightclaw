@@ -95,11 +95,13 @@ roadmap's “proof over claims” rule.
   out-of-range callback values are rejected, and page reads still use the session-history index
   without a temporary sort. The runtime-line cap is 22,125 for this 71-line change, documented in
   `docs/architecture/core-budget.json`.
-- Latest canonical `scripts/quality.py` run at `f503098` passed on macOS arm64 Python 3.14.7:
+- Latest canonical `scripts/quality.py` run at `5792f1b` passed on macOS arm64 Python 3.14.7:
   871 tests, lint, documentation links, provider artifacts, architecture/runtime budgets, locked
   dependency resolution, dependency audit, sdist/wheel build, and clean-wheel installation. The
   cross-chat history regression covers legacy and snapshot-cursor callbacks; new file-path tests
   protect `.git`, `.lightclaw`, and `.lightclaw-meta` from model context and file-block edits.
+  Recent-file discovery also prunes those private directories plus generated dependency, build, and
+  cache trees while preserving explicitly named and last-used paths.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
