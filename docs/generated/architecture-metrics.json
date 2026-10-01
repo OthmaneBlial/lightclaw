@@ -7,13 +7,6 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
-      "branch_points": 100,
-      "line": 180,
-      "lines": 537,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
       "branch_points": 94,
       "line": 250,
       "lines": 509,
@@ -71,6 +64,13 @@
     },
     {
       "branch_points": 52,
+      "line": 180,
+      "lines": 318,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
+      "branch_points": 52,
       "line": 571,
       "lines": 177,
       "name": "_evaluate_multi_worker_acceptance",
@@ -82,6 +82,13 @@
       "lines": 310,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
+    },
+    {
+      "branch_points": 48,
+      "line": 499,
+      "lines": 209,
+      "name": "_cmd_agent_multi",
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 47,
@@ -103,13 +110,6 @@
       "lines": 73,
       "name": "validate_skill_manifest",
       "path": "skills.py"
-    },
-    {
-      "branch_points": 42,
-      "line": 500,
-      "lines": 284,
-      "name": "_invoke_local_agent_streaming",
-      "path": "core/bot/delegation/execution.py"
     }
   ],
   "largest_functions": [
@@ -119,13 +119,6 @@
       "lines": 668,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
-    },
-    {
-      "branch_points": 100,
-      "line": 180,
-      "lines": 537,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 94,
@@ -168,6 +161,13 @@
       "lines": 344,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
+    },
+    {
+      "branch_points": 52,
+      "line": 180,
+      "lines": 318,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 50,
@@ -205,18 +205,18 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
+      "branch_points": 48,
+      "line": 499,
+      "lines": 209,
+      "name": "_cmd_agent_multi",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
       "branch_points": 32,
       "line": 118,
       "lines": 179,
       "name": "_run_heartbeat_once_impl",
       "path": "core/bot/commands/heartbeat.py"
-    },
-    {
-      "branch_points": 52,
-      "line": 571,
-      "lines": 177,
-      "name": "_evaluate_multi_worker_acceptance",
-      "path": "core/bot/commands/agent_acceptance.py"
     }
   ],
   "largest_modules": [
@@ -261,12 +261,12 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 776,
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
       "lines": 774,
       "path": "core/bot/commands/agent_acceptance.py"
+    },
+    {
+      "lines": 766,
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "lines": 705,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22664,
+  "runtime_lines": 22654,
   "schema_version": 1
 }

@@ -298,226 +298,7 @@ class CommandsAgentRouterMixin:
             return
 
         if sub == "multi":
-            parsed, parse_error = self._parse_multi_agent_args(args[1:])
-            if parse_error:
-                await self._reply_logged(
-                    update,
-                    parse_error,
-                    parse_mode=ParseMode.HTML,
-                )
-                return
-
-            action = str(parsed.get("action") or "")
-            pending = self._get_pending_multi_plan(session_id)
-            pending_for_action = pending or self._pending_multi_plan_by_session.get(
-                session_id
-            )
-
-            if (
-                action in {"confirm", "cancel", "edit", "proposal"}
-                and pending_for_action
-                and not self._is_pending_requester(update, pending_for_action)
-            ):
-                await self._reply_logged(
-                    update,
-                    "Only the requester can act on or replace this plan.",
-                )
-                return
-
-            if action == "confirm":
-                if not pending:
-                    await self._reply_logged(
-                        update,
-                        "No pending multi-agent plan.\nStart one with <code>/agent multi &lt;goal&gt;</code>.",
-                        parse_mode=ParseMode.HTML,
-                    )
-                    return
-                approval_id = str(parsed.get("approval_id") or "")
-                if not approval_id or not secrets.compare_digest(str(pending["approval_id"]), approval_id):
-                    await self._reply_logged(
-                        update,
-                        "This confirmation does not identify the current reviewed plan. "
-                        "Use its Approve button or copy /agent multi confirm <review-id> from the review.",
-                    )
-                    return
-                await self._execute_pending_multi_plan(update, session_id)
-                return
-
-            if action == "cancel":
-                cleared = self._clear_pending_multi_plan(session_id)
-                if not cleared:
-                    await self._reply_logged(
-                        update,
-                        "No pending multi-agent plan to cancel.",
-                    )
-                    return
-                await self._reply_logged(update, "Cancelled pending multi-agent plan.")
-                return
-
-            if action == "edit":
-                if not pending:
-                    await self._reply_logged(
-                        update,
-                        "No pending multi-agent plan.\nStart one with <code>/agent multi &lt;goal&gt;</code>.",
-                        parse_mode=ParseMode.HTML,
-                    )
-                    return
-                feedback = str(parsed.get("feedback") or "").strip()
-                goal = str(pending.get("goal") or "")
-                explicit_specs = (
-                    pending.get("explicit_specs")
-                    if isinstance(pending.get("explicit_specs"), list)
-                    else []
-                )
-                explicit_dependency_specs = (
-                    pending.get("explicit_dependency_specs")
-                    if isinstance(pending.get("explicit_dependency_specs"), dict)
-                    else {}
-                )
-                preferred_agents = (
-                    pending.get("preferred_agents")
-                    if isinstance(pending.get("preferred_agents"), list)
-                    else []
-                )
-                explicit_pairs: list[tuple[str, str]] = []
-                for item in explicit_specs:
-                    if not isinstance(item, (list, tuple)) or len(item) != 2:
-                        continue
-                    label = str(item[0]).strip()
-                    agent = str(item[1]).strip()
-                    if label and agent:
-                        explicit_pairs.append((label, agent))
-                available = self._available_local_agents()
-                planned, plan_error = await self._plan_current_multi_request(
-                    session_id,
-                    requester_user_id=update.effective_user.id,
-                    goal=goal,
-                    available_agents=available,
-                    explicit_specs=explicit_pairs,
-                    explicit_dependency_specs={
-                        str(k): [str(v) for v in values if isinstance(v, str)]
-                        for k, values in explicit_dependency_specs.items()
-                        if isinstance(k, str) and isinstance(values, list)
-                    },
-                    preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
-                    feedback=feedback,
-                )
-                if planned is None:
-                    return
-                if plan_error:
-                    await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
-                    return
-                pending_payload = self._set_pending_multi_plan(
-                    session_id,
-                    self._decorate_pending_plan(
-                        {
-                            **planned,
-                            "feedback": feedback,
-                        }
-                    ),
-                )
-                preview_payload_obj = pending_payload.get("plan_payload")
-                preview_payload = (
-                    preview_payload_obj
-                    if isinstance(preview_payload_obj, dict)
-                    else {}
-                )
-                preview_warnings_obj = pending_payload.get("warnings")
-                preview_warnings = (
-                    preview_warnings_obj
-                    if isinstance(preview_warnings_obj, list)
-                    else []
-                )
-                preview = self._render_multi_plan_preview(
-                    goal=str(pending_payload.get("goal") or ""),
-                    workers=list(pending_payload.get("workers") or []),
-                    plan_payload=preview_payload,
-                    warnings=[str(item) for item in preview_warnings],
-                    include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
-                    approval_id=str(pending_payload["approval_id"]),
-                )
-                preview += "\n\n" + self._render_plan_review(pending_payload)
-                await self._reply_multi_plan_preview(
-                    update,
-                    preview,
-                    str(pending_payload["approval_id"]),
-                    bool(pending_payload["review"]["approval_blocked"]),
-                )
-                return
-
-            goal = str(parsed.get("goal") or "").strip()
-            explicit_specs_obj = parsed.get("explicit_specs")
-            explicit_specs = explicit_specs_obj if isinstance(explicit_specs_obj, list) else []
-            explicit_dependency_specs_obj = parsed.get("explicit_dependency_specs")
-            explicit_dependency_specs = (
-                explicit_dependency_specs_obj
-                if isinstance(explicit_dependency_specs_obj, dict)
-                else {}
-            )
-            preferred_agents_obj = parsed.get("preferred_agents")
-            preferred_agents = preferred_agents_obj if isinstance(preferred_agents_obj, list) else []
-            explicit_pairs: list[tuple[str, str]] = []
-            for item in explicit_specs:
-                if not isinstance(item, (list, tuple)) or len(item) != 2:
-                    continue
-                label = str(item[0]).strip()
-                agent = str(item[1]).strip()
-                if label and agent:
-                    explicit_pairs.append((label, agent))
-
-            available = self._available_local_agents()
-            planned, plan_error = await self._plan_current_multi_request(
-                session_id,
-                requester_user_id=update.effective_user.id,
-                goal=goal,
-                available_agents=available,
-                explicit_specs=explicit_pairs,
-                explicit_dependency_specs={
-                    str(k): [str(v) for v in values if isinstance(v, str)]
-                    for k, values in explicit_dependency_specs.items()
-                    if isinstance(k, str) and isinstance(values, list)
-                },
-                preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
-            )
-            if planned is None:
-                return
-            if plan_error:
-                await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
-                return
-
-            pending_payload = self._set_pending_multi_plan(
-                session_id,
-                self._decorate_pending_plan(planned),
-            )
-            preview_payload_obj = pending_payload.get("plan_payload")
-            preview_payload = (
-                preview_payload_obj if isinstance(preview_payload_obj, dict) else {}
-            )
-            preview_warnings_obj = pending_payload.get("warnings")
-            preview_warnings = (
-                preview_warnings_obj if isinstance(preview_warnings_obj, list) else []
-            )
-            preview = self._render_multi_plan_preview(
-                goal=str(pending_payload.get("goal") or ""),
-                workers=list(pending_payload.get("workers") or []),
-                plan_payload=preview_payload,
-                warnings=[str(item) for item in preview_warnings],
-                include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
-                approval_id=str(pending_payload["approval_id"]),
-            )
-            preview += "\n\n" + self._render_plan_review(pending_payload)
-            await self._reply_multi_plan_preview(
-                update,
-                preview,
-                str(pending_payload["approval_id"]),
-                bool(pending_payload["review"]["approval_blocked"]),
-            )
-
-            if self.config.local_agent_multi_auto_continue:
-                await self._reply_logged(
-                    update,
-                    "Auto-continue is ignored for safety. Use the explicit Approve button.",
-                )
+            await self._cmd_agent_multi(update, session_id, args)
             return
 
         if sub in {"observe", "trusted"}:
@@ -715,6 +496,215 @@ class CommandsAgentRouterMixin:
             parse_mode=ParseMode.HTML,
         )
 
+    async def _cmd_agent_multi(self, update: Update, session_id: str, args: list[str]) -> None:
+        parsed, parse_error = self._parse_multi_agent_args(args[1:])
+        if parse_error:
+            await self._reply_logged(
+                update,
+                parse_error,
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        action = str(parsed.get("action") or "")
+        pending = self._get_pending_multi_plan(session_id)
+        pending_for_action = pending or self._pending_multi_plan_by_session.get(
+            session_id
+        )
+
+        if (
+            action in {"confirm", "cancel", "edit", "proposal"}
+            and pending_for_action
+            and not self._is_pending_requester(update, pending_for_action)
+        ):
+            await self._reply_logged(
+                update,
+                "Only the requester can act on or replace this plan.",
+            )
+            return
+
+        if action == "confirm":
+            if not pending:
+                await self._reply_logged(
+                    update,
+                    "No pending multi-agent plan.\nStart one with <code>/agent multi &lt;goal&gt;</code>.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+            approval_id = str(parsed.get("approval_id") or "")
+            if not approval_id or not secrets.compare_digest(str(pending["approval_id"]), approval_id):
+                await self._reply_logged(
+                    update,
+                    "This confirmation does not identify the current reviewed plan. "
+                    "Use its Approve button or copy /agent multi confirm <review-id> from the review.",
+                )
+                return
+            await self._execute_pending_multi_plan(update, session_id)
+            return
+
+        if action == "cancel":
+            cleared = self._clear_pending_multi_plan(session_id)
+            if not cleared:
+                await self._reply_logged(
+                    update,
+                    "No pending multi-agent plan to cancel.",
+                )
+                return
+            await self._reply_logged(update, "Cancelled pending multi-agent plan.")
+            return
+
+        if action == "edit":
+            if not pending:
+                await self._reply_logged(
+                    update,
+                    "No pending multi-agent plan.\nStart one with <code>/agent multi &lt;goal&gt;</code>.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+            feedback = str(parsed.get("feedback") or "").strip()
+            goal = str(pending.get("goal") or "")
+            explicit_specs = (
+                pending.get("explicit_specs")
+                if isinstance(pending.get("explicit_specs"), list)
+                else []
+            )
+            explicit_dependency_specs = (
+                pending.get("explicit_dependency_specs")
+                if isinstance(pending.get("explicit_dependency_specs"), dict)
+                else {}
+            )
+            preferred_agents = (
+                pending.get("preferred_agents")
+                if isinstance(pending.get("preferred_agents"), list)
+                else []
+            )
+            explicit_pairs: list[tuple[str, str]] = []
+            for item in explicit_specs:
+                if not isinstance(item, (list, tuple)) or len(item) != 2:
+                    continue
+                label = str(item[0]).strip()
+                agent = str(item[1]).strip()
+                if label and agent:
+                    explicit_pairs.append((label, agent))
+            available = self._available_local_agents()
+            planned, plan_error = await self._plan_current_multi_request(
+                session_id,
+                requester_user_id=update.effective_user.id,
+                goal=goal,
+                available_agents=available,
+                explicit_specs=explicit_pairs,
+                explicit_dependency_specs={
+                    str(k): [str(v) for v in values if isinstance(v, str)]
+                    for k, values in explicit_dependency_specs.items()
+                    if isinstance(k, str) and isinstance(values, list)
+                },
+                preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
+                feedback=feedback,
+            )
+            if planned is None:
+                return
+            if plan_error:
+                await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
+                return
+            pending_payload = self._set_pending_multi_plan(
+                session_id,
+                self._decorate_pending_plan(
+                    {
+                        **planned,
+                        "feedback": feedback,
+                    }
+                ),
+            )
+            preview_payload_obj = pending_payload.get("plan_payload")
+            preview_payload = preview_payload_obj if isinstance(preview_payload_obj, dict) else {}
+            preview_warnings_obj = pending_payload.get("warnings")
+            preview_warnings = preview_warnings_obj if isinstance(preview_warnings_obj, list) else []
+            preview = self._render_multi_plan_preview(
+                goal=str(pending_payload.get("goal") or ""),
+                workers=list(pending_payload.get("workers") or []),
+                plan_payload=preview_payload,
+                warnings=[str(item) for item in preview_warnings],
+                include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
+                approval_id=str(pending_payload["approval_id"]),
+            )
+            preview += "\n\n" + self._render_plan_review(pending_payload)
+            await self._reply_multi_plan_preview(
+                update,
+                preview,
+                str(pending_payload["approval_id"]),
+                bool(pending_payload["review"]["approval_blocked"]),
+            )
+            return
+
+        goal = str(parsed.get("goal") or "").strip()
+        explicit_specs_obj = parsed.get("explicit_specs")
+        explicit_specs = explicit_specs_obj if isinstance(explicit_specs_obj, list) else []
+        explicit_dependency_specs_obj = parsed.get("explicit_dependency_specs")
+        explicit_dependency_specs = (
+            explicit_dependency_specs_obj
+            if isinstance(explicit_dependency_specs_obj, dict)
+            else {}
+        )
+        preferred_agents_obj = parsed.get("preferred_agents")
+        preferred_agents = preferred_agents_obj if isinstance(preferred_agents_obj, list) else []
+        explicit_pairs: list[tuple[str, str]] = []
+        for item in explicit_specs:
+            if not isinstance(item, (list, tuple)) or len(item) != 2:
+                continue
+            label = str(item[0]).strip()
+            agent = str(item[1]).strip()
+            if label and agent:
+                explicit_pairs.append((label, agent))
+
+        available = self._available_local_agents()
+        planned, plan_error = await self._plan_current_multi_request(
+            session_id,
+            requester_user_id=update.effective_user.id,
+            goal=goal,
+            available_agents=available,
+            explicit_specs=explicit_pairs,
+            explicit_dependency_specs={
+                str(k): [str(v) for v in values if isinstance(v, str)]
+                for k, values in explicit_dependency_specs.items()
+                if isinstance(k, str) and isinstance(values, list)
+            },
+            preferred_agents=[str(a) for a in preferred_agents if isinstance(a, str)],
+        )
+        if planned is None:
+            return
+        if plan_error:
+            await self._reply_logged(update, plan_error, parse_mode=ParseMode.HTML)
+            return
+
+        pending_payload = self._set_pending_multi_plan(
+            session_id,
+            self._decorate_pending_plan(planned),
+        )
+        preview_payload_obj = pending_payload.get("plan_payload")
+        preview_payload = preview_payload_obj if isinstance(preview_payload_obj, dict) else {}
+        preview_warnings_obj = pending_payload.get("warnings")
+        preview_warnings = preview_warnings_obj if isinstance(preview_warnings_obj, list) else []
+        preview = self._render_multi_plan_preview(
+            goal=str(pending_payload.get("goal") or ""),
+            workers=list(pending_payload.get("workers") or []),
+            plan_payload=preview_payload,
+            warnings=[str(item) for item in preview_warnings],
+            include_confirm_hint=not bool(pending_payload["review"]["approval_blocked"]),
+            approval_id=str(pending_payload["approval_id"]),
+        )
+        preview += "\n\n" + self._render_plan_review(pending_payload)
+        await self._reply_multi_plan_preview(
+            update,
+            preview,
+            str(pending_payload["approval_id"]),
+            bool(pending_payload["review"]["approval_blocked"]),
+        )
+
+        if self.config.local_agent_multi_auto_continue:
+            await self._reply_logged(
+                update,
+                "Auto-continue is ignored for safety. Use the explicit Approve button.",
+            )
     async def _execute_one_shot_delegation(
         self,
         update: Update,
