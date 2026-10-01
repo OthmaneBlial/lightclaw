@@ -249,7 +249,7 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 967,
+      "lines": 969,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22841,
+  "runtime_lines": 22843,
   "schema_version": 1
 }

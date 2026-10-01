@@ -869,8 +869,10 @@ class BotApprovalsMixin:
         if patch_path and patch_size is not None and patch_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
             if patch_handle:
                 patch_handle.close()
+            relative_patch_path = patch_path.absolute().relative_to(workspace)
             review_lines.append(
-                f"Full patch is too large to attach through Telegram; review it locally: `{patch_path}`"
+                "Full patch is too large to attach through Telegram; review it in the "
+                f"configured workspace at `{relative_patch_path.as_posix()}`."
             )
             await self._reply_logged(update, "\n".join(review_lines))
             return

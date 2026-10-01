@@ -2034,9 +2034,12 @@ async def test_view_diff_closes_patch_fd_when_cancelled_while_opening(tmp_path, 
 @pytest.mark.asyncio
 async def test_view_diff_skips_patch_larger_than_telegram_upload_limit(tmp_path, monkeypatch):
     monkeypatch.setattr("core.bot.approvals.TELEGRAM_BOT_API_MAX_FILE_BYTES", 8)
-    patch_path = tmp_path / "changes.patch"
+    workspace = tmp_path / "workspace"
+    receipt_dir = workspace / ".lightclaw-meta" / "receipts" / "run-large-patch"
+    receipt_dir.mkdir(parents=True)
+    patch_path = receipt_dir / "changes.patch"
     patch_path.write_bytes(b"x" * 9)
-    receipt_path = tmp_path / "receipt.json"
+    receipt_path = receipt_dir / "receipt.json"
     receipt_path.write_text(
         json.dumps(
             {
@@ -2049,7 +2052,7 @@ async def test_view_diff_skips_patch_larger_than_telegram_upload_limit(tmp_path,
         encoding="utf-8",
     )
     bot = LightClawBot.__new__(LightClawBot)
-    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
     bot._last_run_receipts_by_session = {"456": str(receipt_path)}
     bot._reply_logged = AsyncMock()
     message = SimpleNamespace(reply_document=AsyncMock())
@@ -2059,8 +2062,10 @@ async def test_view_diff_skips_patch_larger_than_telegram_upload_limit(tmp_path,
     )
 
     message.reply_document.assert_not_awaited()
-    assert "too large to attach" in bot._reply_logged.await_args.args[1]
-    assert patch_path.as_posix() in bot._reply_logged.await_args.args[1]
+    response = bot._reply_logged.await_args.args[1]
+    assert "too large to attach" in response
+    assert ".lightclaw-meta/receipts/run-large-patch/changes.patch" in response
+    assert str(workspace) not in response
 
 
 @pytest.mark.asyncio
