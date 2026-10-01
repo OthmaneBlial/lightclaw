@@ -145,7 +145,7 @@ python -m pip install -e '.[dev]'
 python scripts/quality.py
 ```
 
-That is the canonical local quality gate: lint, docs, architecture/runtime budgets, dependency audit, 400+ tests, demo replays, and clean-wheel checks. **GitHub CI, CodeQL, OpenSSF Scorecard, and showcase workflows are disabled**; run the local gate before pushing.
+That is the canonical local quality gate: lint, docs, architecture/runtime budgets, dependency audit, the full pytest suite, demo replays, and clean-wheel checks. **GitHub CI, CodeQL, OpenSSF Scorecard, and showcase workflows are disabled**; run the local gate before pushing.
 
 Read [contributing](CONTRIBUTING.md), [support](SUPPORT.md), and the [Code of Conduct](CODE_OF_CONDUCT.md) before opening a ticket.
 
