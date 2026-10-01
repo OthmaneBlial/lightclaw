@@ -120,7 +120,7 @@ class CommandsBasicMixin:
         pending = self._pending_wipe_confirm.get(session_id)
         confirmation_active = bool(
             pending
-            and pending.get("user_id") == update.effective_user.id
+            and self._is_pending_requester(update, pending)
             and not self._pending_confirmation_expired(pending)
         )
 

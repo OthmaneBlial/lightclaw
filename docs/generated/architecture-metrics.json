@@ -7,8 +7,15 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
+      "branch_points": 96,
+      "line": 180,
+      "lines": 522,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
+    },
+    {
       "branch_points": 94,
-      "line": 276,
+      "line": 281,
       "lines": 694,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
@@ -21,23 +28,16 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 93,
-      "line": 175,
-      "lines": 507,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
-      "branch_points": 81,
+      "branch_points": 83,
       "line": 338,
-      "lines": 315,
+      "lines": 326,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
     {
-      "branch_points": 74,
-      "line": 266,
-      "lines": 383,
+      "branch_points": 75,
+      "line": 267,
+      "lines": 388,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -115,10 +115,17 @@
   "largest_functions": [
     {
       "branch_points": 94,
-      "line": 276,
+      "line": 281,
       "lines": 694,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
+    },
+    {
+      "branch_points": 96,
+      "line": 180,
+      "lines": 522,
+      "name": "cmd_agent",
+      "path": "core/bot/commands/agent_router.py"
     },
     {
       "branch_points": 94,
@@ -128,13 +135,6 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 93,
-      "line": 175,
-      "lines": 507,
-      "name": "cmd_agent",
-      "path": "core/bot/commands/agent_router.py"
-    },
-    {
       "branch_points": 71,
       "line": 854,
       "lines": 404,
@@ -142,9 +142,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 74,
-      "line": 266,
-      "lines": 383,
+      "branch_points": 75,
+      "line": 267,
+      "lines": 388,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -163,9 +163,9 @@
       "path": "core/bot/commands/skills.py"
     },
     {
-      "branch_points": 81,
+      "branch_points": 83,
       "line": 338,
-      "lines": 315,
+      "lines": 326,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -245,7 +245,7 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 969,
+      "lines": 974,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -257,7 +257,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 834,
+      "lines": 845,
       "path": "core/bot/approvals.py"
     },
     {
@@ -265,15 +265,15 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 740,
+      "lines": 760,
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 667,
+      "lines": 672,
       "path": "core/bot/base.py"
     },
     {
-      "lines": 650,
+      "lines": 656,
       "path": "core/bot/handlers.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22364,
+  "runtime_lines": 22411,
   "schema_version": 1
 }

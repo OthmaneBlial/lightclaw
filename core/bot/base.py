@@ -264,6 +264,11 @@ class BotBaseMixin:
             and not self.config.telegram_allowed_users
         )
 
+    @staticmethod
+    def _is_pending_requester(update: Update, pending: dict[str, object]) -> bool:
+        user = getattr(update, "effective_user", None)
+        return bool(user and pending.get("user_id") == user.id)
+
     def _access_policy_label(self) -> str:
         return access_policy_label(
             self.config.telegram_allowed_users,

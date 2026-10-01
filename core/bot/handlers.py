@@ -189,6 +189,7 @@ class BotHandlersMixin:
                         "text": user_text,
                         "transcription": text,
                         "approval_id": approval_id,
+                        "user_id": update.effective_user.id,
                         "expires_at": now + 10 * 60,
                         "expires_monotonic": time.monotonic() + 10 * 60,
                     }
@@ -290,6 +291,11 @@ class BotHandlersMixin:
 
         pending_multi = self._get_pending_multi_plan(session_id)
         if pending_multi:
+            if not self._is_pending_requester(update, pending_multi):
+                await self._reply_logged(
+                    update, "Only the requester can act on this plan."
+                )
+                return
             decision = self._classify_pending_multi_reply(user_text)
             if decision == "confirm":
                 reply = getattr(getattr(update, "message", None), "reply_to_message", None)

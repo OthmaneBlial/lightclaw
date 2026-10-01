@@ -165,6 +165,11 @@ class CommandsAgentExecutionMixin:
                 parse_mode=ParseMode.HTML,
             )
             return
+        if not self._is_pending_requester(update, pending):
+            await self._reply_logged(
+                update, "Only the requester can approve this plan."
+            )
+            return
         review = pending.get("review") if isinstance(pending.get("review"), dict) else {}
         if not await self._require_complete_plan_review(update, pending):
             return

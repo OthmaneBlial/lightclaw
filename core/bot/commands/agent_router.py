@@ -19,9 +19,11 @@ _RUN_HISTORY_PAGE_SIZE = 10
 
 class CommandsAgentRouterMixin:
     async def _plan_current_multi_request(
-        self, session_id: str, **kwargs
+        self, session_id: str, *, requester_user_id: int, **kwargs
     ) -> tuple[dict[str, object] | None, str]:
-        pending = self._set_pending_multi_plan(session_id, {"planning": True})
+        pending = self._set_pending_multi_plan(
+            session_id, {"planning": True, "user_id": requester_user_id}
+        )
         try:
             result = await self._plan_multi_agent_payload(**kwargs)
         except BaseException:
@@ -31,7 +33,10 @@ class CommandsAgentRouterMixin:
         if self._pending_multi_plan_by_session.get(session_id) is not pending:
             return None, ""
         self._clear_pending_multi_plan(session_id)
-        return result
+        planned, error = result
+        if planned is not None:
+            planned = {**planned, "user_id": requester_user_id}
+        return planned, error
 
     async def _reply_multi_plan_preview(
         self,
@@ -299,6 +304,19 @@ class CommandsAgentRouterMixin:
 
             action = str(parsed.get("action") or "")
             pending = self._get_pending_multi_plan(session_id)
+            pending_for_action = pending or self._pending_multi_plan_by_session.get(
+                session_id
+            )
+
+            if (
+                action in {"confirm", "cancel", "edit"}
+                and pending_for_action
+                and not self._is_pending_requester(update, pending_for_action)
+            ):
+                await self._reply_logged(
+                    update, "Only the requester can act on this plan."
+                )
+                return
 
             if action == "confirm":
                 if not pending:
@@ -366,6 +384,7 @@ class CommandsAgentRouterMixin:
                 available = self._available_local_agents()
                 planned, plan_error = await self._plan_current_multi_request(
                     session_id,
+                    requester_user_id=update.effective_user.id,
                     goal=goal,
                     available_agents=available,
                     explicit_specs=explicit_pairs,
@@ -443,6 +462,7 @@ class CommandsAgentRouterMixin:
             available = self._available_local_agents()
             planned, plan_error = await self._plan_current_multi_request(
                 session_id,
+                requester_user_id=update.effective_user.id,
                 goal=goal,
                 available_agents=available,
                 explicit_specs=explicit_pairs,
@@ -507,7 +527,7 @@ class CommandsAgentRouterMixin:
                         parse_mode=ParseMode.HTML,
                     )
                     return
-                if pending.get("user_id") != update.effective_user.id:
+                if not self._is_pending_requester(update, pending):
                     await self._reply_logged(
                         update,
                         "Only the Telegram user who requested this trusted run can confirm it.",

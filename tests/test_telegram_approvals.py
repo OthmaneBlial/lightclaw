@@ -407,6 +407,7 @@ async def test_hidden_plan_command_callback_is_refused():
     pending = {
         "review_delivered": True,
         "approval_id": "0123456789abcdef",
+        "user_id": 123,
         "review": {
             "proposed_commands": ["python -m pytest"],
             "approval_blocked": True,
@@ -438,12 +439,15 @@ async def test_hidden_plan_command_callback_is_refused():
 async def test_pending_plan_execution_refuses_hidden_commands():
     bot = LightClawBot.__new__(LightClawBot)
     bot._get_pending_multi_plan = lambda _session: {
+        "user_id": 123,
         "review_delivered": True,
         "review": {"approval_blocked": True}
     }
     bot._reply_logged = AsyncMock()
 
-    await bot._execute_pending_multi_plan_impl(SimpleNamespace(), "456")
+    await bot._execute_pending_multi_plan_impl(
+        SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+    )
 
     assert "blocked" in bot._reply_logged.await_args.args[1].lower()
 
@@ -454,6 +458,7 @@ async def test_shared_execution_gate_requires_second_confirmation():
     pending = {
         "review_delivered": True,
         "approval_id": "0123456789abcdef",
+        "user_id": 123,
         "review": {
             "second_confirmation_required": True,
             "second_confirmation_prompted": False,
@@ -464,7 +469,9 @@ async def test_shared_execution_gate_requires_second_confirmation():
     bot._reply_logged = AsyncMock()
     bot._execute_multi_agent_plan = AsyncMock()
 
-    await bot._execute_pending_multi_plan_impl(SimpleNamespace(), "456")
+    await bot._execute_pending_multi_plan_impl(
+        SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+    )
 
     bot._execute_multi_agent_plan.assert_not_awaited()
     assert pending["review"]["second_confirmation_prompted"] is True
@@ -477,6 +484,7 @@ async def test_shared_execution_gate_requires_second_confirmation():
 async def test_multi_agent_setup_failure_explains_approval_was_consumed():
     bot = LightClawBot.__new__(LightClawBot)
     bot._get_pending_multi_plan = lambda _session: {
+        "user_id": 123,
         "review_delivered": True,
         "goal": "review the patch",
         "workers": [("builder", "codex"), ("auditor", "claude")],
@@ -488,7 +496,9 @@ async def test_multi_agent_setup_failure_explains_approval_was_consumed():
     bot._reply_logged = AsyncMock()
     bot._execute_multi_agent_plan = AsyncMock(side_effect=OSError("workspace unavailable"))
 
-    await bot._execute_pending_multi_plan_impl(SimpleNamespace(), "456")
+    await bot._execute_pending_multi_plan_impl(
+        SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+    )
 
     bot._execute_multi_agent_plan.assert_awaited_once()
     bot._clear_pending_multi_plan.assert_called_once_with("456")
@@ -503,6 +513,7 @@ async def test_text_confirmation_refuses_hidden_commands():
     bot._session_id_from_update = lambda _update: "456"
     bot._log_user_message = Mock()
     bot._get_pending_multi_plan = lambda _session: {
+        "user_id": 123,
         "review_delivered": True,
         "review_message_id": 42,
         "review": {"approval_blocked": True}
@@ -511,6 +522,7 @@ async def test_text_confirmation_refuses_hidden_commands():
     bot._reply_logged = AsyncMock()
     bot._execute_pending_multi_plan = AsyncMock()
     update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123),
         effective_chat=SimpleNamespace(id=456),
         message=SimpleNamespace(reply_to_message=SimpleNamespace(message_id=42)),
     )
@@ -620,6 +632,7 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
     assert bot._pending_voice_goal_by_session["456"]["text"] == (
         "Review this change\n[voice transcription: Build the fixture]"
     )
+    assert bot._pending_voice_goal_by_session["456"]["user_id"] == 123
     call = bot._reply_logged.await_args
     assert "not executed" in call.args[1]
     assert "Review this change" in call.args[1]
@@ -633,6 +646,47 @@ async def test_voice_transcription_survives_typing_failure_and_waits_for_approva
     ]
     approval_id = bot._pending_voice_goal_by_session["456"]["approval_id"]
     assert f"lc:voice:approve:{approval_id}" in voice_buttons
+
+
+@pytest.mark.asyncio
+async def test_group_voice_approval_is_bound_to_the_speaker():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="-7")
+    bot._pending_voice_goal_by_session = {
+        "-7": {
+            "text": "[voice transcription: inspect the patch]",
+            "approval_id": "0123456789abcdef",
+            "user_id": 42,
+            "expires_at": 10**20,
+            "expires_monotonic": 10**20,
+        }
+    }
+    bot._reply_logged = AsyncMock()
+    bot._process_user_message = AsyncMock()
+    query = SimpleNamespace(
+        data="lc:voice:approve:0123456789abcdef",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=99),
+        effective_chat=SimpleNamespace(id=-7, type="group"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    assert "-7" in bot._pending_voice_goal_by_session
+    bot._process_user_message.assert_not_awaited()
+    assert "only the user who sent" in bot._reply_logged.await_args.args[1].lower()
+
+    update.effective_user.id = 42
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    assert "-7" not in bot._pending_voice_goal_by_session
+    bot._process_user_message.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -746,6 +800,7 @@ async def test_high_risk_callback_requires_ordered_second_confirmation():
     pending = {
         "review_delivered": True,
         "approval_id": "0123456789abcdef",
+        "user_id": 123,
         "review": {
             "second_confirmation_required": True,
             "second_confirmation_prompted": False,
@@ -790,6 +845,7 @@ async def test_second_confirmation_requires_successful_prompt_delivery(failure):
     pending = {
         "review_delivered": True,
         "approval_id": "0123456789abcdef",
+        "user_id": 123,
         "review": {
             "second_confirmation_required": True,
             "second_confirmation_prompted": False,
@@ -852,6 +908,7 @@ async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
         "review_delivered": True,
         "review_message_id": 42,
         "approval_id": "0123456789abcdef",
+        "user_id": 123,
         "review": {
             "second_confirmation_required": True,
             "second_confirmation_prompted": False,
@@ -863,7 +920,8 @@ async def test_text_confirmation_prompts_for_second_high_risk_confirmation():
     bot._classify_pending_multi_reply = lambda _text: "confirm"
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(
-        effective_chat=SimpleNamespace(id=456, type="private"), effective_user=None,
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        effective_user=SimpleNamespace(id=123),
         message=SimpleNamespace(reply_to_message=SimpleNamespace(message_id=42)),
     )
 
@@ -931,6 +989,7 @@ async def test_duplicate_plan_approval_callbacks_start_one_run():
             "workers": [("builder", "codex"), ("auditor", "claude")],
             "plan_payload": {"workers": []},
             "review": {"second_confirmation_required": False},
+            "user_id": 123,
         },
     )["approval_id"]
     bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
@@ -1003,6 +1062,7 @@ async def test_expired_voice_approval_does_not_process_transcription():
     bot._pending_voice_goal_by_session = {
         "456": {
             "approval_id": "0123456789abcdef",
+            "user_id": 123,
             "text": "expired transcription",
             "expires_at": 10**20,
             "expires_monotonic": 0,
@@ -1344,6 +1404,7 @@ async def test_multi_plan_cancel_button_stops_workers_and_releases_durable_job(
             "goal": "fixture multi run",
             "workers": [("builder", "codex"), ("reviewer", "claude")],
             "plan_payload": {"workers": []},
+            "user_id": 123,
         },
     )
     bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
@@ -1414,7 +1475,9 @@ async def test_multi_plan_cancel_button_stops_workers_and_releases_durable_job(
 
     bot._execute_multi_agent_plan = fake_execute_multi_agent_plan
     execution = asyncio.create_task(
-        bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+        bot._execute_pending_multi_plan(
+            SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+        )
     )
     await worker_started.wait()
     run_id = run_id_holder[0]
@@ -1462,6 +1525,7 @@ async def test_cancelled_multi_workspace_creation_removes_late_owned_directory(
             "goal": "cancel during workspace creation",
             "workers": [("builder", "codex"), ("reviewer", "claude")],
             "plan_payload": {"workers": []},
+            "user_id": 123,
         },
     )
     bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
@@ -1483,7 +1547,9 @@ async def test_cancelled_multi_workspace_creation_removes_late_owned_directory(
         "core.bot.delegation.workspace.register_task_workspace", delayed_register
     )
     execution = asyncio.create_task(
-        bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+        bot._execute_pending_multi_plan(
+            SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+        )
     )
     assert await asyncio.to_thread(started.wait, 5)
     execution.cancel()
@@ -1515,6 +1581,7 @@ async def test_failed_multi_workspace_preflight_removes_unclaimed_workspace(tmp_
             "goal": "fail before workspace announcement",
             "workers": [("builder", "codex"), ("reviewer", "claude")],
             "plan_payload": {"workers": []},
+            "user_id": 123,
         },
     )
     bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
@@ -1525,7 +1592,9 @@ async def test_failed_multi_workspace_preflight_removes_unclaimed_workspace(tmp_
     bot._reply_logged = AsyncMock()
     bot._write_agents_plan_file = Mock(side_effect=OSError("workspace is read-only"))
 
-    await bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+    await bot._execute_pending_multi_plan(
+        SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+    )
 
     assert [path.name for path in root.iterdir()] == [".lightclaw-meta"]
     metadata = list((root / ".lightclaw-meta").glob("*.json"))
@@ -1547,6 +1616,7 @@ async def test_unexpected_multi_plan_failure_cleans_workers_and_fails_job(tmp_pa
             "goal": "fixture multi run",
             "workers": [("builder", "codex"), ("reviewer", "claude")],
             "plan_payload": {"workers": []},
+            "user_id": 123,
         },
     )
     bot._pending_multi_plan_by_session["456"]["review_delivered"] = True
@@ -1617,7 +1687,9 @@ async def test_unexpected_multi_plan_failure_cleans_workers_and_fails_job(tmp_pa
 
     bot._execute_multi_agent_plan = fake_execute_multi_agent_plan
     with pytest.raises(RuntimeError, match="fixture orchestration failure"):
-        await bot._execute_pending_multi_plan(SimpleNamespace(), "456")
+        await bot._execute_pending_multi_plan(
+            SimpleNamespace(effective_user=SimpleNamespace(id=123)), "456"
+        )
 
     run_id = run_id_holder[0]
     job = bot.jobs.get_job(run_id)

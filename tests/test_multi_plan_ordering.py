@@ -18,6 +18,10 @@ def _payload(goal):
     }
 
 
+def _set_pending_plan(bot, session_id, payload):
+    return bot._set_pending_multi_plan(session_id, {**payload, "user_id": 42})
+
+
 def _bot():
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = Config(telegram_allowed_users=["42"])
@@ -92,6 +96,7 @@ async def test_late_planner_cannot_replace_newer_request_or_restore_cleared_plan
     if replacement == "new":
         assert bot._get_pending_multi_plan("456") is latest
         assert latest["goal"] == "latest goal"
+        assert latest["user_id"] == 42
     else:
         assert bot._get_pending_multi_plan("456") is None
     bot._execute_multi_agent_plan.assert_not_awaited()
@@ -100,7 +105,7 @@ async def test_late_planner_cannot_replace_newer_request_or_restore_cleared_plan
 @pytest.mark.asyncio
 async def test_late_plan_edit_cannot_replace_new_request_in_the_same_chat():
     bot = _bot()
-    bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("original goal")))
+    _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("original goal")))
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -199,13 +204,59 @@ async def _plan_action(bot, update, approval_id, action):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("entry", ["button", "slash", "cancel", "edit", "text"])
+async def test_public_group_plan_actions_require_the_requester(entry):
+    bot = _bot()
+    bot.config = Config(telegram_public_bot_ack=True)
+    if entry == "cancel":
+        pending = bot._set_pending_multi_plan(
+            "456", {"planning": True, "user_id": 42}
+        )
+    else:
+        pending = _set_pending_plan(
+            bot, "456", bot._decorate_pending_plan(_payload("shared group task"))
+        )
+        pending.update(review_delivered=True, review_message_id=20)
+    bot._execute_approved_plan_action = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=99),
+        effective_chat=SimpleNamespace(id=456, type="group"),
+        message=SimpleNamespace(),
+    )
+
+    if entry == "button":
+        update.callback_query = SimpleNamespace(
+            data=f"lc:plan:approve:{pending['approval_id']}",
+            answer=AsyncMock(),
+            message=update.message,
+        )
+        update.effective_message = update.message
+        await bot.handle_run_action(update, SimpleNamespace())
+    elif entry in {"slash", "cancel", "edit"}:
+        args = {
+            "slash": ["multi", "confirm", pending["approval_id"]],
+            "cancel": ["multi", "cancel"],
+            "edit": ["multi", "edit", "narrow the task"],
+        }[entry]
+        await bot.cmd_agent(update, SimpleNamespace(args=args))
+    else:
+        await bot._process_user_message_serialized(
+            update, SimpleNamespace(), "yes", asyncio.Event()
+        )
+
+    assert bot._pending_multi_plan_by_session["456"] is pending
+    bot._execute_approved_plan_action.assert_not_awaited()
+    assert "requester" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["slash", "text", "approve", "confirm-risk"])
 @pytest.mark.parametrize("high_risk", [False, True])
 async def test_incomplete_review_cannot_execute_or_prime_second_confirmation(action, high_risk):
     bot = _bot()
     bot._active_run_tasks_by_session = {}
     bot._active_run_ids_by_session = {}
-    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("update docs")))
+    pending = _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("update docs")))
     pending["review"]["second_confirmation_required"] = high_risk
     entered = asyncio.Event()
     release = asyncio.Event()
@@ -247,7 +298,7 @@ async def test_incomplete_review_cannot_execute_or_prime_second_confirmation(act
 @pytest.mark.parametrize("replace", [False, True])
 async def test_failed_review_delivery_invalidates_only_its_own_plan(failure, replace):
     bot = _bot()
-    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("old goal")))
+    pending = _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("old goal")))
     entered = asyncio.Event()
     release = asyncio.Event()
     first = True
@@ -287,9 +338,9 @@ async def test_old_or_unbound_confirmation_cannot_approve_replacement_plan(entry
     bot = _bot()
     bot._active_run_tasks_by_session = {}
     bot._active_run_ids_by_session = {}
-    old = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("old goal")))
+    old = _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("old goal")))
     old.update(review_delivered=True, review_message_id=10)
-    latest = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("latest goal")))
+    latest = _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("latest goal")))
     latest.update(review_delivered=True, review_message_id=20)
     update = _update()
     if entry == "bare-command":
@@ -312,7 +363,7 @@ async def test_confirmation_bound_to_current_complete_review_runs_once(entry, hi
     bot = _bot()
     bot._active_run_tasks_by_session = {}
     bot._active_run_ids_by_session = {}
-    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("latest goal")))
+    pending = _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("latest goal")))
     pending["review"]["second_confirmation_required"] = high_risk
     bot._reply_logged.return_value = SimpleNamespace(message_id=777)
     update = _update()
@@ -337,7 +388,7 @@ async def test_confirmation_bound_to_current_complete_review_runs_once(entry, hi
 @pytest.mark.parametrize("review_id", ["é" * 16, "x", "", "0" * 16])
 async def test_invalid_multi_review_id_does_not_consume_current_plan(review_id):
     bot = _bot()
-    pending = bot._set_pending_multi_plan("456", bot._decorate_pending_plan(_payload("latest goal")))
+    pending = _set_pending_plan(bot, "456", bot._decorate_pending_plan(_payload("latest goal")))
     pending["review_delivered"] = True
     await bot.cmd_agent(_update(), SimpleNamespace(args=["multi", "confirm", review_id]))
     bot._execute_multi_agent_plan.assert_not_awaited()

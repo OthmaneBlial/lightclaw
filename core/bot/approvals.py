@@ -378,6 +378,12 @@ class BotApprovalsMixin:
                     proxy, "This voice approval is stale; review the latest transcription."
                 )
                 return
+            if not self._is_pending_requester(update, pending):
+                await self._reply_logged(
+                    proxy,
+                    "Only the user who sent this voice request can approve or discard it.",
+                )
+                return
             self._pending_voice_goal_by_session.pop(session_id, None)
             if self._pending_confirmation_expired(pending):
                 await self._reply_logged(proxy, "Voice transcription expired; send it again.")
@@ -522,6 +528,11 @@ class BotApprovalsMixin:
             ):
                 await self._reply_logged(
                     proxy, "This plan approval is stale; review the latest plan."
+                )
+                return
+            if not self._is_pending_requester(update, pending):
+                await self._reply_logged(
+                    proxy, "Only the requester can act on this plan."
                 )
                 return
             if decision == "edit":
