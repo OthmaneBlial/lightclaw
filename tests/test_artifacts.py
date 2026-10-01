@@ -4,8 +4,11 @@ import hashlib
 import json
 import os
 import shlex
+import signal
 import stat
 import subprocess
+import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -1424,6 +1427,55 @@ def test_artifact_timeout_kills_entire_process_group(tmp_path):
         )
     time.sleep(1)
     assert not marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="detached pipe inheritance is POSIX-only")
+def test_artifact_timeout_does_not_wait_for_detached_descendant_pipes(tmp_path):
+    import sys
+
+    pid_path = tmp_path / "detached-artifact-child.pid"
+    child_code = (
+        "import os,pathlib,time; "
+        f"pathlib.Path({str(pid_path)!r}).write_text(str(os.getpid())); "
+        "time.sleep(20)"
+    )
+    parent_code = (
+        "import subprocess,sys,time; print('probe-started',flush=True); "
+        f"subprocess.Popen([sys.executable,'-c',{child_code!r}],start_new_session=True); "
+        "time.sleep(30)"
+    )
+    errors = []
+    finished = threading.Event()
+
+    def run_command():
+        try:
+            artifact_module._run_bounded_process(
+                [sys.executable, "-c", parent_code], timeout=1
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=run_command, daemon=True)
+    thread.start()
+    try:
+        deadline = time.monotonic() + 3
+        while not pid_path.exists() and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert pid_path.exists(), "artifact command did not start its detached child"
+        assert finished.wait(timeout=2), "artifact timeout waited for a detached child's output pipes"
+    finally:
+        if pid_path.exists():
+            try:
+                os.kill(int(pid_path.read_text()), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        thread.join(timeout=3)
+
+    assert not thread.is_alive()
+    assert len(errors) == 1 and isinstance(errors[0], subprocess.TimeoutExpired)
+    assert "probe-started" in (errors[0].output or "")
 
 
 def test_pr_auth_timeout_is_reported_as_artifact_error(monkeypatch):

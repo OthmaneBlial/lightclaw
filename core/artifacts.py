@@ -53,9 +53,25 @@ def _run_bounded_process(
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
+            except OSError:
+                if process.poll() is None:
+                    process.kill()
         elif process.poll() is None:
             process.kill()
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(timeout=0.25)
+        except subprocess.TimeoutExpired as drain_error:
+            if process.poll() is None:
+                process.kill()
+            process.wait()
+            stdout, stderr = drain_error.output or exc.output, drain_error.stderr or exc.stderr
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode(process.stdout.encoding or "utf-8", errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode(process.stderr.encoding or "utf-8", errors="replace")
         raise subprocess.TimeoutExpired(
             command, timeout, output=stdout, stderr=stderr
         ) from exc
