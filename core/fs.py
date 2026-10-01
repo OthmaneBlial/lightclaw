@@ -376,7 +376,10 @@ def read_json_object(
         )
     except FileNotFoundError:
         return dict(default or {})
-    loaded = json.loads(content)
+    try:
+        loaded = json.loads(content)
+    except RecursionError as exc:
+        raise ValueError("JSON nesting exceeds the parser limit") from exc
     if not isinstance(loaded, dict):
         raise ValueError("JSON state must contain an object")
     return loaded

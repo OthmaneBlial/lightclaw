@@ -311,3 +311,16 @@ def test_rooted_json_reader_rejects_absolute_and_traversal_paths(tmp_path):
     for path in ("../outside.json", outside):
         with pytest.raises(ValueError, match="safe and relative"):
             read_json_object(path, root=root)
+
+
+def test_json_reader_normalizes_decoder_recursion_error(tmp_path, monkeypatch):
+    source = tmp_path / "deep.json"
+    source.write_text("{}", encoding="utf-8")
+
+    def reject_deep_input(_content):
+        raise RecursionError("decoder nesting limit")
+
+    monkeypatch.setattr("core.fs.json.loads", reject_deep_input)
+
+    with pytest.raises(ValueError, match="nesting"):
+        read_json_object(source, max_bytes=32 * 1024)
