@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import math
+import os
 import re
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -16,7 +19,7 @@ from telegram.constants import ParseMode
 from telegram.error import RetryAfter, TelegramError
 from telegram.ext import ContextTypes
 
-from ...fs import FileTooLargeError, read_json_object
+from ...fs import FileTooLargeError, open_directory_at, read_json_object
 from ...fs import atomic_write_json as _atomic_write_json
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
@@ -152,6 +155,35 @@ class CommandsCronMixin:
         _atomic_write_json(self._cron_jobs_path(), payload, max_bytes=MAX_CRON_STORE_BYTES)
 
 
+    def _mutate_cron_store(
+        self,
+        mutation: Callable[[list[dict[str, Any]]], tuple[bool, Any]],
+    ) -> Any:
+        path = self._cron_jobs_path()
+        directory_fd = None
+        try:
+            directory_fd = open_directory_at(
+                path.parent.parent,
+                (path.parent.name,),
+                create=True,
+                private=True,
+            )
+            # The directory inode stays stable while atomic writes replace jobs.json.
+            fcntl.flock(directory_fd, fcntl.LOCK_EX)
+            jobs = list(self._read_cron_store().get("jobs", []))
+            changed, result = mutation(jobs)
+            if changed:
+                self._write_cron_store({"jobs": jobs})
+            return result
+        except FileTooLargeError:
+            raise
+        except OSError as e:
+            raise CronStoreReadError(f"Failed to update cron jobs store: {e}") from e
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
+
+
     async def _reply_cron_store_read_error(self, update: Update, error: CronStoreReadError) -> None:
         log.warning(str(error))
         await self._reply_logged(
@@ -275,17 +307,18 @@ class CommandsCronMixin:
 
             if updates:
                 async with self._cron_lock:
-                    current_jobs = list(
-                        (await await_thread_completion(self._read_cron_store)).get("jobs", [])
-                    )
-                    merged_jobs = [
-                        updated
-                        for job in current_jobs
-                        if (updated := updates.get(str(job["id"]), job)) is not None
-                    ]
-                    await await_thread_completion(
-                        self._write_cron_store, {"jobs": merged_jobs}
-                    )
+                    def merge_updates(jobs: list[dict[str, Any]]) -> tuple[bool, None]:
+                        merged = [
+                            updated
+                            for job in jobs
+                            if (updated := updates.get(str(job["id"]), job)) is not None
+                        ]
+                        if merged == jobs:
+                            return False, None
+                        jobs[:] = merged
+                        return True, None
+
+                    await await_thread_completion(self._mutate_cron_store, merge_updates)
 
 
     def _render_cron_list(self, session_id: str) -> str:
@@ -489,19 +522,19 @@ class CommandsCronMixin:
                 return
 
             assert job is not None
-            at_session_limit = False
             async with self._cron_lock:
-                store = await await_thread_completion(self._read_cron_store)
-                jobs = list(store.get("jobs", []))
-                # ponytail: 1 MiB bounds this scan; add per-session counts if that limit grows.
-                at_session_limit = sum(
-                    str(existing.get("chat_id")) == session_id for existing in jobs
-                ) >= MAX_CRON_JOBS_PER_SESSION
-                if not at_session_limit:
+                def add_job(jobs: list[dict[str, Any]]) -> tuple[bool, bool]:
+                    # ponytail: 1 MiB bounds this scan; add per-session counts if that limit grows.
+                    if sum(
+                        str(existing.get("chat_id")) == session_id for existing in jobs
+                    ) >= MAX_CRON_JOBS_PER_SESSION:
+                        return False, False
                     jobs.append(job)
-                    await await_thread_completion(self._write_cron_store, {"jobs": jobs})
+                    return True, True
 
-            if at_session_limit:
+                added = await await_thread_completion(self._mutate_cron_store, add_job)
+
+            if not added:
                 await self._reply_logged(
                     update,
                     f"This session already has {MAX_CRON_JOBS_PER_SESSION} reminders. Remove one before adding another.",
@@ -541,22 +574,21 @@ class CommandsCronMixin:
                 return
 
             async with self._cron_lock:
-                store = await await_thread_completion(self._read_cron_store)
-                jobs = list(store.get("jobs", []))
-                updated = [
-                    job
-                    for job in jobs
-                    if not (
-                        str(job.get("id")) == target_id
-                        and str(job.get("chat_id")) == session_id
-                    )
-                ]
+                def remove_job(jobs: list[dict[str, Any]]) -> tuple[bool, bool]:
+                    updated = [
+                        job
+                        for job in jobs
+                        if not (
+                            str(job.get("id")) == target_id
+                            and str(job.get("chat_id")) == session_id
+                        )
+                    ]
+                    if len(updated) == len(jobs):
+                        return False, False
+                    jobs[:] = updated
+                    return True, True
 
-                if len(updated) == len(jobs):
-                    removed = False
-                else:
-                    removed = True
-                    await await_thread_completion(self._write_cron_store, {"jobs": updated})
+                removed = await await_thread_completion(self._mutate_cron_store, remove_job)
 
             if removed:
                 await self._reply_logged(

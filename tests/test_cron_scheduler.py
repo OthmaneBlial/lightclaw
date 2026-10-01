@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 import os
 import re
 import threading
 import time
 from datetime import datetime
 from html import unescape
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -26,6 +28,28 @@ from core.bot.messaging import BotMessagingMixin
 class CronHarness(CommandsCronMixin, BotMessagingMixin, BotBaseMixin):
     def __init__(self):
         self.config = Config(telegram_allowed_users=["123"])
+
+
+def _append_cron_job_in_process(store_path, job_id, barrier):
+    bot = CronHarness()
+    bot._cron_jobs_path = lambda: Path(store_path)
+    barrier.wait(timeout=20)
+
+    def append_job(jobs):
+        time.sleep(0.05)
+        jobs.append(
+            {
+                "id": job_id,
+                "chat_id": "123",
+                "mode": "at",
+                "next_run_at": time.time() + 60,
+                "created_at": time.time(),
+                "text": job_id,
+            }
+        )
+        return True, None
+
+    bot._mutate_cron_store(append_job)
 
 
 def test_forum_topic_session_ids_and_memory_scope():
@@ -305,8 +329,17 @@ async def test_failed_cron_delivery_is_retained_with_retry_delay(
     bot._cron_iteration_lock = asyncio.Lock()
     bot._cron_poll_sec = 15
     bot._cron_last_run_at = 0
-    bot._read_cron_store = lambda: {"jobs": jobs}
-    bot._write_cron_store = writes.append
+    bot._read_cron_store = lambda: {"jobs": [dict(job) for job in jobs]}
+
+    def mutate_store(mutation):
+        current_jobs = [dict(job) for job in jobs]
+        changed, result = mutation(current_jobs)
+        if changed:
+            jobs[:] = current_jobs
+            writes.append({"jobs": list(current_jobs)})
+        return result
+
+    bot._mutate_cron_store = mutate_store
     telegram_bot = SimpleNamespace(send_message=AsyncMock(side_effect=[None, error]))
 
     await bot._run_due_cron_jobs(telegram_bot)
@@ -369,7 +402,7 @@ async def test_cron_rejects_missing_dst_time_and_accepts_explicit_offsets():
         bot._session_id_from_update = lambda _update: "123"
         bot._log_user_message = lambda *_args: None
         bot._reply_logged = AsyncMock()
-        bot._write_cron_store = Mock()
+        bot._mutate_cron_store = Mock()
         await bot.cmd_cron(
             SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object()),
             SimpleNamespace(
@@ -377,7 +410,7 @@ async def test_cron_rejects_missing_dst_time_and_accepts_explicit_offsets():
                 bot=SimpleNamespace(),
             ),
         )
-        bot._write_cron_store.assert_not_called()
+        bot._mutate_cron_store.assert_not_called()
         assert "invalid date/time" in bot._reply_logged.await_args.args[1].lower()
     finally:
         if original_tz is None:
@@ -429,7 +462,15 @@ async def test_split_cron_datetime_uses_time_as_schedule_not_message(tmp_path):
     bot._reply_logged = AsyncMock()
     bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
     writes = []
-    bot._write_cron_store = writes.append
+
+    def mutate_store(mutation):
+        jobs = []
+        changed, result = mutation(jobs)
+        if changed:
+            writes.append({"jobs": jobs})
+        return result
+
+    bot._mutate_cron_store = mutate_store
     scheduled = datetime.fromtimestamp(time.time() + 7200).replace(
         second=0, microsecond=0
     )
@@ -467,13 +508,13 @@ async def test_cron_interval_outside_localtime_range_is_rejected():
     bot._log_user_message = lambda *_args: None
     bot._reply_logged = AsyncMock()
     bot._read_cron_store = lambda: {"jobs": []}
-    bot._write_cron_store = Mock()
+    bot._mutate_cron_store = Mock()
     update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
     context = SimpleNamespace(args=["add", "every", "9" * 100, "check"], bot=SimpleNamespace())
 
     await bot.cmd_cron(update, context)
 
-    bot._write_cron_store.assert_not_called()
+    bot._mutate_cron_store.assert_not_called()
     assert "too far in the future" in bot._reply_logged.await_args.args[1].lower()
 
 
@@ -586,6 +627,36 @@ async def test_cron_add_caps_reminders_per_session_without_affecting_other_sessi
         assert "session already has 10 reminders" in bot._reply_logged.await_args.args[1]
     else:
         assert jobs[-1]["text"] == "new reminder"
+
+
+def test_cron_store_mutations_are_serialized_across_processes(tmp_path):
+    context = multiprocessing.get_context("spawn")
+    barrier = context.Barrier(4)
+    store_path = tmp_path / "jobs.json"
+    processes = [
+        context.Process(
+            target=_append_cron_job_in_process,
+            args=(str(store_path), f"worker-{worker}", barrier),
+        )
+        for worker in range(4)
+    ]
+    try:
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(timeout=20)
+        assert not any(process.is_alive() for process in processes)
+        assert [process.exitcode for process in processes] == [0] * len(processes)
+    finally:
+        for process in processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+
+    bot = CronHarness()
+    bot._cron_jobs_path = lambda: store_path
+    jobs = bot._read_cron_store()["jobs"]
+    assert {job["id"] for job in jobs} == {f"worker-{worker}" for worker in range(4)}
 
 
 @pytest.mark.asyncio

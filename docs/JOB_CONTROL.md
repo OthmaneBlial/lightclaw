@@ -64,7 +64,7 @@ Personality, heartbeat, and agent authentication text reads accept regular files
 /cron remove <id>
 ```
 
-Date and time use the bot host's local timezone. `/cron` with no arguments lists reminders. Each reminder is scoped to its chat or forum-topic session, with a maximum of ten reminders per session. Remove one before adding after reaching the limit. Long lists are split into messages that fit Telegram, preserving each job's identifier and full text.
+Date and time use the bot host's local timezone. `/cron` with no arguments lists reminders. Each reminder is scoped to its chat or forum-topic session, with a maximum of ten reminders per session. Remove one before adding after reaching the limit. Terminal and Telegram updates are serialized across processes. Long lists are split into messages that fit Telegram, preserving each job's identifier and full text.
 
 Local times skipped by a daylight-saving change are rejected instead of shifted. If a clock change repeats a local time, the local form selects its first occurrence; use an ISO timestamp with an explicit UTC offset (such as `YYYY-MM-DDTHH:MM+01:00`) or Unix seconds to choose the other instant.
 
