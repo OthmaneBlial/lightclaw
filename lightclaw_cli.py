@@ -1117,6 +1117,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
             class _CliUpdate:
                 def __init__(self, line_text: str):
+                    self.is_local_terminal = True
                     self.effective_user = type("U", (), {"id": cli_user_id})()
                     self.effective_chat = type("C", (), {"id": session_id})()
                     self.message = _CliIncomingMessage(line_text)

@@ -266,6 +266,13 @@ class BotBaseMixin:
             and not self.config.telegram_allowed_users
         )
 
+    def is_public_telegram_update(self, update: Update | None) -> bool:
+        """Apply public-bot restrictions to Telegram, not trusted local CLI input."""
+        return bool(
+            self.config.telegram_public_bot_ack
+            and not getattr(update, "is_local_terminal", False)
+        )
+
     @staticmethod
     def _is_pending_requester(update: Update, pending: dict[str, object]) -> bool:
         user = getattr(update, "effective_user", None)

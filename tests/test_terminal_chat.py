@@ -74,9 +74,12 @@ def test_terminal_closes_resources_on_every_exit(tmp_path, monkeypatch, stage):
             bot.jobs.close()
 
 
-@pytest.mark.parametrize("allowed_users", [[], ["42"]])
+@pytest.mark.parametrize(
+    ("allowed_users", "public_ack"),
+    [([], False), (["42"], False), ([], True)],
+)
 def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
-    tmp_path, monkeypatch, capsys, allowed_users
+    tmp_path, monkeypatch, capsys, allowed_users, public_ack
 ):
     config = Config(
         llm_provider="fixture",
@@ -84,6 +87,7 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
         memory_db_path=str(tmp_path / "memory.db"),
         skills_state_path=str(tmp_path / "skills.json"),
         telegram_allowed_users=allowed_users,
+        telegram_public_bot_ack=public_ack,
     )
     user = allowed_users[0] if allowed_users else "cli-user"
     namespace = f"cli-user:{user}"
@@ -114,7 +118,8 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
     )
     monkeypatch.setenv("LIGHTCLAW_CHAT_MODE", "0")
     lines = iter([
-        "/help", "/recall amberfalcon", "/agent multi inspect docs", "yes",
+        "/help", "/recall amberfalcon", "/heartbeat show",
+        "/wipe_memory", "/wipe_memory confirm", "/agent multi inspect docs", "yes",
         "/agent trusted codex inspect external files", "/exit"
     ])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(lines))
@@ -124,10 +129,12 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
     output = capsys.readouterr().out
     assert "LightClaw Commands" in output
     assert "terminal secret amberfalcon <draft> & review" in output
+    assert "HEARTBEAT.md" in output
+    assert "All memory wiped." in output
     assert "Trusted host execution requested" in output
     assert "Command failed" not in output
     assert config.telegram_allowed_users == allowed_users
-    assert not config.telegram_public_bot_ack
+    assert config.telegram_public_bot_ack is public_ack
     bots[0].llm.chat.assert_not_awaited()
     bots[0]._execute_multi_agent_plan.assert_awaited_once()
     assert bots[0]._execute_multi_agent_plan.await_args.kwargs["goal"] == "inspect docs"

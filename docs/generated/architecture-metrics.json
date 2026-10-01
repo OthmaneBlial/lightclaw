@@ -58,7 +58,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 343,
+      "lines": 344,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -158,7 +158,7 @@
     {
       "branch_points": 57,
       "line": 838,
-      "lines": 343,
+      "lines": 344,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
     },
@@ -185,7 +185,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1681,
+      "line": 1682,
       "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -221,7 +221,7 @@
   ],
   "largest_modules": [
     {
-      "lines": 1939,
+      "lines": 1940,
       "path": "lightclaw_cli.py"
     },
     {
@@ -269,7 +269,7 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 698,
+      "lines": 705,
       "path": "core/bot/base.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22540,
+  "runtime_lines": 22548,
   "schema_version": 1
 }

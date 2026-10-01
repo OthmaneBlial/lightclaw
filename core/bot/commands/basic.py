@@ -122,7 +122,7 @@ class CommandsBasicMixin:
             return
         if not self.is_update_allowed(update):
             return
-        if self.config.telegram_public_bot_ack:
+        if self.is_public_telegram_update(update):
             await self._reply_logged(
                 update,
                 "Global memory wipe is disabled while Telegram access is public. "
