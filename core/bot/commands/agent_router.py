@@ -132,13 +132,18 @@ class CommandsAgentRouterMixin:
         page: int = 0,
         has_more: bool = False,
         snapshot_rowid: int | None = None,
-        allow_cancel: bool = False,
+        requester_user_id: int | None = None,
+        private_chat: bool = False,
     ) -> InlineKeyboardMarkup | None:
         buttons = []
         for job in jobs:
             run_id = str(job.get("run_id") or "")
             if (
-                allow_cancel
+                requester_user_id is not None
+                and (
+                    job.get("requester_user_id") == requester_user_id
+                    or (private_chat and job.get("requester_user_id") is None)
+                )
                 and snapshot_rowid is not None
                 and job.get("status") == "queued"
                 and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id)
@@ -223,7 +228,8 @@ class CommandsAgentRouterMixin:
                     jobs,
                     has_more=has_more,
                     snapshot_rowid=snapshot_rowid,
-                    allow_cancel=getattr(effective_chat, "type", None) == "private",
+                    requester_user_id=update.effective_user.id,
+                    private_chat=getattr(effective_chat, "type", None) == "private",
                 ),
             )
             return

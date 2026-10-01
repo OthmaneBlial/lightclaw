@@ -938,6 +938,7 @@ class DelegationExecutionMixin:
                     durable_store.create_job,
                     workspace=target_workspace,
                     session_id=session_id,
+                    requester_user_id=requester_user_id,
                     goal=task,
                     approved_scope=f"LightClaw-owned task workspace: {workspace_label}",
                     risk_level="high" if profile == "trusted-command" else "medium",
@@ -957,7 +958,7 @@ class DelegationExecutionMixin:
                 if not claimed or claimed["run_id"] != durable["run_id"]:
                     return (
                         f"⏳ Delegation `{run_id}` was not started; it remains queued and will not auto-start. "
-                        "Private-chat `/agent runs` offers one-tap cancellation for jobs in that chat; "
+                        "`/agent runs` in this chat offers one-tap cancellation to the requester; "
                         "otherwise use `lightclaw jobs cancel <run-id>` on the host, "
                         "then resubmit after the workspace is clear."
                     )

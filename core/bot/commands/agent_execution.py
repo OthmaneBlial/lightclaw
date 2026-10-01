@@ -430,6 +430,9 @@ class CommandsAgentExecutionMixin:
                 self.jobs.create_job,
                 workspace=multi_workspace,
                 session_id=session_id,
+                requester_user_id=getattr(
+                    getattr(update, "effective_user", None), "id", None
+                ),
                 goal=goal,
                 approved_scope=f"LightClaw-owned task workspace: {multi_workspace_label}",
                 risk_level="medium",
@@ -459,7 +462,7 @@ class CommandsAgentExecutionMixin:
             await self._reply_logged(
                 update,
                 f"⏳ Run <code>{_escape_html(run_id)}</code> was not started; it remains queued and will not auto-start. "
-                "Private-chat <code>/agent runs</code> offers one-tap cancellation for jobs in that chat; "
+                "<code>/agent runs</code> in this chat offers one-tap cancellation to the requester; "
                 "otherwise use <code>lightclaw jobs cancel &lt;run-id&gt;</code> on the host, "
                 "then resubmit after the workspace is clear.",
                 parse_mode=ParseMode.HTML,

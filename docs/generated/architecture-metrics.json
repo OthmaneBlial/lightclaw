@@ -8,8 +8,8 @@
   "highest_branch_functions": [
     {
       "branch_points": 91,
-      "line": 414,
-      "lines": 375,
+      "line": 425,
+      "lines": 376,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -23,7 +23,7 @@
     {
       "branch_points": 83,
       "line": 334,
-      "lines": 671,
+      "lines": 674,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -37,7 +37,7 @@
     {
       "branch_points": 73,
       "line": 857,
-      "lines": 426,
+      "lines": 427,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -64,8 +64,8 @@
     },
     {
       "branch_points": 52,
-      "line": 195,
-      "lines": 322,
+      "line": 200,
+      "lines": 323,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -85,7 +85,7 @@
     },
     {
       "branch_points": 48,
-      "line": 518,
+      "line": 524,
       "lines": 209,
       "name": "_cmd_agent_multi",
       "path": "core/bot/commands/agent_router.py"
@@ -116,7 +116,7 @@
     {
       "branch_points": 83,
       "line": 334,
-      "lines": 671,
+      "lines": 674,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -130,7 +130,7 @@
     {
       "branch_points": 73,
       "line": 857,
-      "lines": 426,
+      "lines": 427,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -143,8 +143,8 @@
     },
     {
       "branch_points": 91,
-      "line": 414,
-      "lines": 375,
+      "line": 425,
+      "lines": 376,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
@@ -164,8 +164,8 @@
     },
     {
       "branch_points": 52,
-      "line": 195,
-      "lines": 322,
+      "line": 200,
+      "lines": 323,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -206,7 +206,7 @@
     },
     {
       "branch_points": 48,
-      "line": 518,
+      "line": 524,
       "lines": 209,
       "name": "_cmd_agent_multi",
       "path": "core/bot/commands/agent_router.py"
@@ -233,7 +233,7 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1282,
+      "lines": 1283,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -245,15 +245,15 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 1004,
+      "lines": 1007,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 970,
+      "lines": 982,
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 913,
+      "lines": 923,
       "path": "core/jobs.py"
     },
     {
@@ -261,7 +261,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 785,
+      "lines": 791,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22815,
+  "runtime_lines": 22847,
   "schema_version": 1
 }

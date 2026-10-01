@@ -2227,11 +2227,12 @@ async def test_history_page_callback_edits_message_in_place_for_current_chat():
 
 
 @pytest.mark.asyncio
-async def test_queued_history_cancel_is_private_only_and_refreshes_status(tmp_path):
+async def test_queued_history_cancel_is_requester_scoped_in_groups_and_refreshes(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     job = store.create_job(
         workspace=tmp_path / "repo",
         session_id="chat-one",
+        requester_user_id=7,
         goal="queued task",
         approved_scope="fixture",
         risk_level="low",
@@ -2257,13 +2258,18 @@ async def test_queued_history_cancel_is_private_only_and_refreshes_status(tmp_pa
     bot._reply_logged = AsyncMock()
     bot._log_bot_message = Mock()
     callback = bot._recent_runs_keyboard(
-        [job], snapshot_rowid=snapshot, allow_cancel=True
+        [job], snapshot_rowid=snapshot, requester_user_id=7
     ).inline_keyboard[0][0].callback_data
     assert callback.startswith("lc:history:cancel:0:")
     assert len(callback.encode("utf-8")) <= 64
     assert bot._recent_runs_keyboard(
-        [job], snapshot_rowid=snapshot, allow_cancel=False
+        [job], snapshot_rowid=snapshot, requester_user_id=8
     ) is None
+
+    # The owner identity must survive restart because history callbacks use durable jobs.
+    store.close()
+    store = JobStore(tmp_path / "jobs.db")
+    bot.jobs = store
 
     query = SimpleNamespace(
         data=callback,
@@ -2273,21 +2279,21 @@ async def test_queued_history_cancel_is_private_only_and_refreshes_status(tmp_pa
     )
     update = SimpleNamespace(
         callback_query=query,
-        effective_user=SimpleNamespace(id=7),
+        effective_user=SimpleNamespace(id=8),
         effective_chat=SimpleNamespace(id=42, type="supergroup"),
     )
     await bot.handle_run_action(update, SimpleNamespace())
     assert store.get_job(job["run_id"])["status"] == "queued"
-    assert "private chat only" in bot._reply_logged.await_args.args[1]
+    assert "original requester" in bot._reply_logged.await_args.args[1]
 
     bot._reply_logged.reset_mock()
-    update.effective_chat.type = "private"
     bot._session_scope_from_update = AsyncMock(return_value="chat-two")
     await bot.handle_run_action(update, SimpleNamespace())
     assert store.get_job(job["run_id"])["status"] == "queued"
     assert "no longer available" in bot._reply_logged.await_args.args[1]
 
     bot._reply_logged.reset_mock()
+    update.effective_user.id = 7
     bot._session_scope_from_update = AsyncMock(return_value="chat-one")
     await bot.handle_run_action(update, SimpleNamespace())
     canceled = store.get_job(job["run_id"])
@@ -2300,6 +2306,46 @@ async def test_queued_history_cancel_is_private_only_and_refreshes_status(tmp_pa
         for row in refreshed_keyboard.inline_keyboard
         for button in row
     )
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_legacy_queued_group_run_stays_cli_only(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    job = store.create_job(
+        workspace=tmp_path / "repo",
+        session_id="group-one",
+        goal="legacy queued task",
+        approved_scope="fixture",
+        risk_level="low",
+        capability_profile="workspace-write",
+        plan=[{"label": "task", "depends_on": [], "owned_paths": []}],
+        status="queued",
+    )
+    snapshot = store.history_snapshot("group-one")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = store
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="group-one")
+    bot._reply_logged = AsyncMock()
+    callback = bot._recent_runs_keyboard(
+        [job], snapshot_rowid=snapshot, requester_user_id=7
+    )
+    assert callback is None
+    query = SimpleNamespace(
+        data=f"lc:history:cancel:0:{snapshot}:{bot._run_action_token(job['run_id'])}",
+        message=SimpleNamespace(),
+        answer=AsyncMock(),
+        edit_message_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=7),
+        effective_chat=SimpleNamespace(id=42, type="supergroup"),
+    )
+    await bot.handle_run_action(update, SimpleNamespace())
+    assert store.get_job(job["run_id"])["status"] == "queued"
+    assert "no saved requester" in bot._reply_logged.await_args.args[1]
     store.close()
 
 

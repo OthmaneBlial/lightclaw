@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 
 from core.fs import secure_sqlite_files
 
-JOB_SCHEMA_VERSION = 2
+JOB_SCHEMA_VERSION = 3
 TERMINAL_STATUSES = frozenset({"canceled", "failed", "succeeded", "accepted", "rejected"})
 TERMINAL_LANE_STATUSES = frozenset({"canceled", "failed", "skipped", "succeeded"})
 RESUMABLE_STATUSES = frozenset({"paused", "stalled", "failed"})
@@ -174,6 +174,7 @@ class JobStore:
                     schema_version INTEGER NOT NULL,
                     workspace TEXT NOT NULL,
                     session_id TEXT NOT NULL,
+                    requester_user_id INTEGER,
                     goal TEXT NOT NULL,
                     approved_scope TEXT NOT NULL,
                     risk_level TEXT NOT NULL,
@@ -227,13 +228,19 @@ class JobStore:
                 """
             )
             columns = {str(row["name"]) for row in self.db.execute("PRAGMA table_info(jobs)")}
+            needs_version_update = False
             if "worker_start_token" not in columns:
                 self.db.execute(
                     "ALTER TABLE jobs ADD COLUMN worker_start_token TEXT NOT NULL DEFAULT ''"
                 )
+                needs_version_update = True
+            if "requester_user_id" not in columns:
                 self.db.execute(
-                    "UPDATE jobs SET schema_version = ?", (JOB_SCHEMA_VERSION,)
+                    "ALTER TABLE jobs ADD COLUMN requester_user_id INTEGER"
                 )
+                needs_version_update = True
+            if needs_version_update:
+                self.db.execute("UPDATE jobs SET schema_version = ?", (JOB_SCHEMA_VERSION,))
             if "session_id" in columns:
                 self.db.execute(
                     "CREATE INDEX IF NOT EXISTS jobs_by_session_history "
@@ -256,6 +263,7 @@ class JobStore:
         *,
         workspace: str | Path,
         session_id: str,
+        requester_user_id: int | None = None,
         goal: str,
         approved_scope: str,
         risk_level: str,
@@ -284,16 +292,17 @@ class JobStore:
             self.db.execute(
                 """
                 INSERT INTO jobs(
-                    run_id, schema_version, workspace, session_id, goal, approved_scope,
-                    risk_level, capability_profile, plan_json, status, priority, resumable,
-                    max_retries, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    run_id, schema_version, workspace, session_id, requester_user_id,
+                    goal, approved_scope, risk_level, capability_profile, plan_json,
+                    status, priority, resumable, max_retries, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     identifier,
                     JOB_SCHEMA_VERSION,
                     workspace_path,
                     str(session_id),
+                    requester_user_id,
                     str(goal),
                     str(approved_scope),
                     str(risk_level),
@@ -347,6 +356,7 @@ class JobStore:
             "schema_version": row["schema_version"],
             "workspace": row["workspace"],
             "session_id": row["session_id"],
+            "requester_user_id": row["requester_user_id"],
             "goal": row["goal"],
             "approved_scope": row["approved_scope"],
             "risk_level": row["risk_level"],

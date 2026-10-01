@@ -327,7 +327,8 @@ async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(
     bot._run_local_agent_task = worker
     try:
         await bot._execute_multi_agent_plan(
-            update=SimpleNamespace(), session_id="fixture-session", goal="bounded repair",
+            update=SimpleNamespace(effective_user=SimpleNamespace(id=123)),
+            session_id="fixture-session", goal="bounded repair",
             workers=[("builder", "codex"), ("checker", "claude")],
             plan_payload={"workers": [
                 {"label": "builder", "depends_on": []},
@@ -362,6 +363,7 @@ async def test_multi_agent_repairs_keep_cancel_controls_and_record_attempts(
 
         assert invocations == [1, 2]
         job = bot.jobs.get_job("multi-repair-fixture")
+        assert job["requester_user_id"] == 123
         assert job["status"] == ("failed" if acceptance_fails else "succeeded")
         assert [lane["attempt"] for lane in job["lanes"]] == (
             [2, 0] if acceptance_fails else [2, 1]

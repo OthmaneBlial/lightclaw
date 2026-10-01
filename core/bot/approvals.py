@@ -344,11 +344,6 @@ class BotApprovalsMixin:
         token: str,
     ) -> None:
         proxy = self._callback_proxy(update)
-        if update.effective_chat.type != "private":
-            await self._reply_logged(
-                proxy, "Queued-run cancellation is available in private chat only."
-            )
-            return
         jobs, _has_more, _snapshot = await self._load_recent_runs_page(
             session_id, page, snapshot_rowid
         )
@@ -365,6 +360,21 @@ class BotApprovalsMixin:
         if not job or job.get("status") != "queued":
             await self._reply_logged(
                 proxy, "This queued run is no longer available to cancel."
+            )
+            return
+        requester_user_id = getattr(update.effective_user, "id", None)
+        job_requester_user_id = job.get("requester_user_id")
+        private_chat = getattr(update.effective_chat, "type", None) == "private"
+        if job_requester_user_id is None and not private_chat:
+            await self._reply_logged(
+                proxy,
+                "This older group run has no saved requester; cancel it with "
+                "`lightclaw jobs cancel <run-id>` on the host.",
+            )
+            return
+        if job_requester_user_id is not None and job_requester_user_id != requester_user_id:
+            await self._reply_logged(
+                proxy, "Only the original requester can cancel this queued run."
             )
             return
         run_id = str(job.get("run_id") or "")
@@ -406,7 +416,8 @@ class BotApprovalsMixin:
                 page=page,
                 has_more=has_more,
                 snapshot_rowid=snapshot_rowid,
-                allow_cancel=True,
+                requester_user_id=requester_user_id,
+                private_chat=private_chat,
             ),
         )
         self._log_bot_message(session_id, self._strip_html_for_log(text))
@@ -505,7 +516,8 @@ class BotApprovalsMixin:
                             page=page,
                             has_more=has_more,
                             snapshot_rowid=snapshot_rowid,
-                            allow_cancel=(
+                            requester_user_id=update.effective_user.id,
+                            private_chat=(
                                 getattr(update.effective_chat, "type", None) == "private"
                             ),
                         ),

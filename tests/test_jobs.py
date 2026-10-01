@@ -45,11 +45,13 @@ def _create(
     plan=None,
     status="queued",
     session_id="fixture",
+    requester_user_id=None,
     resumable=True,
 ):
     return store.create_job(
         workspace=workspace,
         session_id=session_id,
+        requester_user_id=requester_user_id,
         goal="bounded fixture goal",
         approved_scope="src only",
         risk_level="medium",
@@ -64,13 +66,16 @@ def _create(
 def test_jobs_persist_across_restart_with_private_database(tmp_path):
     path = tmp_path / "state" / "jobs.db"
     first = JobStore(path)
-    created = _create(first, tmp_path / "repo", status="awaiting_approval")
+    created = _create(
+        first, tmp_path / "repo", status="awaiting_approval", requester_user_id=7
+    )
     first.approve(created["run_id"])
     first.close()
 
     second = JobStore(path)
     restored = second.get_job(created["run_id"])
     assert restored["status"] == "queued"
+    assert restored["requester_user_id"] == 7
     assert [lane["label"] for lane in restored["lanes"]] == ["backend", "frontend"]
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     second.close()
@@ -856,7 +861,7 @@ def test_failed_worker_probe_keeps_live_workspace_locked(tmp_path, monkeypatch, 
         store.close()
 
 
-def test_legacy_job_database_migrates_worker_identity_column(tmp_path):
+def test_legacy_job_database_migrates_worker_identity_and_requester_columns(tmp_path):
     database = tmp_path / "jobs.db"
     now = time.time()
     connection = sqlite3.connect(database)
@@ -888,11 +893,14 @@ def test_legacy_job_database_migrates_worker_identity_column(tmp_path):
     store = JobStore(database)
     columns = {row["name"] for row in store.db.execute("PRAGMA table_info(jobs)")}
     migrated = store.db.execute(
-        "SELECT schema_version, worker_start_token FROM jobs WHERE run_id = 'legacy-run'"
+        "SELECT schema_version, worker_start_token, requester_user_id "
+        "FROM jobs WHERE run_id = 'legacy-run'"
     ).fetchone()
     assert "worker_start_token" in columns
-    assert migrated["schema_version"] == 2
+    assert "requester_user_id" in columns
+    assert migrated["schema_version"] == 3
     assert migrated["worker_start_token"] == ""
+    assert migrated["requester_user_id"] is None
     assert store.recover_stalled() == []
     store.close()
 

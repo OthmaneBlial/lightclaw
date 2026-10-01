@@ -25,7 +25,7 @@ lightclaw jobs list --status queued --json
 lightclaw jobs status <run-id>
 ```
 
-Telegram `/agent runs` shows ten jobs per page, with status and bounded goal previews for the current chat; **Previous** and **Next** navigate a stable snapshot, so new runs do not shift pages or their diff buttons. Private chats also get a page-scoped **Cancel queued run** button; group history stays read-only for queued jobs because requester IDs are not persisted. Run `/agent runs` again to include newer jobs. Multi-agent jobs include lane-state counts, and finished runs have a page- and chat-scoped **View diff** button that remains available after a bot restart. `/show` gives counts; neither command exposes other chats' activity.
+Telegram `/agent runs` shows ten jobs per page, with status and bounded goal previews for the current chat; **Previous** and **Next** navigate a stable snapshot, so new runs do not shift pages or their diff buttons. The original requester gets a page-scoped **Cancel queued run** button in private chats and groups; older group jobs without a saved requester remain CLI-only. Run `/agent runs` again to include newer jobs. Multi-agent jobs include lane-state counts, and finished runs have a page- and chat-scoped **View diff** button that remains available after a bot restart. `/show` gives counts; neither command exposes other chats' activity.
 
 ## Control a job
 

@@ -26,6 +26,7 @@ async def test_new_delegation_does_not_claim_another_sessions_queued_job(tmp_pat
     older = store.create_job(
         workspace=workspace,
         session_id="other-chat",
+        requester_user_id=42,
         goal="older reviewed task",
         approved_scope="fixture",
         risk_level="low",
@@ -53,7 +54,8 @@ async def test_new_delegation_does_not_claim_another_sessions_queued_job(tmp_pat
     bot._invoke_local_agent_streaming = refuse_launch
     try:
         result = await bot._run_local_agent_task_impl(
-            "new-chat", "codex", "new reviewed task", workspace_dir=workspace
+            "new-chat", "codex", "new reviewed task", workspace_dir=workspace,
+            requester_user_id=43,
         )
         assert "queued" in result
         assert "will not auto-start" in result
@@ -61,6 +63,10 @@ async def test_new_delegation_does_not_claim_another_sessions_queued_job(tmp_pat
         jobs = store.list_jobs(workspace=workspace)
         assert len(jobs) == 2
         assert all(job["status"] == "queued" for job in jobs)
+        assert store.get_job(older["run_id"])["requester_user_id"] == 42
+        assert next(job for job in jobs if job["session_id"] == "new-chat")[
+            "requester_user_id"
+        ] == 43
         assert bot._active_run_ids_by_session == {}
     finally:
         store.close()
