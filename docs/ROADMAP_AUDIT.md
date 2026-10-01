@@ -109,6 +109,12 @@ roadmap's “proof over claims” rule.
   bind scopes through worker threads: each update now activates its user/workspace scope in its own
   async context while SQLite persistence remains off the event loop. One third-party
   `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run at `3da9e25` passed on macOS arm64 Python 3.14.7:
+  873 tests and all local quality, audit, package, and clean-wheel checks. Multi-agent receipts now
+  preserve terminal acceptance and dependency failure reasons; the regression covers a failed
+  acceptance after a repair attempt. Receipt assembly also keeps the main orchestrator at 694 lines,
+  within the documented 700-line function ceiling; the runtime-line cap is 22,179. One third-party
+  `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
