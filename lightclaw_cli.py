@@ -912,15 +912,18 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     f"Please retry in about {wait_hint}, or top up your provider balance."
                 )
 
-            memories = bot.memory.recall(
-                user_text,
-                top_k=config.memory_top_k,
-                session_id=session_id,
+            memories, recent = await asyncio.gather(
+                asyncio.to_thread(
+                    bot.memory.recall,
+                    user_text,
+                    top_k=config.memory_top_k,
+                    session_id=session_id,
+                ),
+                asyncio.to_thread(bot.memory.get_recent, session_id, limit=20),
             )
             memories = bot._filter_recalled_memories(memories)
             memories_text = bot.memory.format_memories_for_prompt(memories)
 
-            recent = bot.memory.get_recent(session_id, limit=20)
             recent = bot._clean_orphan_messages(recent)
             recent = bot._filter_recent_context(recent)
 

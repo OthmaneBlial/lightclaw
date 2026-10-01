@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -28,10 +29,20 @@ def test_terminal_closes_resources_on_every_exit(tmp_path, monkeypatch, stage):
     monkeypatch.setattr("config.load_config", lambda: config)
     monkeypatch.setenv("LIGHTCLAW_CHAT_MODE", "0")
     bots = []
+    memory_read_threads = []
+    loop_thread = threading.get_ident()
 
     def create_bot(config):
         bot = LightClawBot(config)
         bots.append(bot)
+        for method_name in ("recall", "get_recent"):
+            original = getattr(bot.memory, method_name)
+
+            def record_thread(*args, _original=original, _name=method_name, **kwargs):
+                memory_read_threads.append((_name, threading.get_ident()))
+                return _original(*args, **kwargs)
+
+            setattr(bot.memory, method_name, record_thread)
         if stage == "bind":
             bot.memory.bind_session = Mock(side_effect=error)
         return bot
@@ -54,6 +65,9 @@ def test_terminal_closes_resources_on_every_exit(tmp_path, monkeypatch, stage):
         for database in (bots[0].memory.db, bots[0].jobs.db):
             with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
                 database.execute("SELECT 1")
+        if stage == "model":
+            assert {name for name, _thread in memory_read_threads} == {"recall", "get_recent"}
+            assert all(thread != loop_thread for _name, thread in memory_read_threads)
     finally:
         for bot in bots:
             bot.memory.db.close()
