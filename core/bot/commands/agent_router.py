@@ -245,6 +245,13 @@ class CommandsAgentRouterMixin:
             return
 
         if sub in {"doctor", "diag", "check"}:
+            if self.is_public_telegram_update(update):
+                await self._reply_logged(
+                    update,
+                    "Host agent diagnostics are unavailable in public Telegram mode. "
+                    "Configure an allowlist and turn public mode off to inspect authentication.",
+                )
+                return
             report = await asyncio.to_thread(self._render_agent_doctor_report)
             await self._reply_logged(update, report, parse_mode=ParseMode.HTML)
             return

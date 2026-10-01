@@ -104,6 +104,29 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("public_mode", [False, True])
+async def test_public_mode_hides_host_agent_diagnostics(public_mode):
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot.is_public_telegram_update = lambda _update: public_mode
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
+    bot._log_user_message = Mock()
+    bot._render_agent_doctor_report = Mock(return_value="private auth location")
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
+
+    await bot.cmd_agent(update, SimpleNamespace(args=["doctor"]))
+
+    if public_mode:
+        bot._render_agent_doctor_report.assert_not_called()
+        assert "unavailable in public Telegram mode" in bot._reply_logged.await_args.args[1]
+    else:
+        bot._render_agent_doctor_report.assert_called_once_with()
+        assert bot._reply_logged.await_args.args[1] == "private auth location"
+
+
+@pytest.mark.asyncio
 async def test_agent_runs_navigate_history_pages_and_keep_diff_page_scoped():
     first_page = [
         {
