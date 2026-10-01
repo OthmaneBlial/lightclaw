@@ -149,6 +149,11 @@ roadmap's “proof over claims” rule.
   fell from 537 lines and 100 branch points to 318 lines and 52; its multi-agent handler is 209
   lines and 48 branches. Runtime usage is 22,654 of the existing 22,664-line cap. One existing
   third-party `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `bf8f0c0` passed on macOS arm64 Python 3.14.7:
+  955 tests and all local quality, audit, package-build, and clean-wheel checks. Model-generated
+  file writes now use a dedicated handler; `_process_file_blocks` fell from 509 lines and 94 branch
+  points to 456 lines and 84. Runtime usage is 22,662 of the 22,664-line cap. One existing
+  third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
