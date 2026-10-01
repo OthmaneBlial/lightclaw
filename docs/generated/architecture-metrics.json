@@ -29,7 +29,7 @@
     },
     {
       "branch_points": 81,
-      "line": 333,
+      "line": 338,
       "lines": 315,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -78,7 +78,7 @@
     },
     {
       "branch_points": 50,
-      "line": 507,
+      "line": 596,
       "lines": 310,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
@@ -164,14 +164,14 @@
     },
     {
       "branch_points": 81,
-      "line": 333,
+      "line": 338,
       "lines": 315,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 50,
-      "line": 507,
+      "line": 596,
       "lines": 310,
       "name": "apply_selected_files",
       "path": "core/artifacts.py"
@@ -185,7 +185,7 @@
     },
     {
       "branch_points": 0,
-      "line": 1675,
+      "line": 1681,
       "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
@@ -221,7 +221,7 @@
   ],
   "largest_modules": [
     {
-      "lines": 1933,
+      "lines": 1939,
       "path": "lightclaw_cli.py"
     },
     {
@@ -241,12 +241,12 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "lines": 969,
-      "path": "core/bot/commands/agent_execution.py"
+      "lines": 1044,
+      "path": "core/artifacts.py"
     },
     {
-      "lines": 955,
-      "path": "core/artifacts.py"
+      "lines": 969,
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
       "lines": 908,
@@ -257,7 +257,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 819,
+      "lines": 834,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22213,
+  "runtime_lines": 22323,
   "schema_version": 1
 }

@@ -1681,12 +1681,20 @@ async def test_result_decision_stays_bound_to_its_run_during_session_change(tmp_
     bot.jobs = JobStore(tmp_path / "jobs.db")
     bot._reply_logged = AsyncMock()
     roots = {run_id: tmp_path / run_id for run_id in ("old-run", "new-run")}
+    receipt_paths = {}
     for run_id, root in roots.items():
         root.mkdir()
         (root / "result.txt").write_text("checkpoint\n")
         artifacts.initialize_artifact_repository(root, run_id)
         (root / "result.txt").write_text(f"reviewed {run_id}\n")
-        artifacts._require_git(root, "add", "-A")
+        review_dir = tmp_path / "receipts" / run_id
+        bundle = artifacts.create_patch_bundle(root, review_dir, run_id=run_id)
+        receipt_path = review_dir / "receipt.json"
+        receipt_path.write_text(
+            json.dumps({"run_id": run_id, "artifacts": [bundle["manifest"]]}),
+            encoding="utf-8",
+        )
+        receipt_paths[run_id] = receipt_path
         bot.jobs.create_job(
             run_id=run_id, workspace=root, session_id="456", goal="fixture",
             approved_scope="fixture", risk_level="low", capability_profile="workspace-write",
@@ -1699,6 +1707,7 @@ async def test_result_decision_stays_bound_to_its_run_during_session_change(tmp_
     new_index = (new_root / ".git" / "index").read_bytes()
     bot._last_run_ids_by_session = {"456": "old-run"}
     bot._last_run_workspaces_by_session = {"456": str(roots["old-run"])}
+    bot._last_run_receipts_by_session = {"456": str(receipt_paths["old-run"])}
     lookup_started, lookup_release = threading.Event(), threading.Event()
     get_job = bot.jobs.get_job
 

@@ -202,8 +202,9 @@ def test_artifact_acceptance_does_not_execute_task_git_hooks(tmp_path, hook_name
     if configured_path:
         _git(task, "config", "core.hooksPath", str(hooks))
     (task / "result.txt").write_text("approved result\n")
+    bundle = create_patch_bundle(task, tmp_path / "review", run_id="hook-test")
 
-    accepted = accept_artifact(task, "hook-test")
+    accepted = accept_artifact(task, "hook-test", reviewed_manifest=bundle)
 
     assert not marker.exists()
     assert accepted["commit"] != checkpoint["base_commit"]
@@ -236,7 +237,8 @@ def test_task_artifacts_ignore_configured_monitor_and_stale_index(tmp_path, acti
     (task / "result.txt").write_text("approved result\n")
 
     if action == "accept":
-        accepted = accept_artifact(task, "monitor-test")
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="monitor-test")
+        accepted = accept_artifact(task, "monitor-test", reviewed_manifest=bundle)
         assert accepted["commit"] != checkpoint["base_commit"]
         assert _git(task, "show", "HEAD:result.txt") == "approved result"
     else:
@@ -277,7 +279,10 @@ def test_task_staging_disables_active_configured_content_filters(tmp_path, phase
         ]
         commit = None
     else:
-        commit = accept_artifact(task, "content-filter-test")["commit"]
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="content-filter-test")
+        commit = accept_artifact(
+            task, "content-filter-test", reviewed_manifest=bundle
+        )["commit"]
 
     assert not marker.exists()
     assert result_file.read_bytes() == b"unfiltered task content\0\n"
@@ -342,7 +347,8 @@ def test_artifact_diffs_ignore_external_helpers_and_preserve_raw_changes(tmp_pat
         _git(task, "apply", str(patch))
         assert data.read_bytes() == after
     else:
-        result = accept_artifact(task, "diff-helper-test")
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="diff-helper-test")
+        result = accept_artifact(task, "diff-helper-test", reviewed_manifest=bundle)
         assert result["commit"] != checkpoint["base_commit"]
         committed = subprocess.run(["git", "-C", str(task), "show", "HEAD:data.bin"], check=True, capture_output=True)
         assert committed.stdout == after
@@ -371,7 +377,8 @@ def test_task_commits_do_not_invoke_configured_signing_program(tmp_path, phase):
     (task / "result.txt").write_text("approved result\n")
 
     if phase == "accept":
-        accept_artifact(task, "signing-test")
+        bundle = create_patch_bundle(task, tmp_path / "review", run_id="signing-test")
+        accept_artifact(task, "signing-test", reviewed_manifest=bundle)
     else:
         initialize_artifact_repository(task, "signing-test")
 
@@ -515,10 +522,58 @@ def test_patch_bundle_is_private_reproducible_and_locally_acceptable(tmp_path):
     _git(clone, "apply", patch.as_posix())
     assert (clone / "service.py").read_text(encoding="utf-8") == "VERSION = 2\n"
 
-    accepted = accept_artifact(workspace, "run-123")
+    accepted = accept_artifact(workspace, "run-123", reviewed_manifest=bundle)
+    retried = accept_artifact(workspace, "run-123", reviewed_manifest=bundle)
     assert accepted["published"] is False
+    assert retried["commit"] == accepted["commit"]
     assert _git(workspace, "log", "-1", "--pretty=%s") == "LightClaw accepted result run-123"
     assert _git(workspace, "remote") == ""
+
+
+@pytest.mark.parametrize("mutation", ["worktree", "staged", "untracked", "branch", "base"])
+def test_accept_refuses_changes_since_review(tmp_path, mutation):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    target = workspace / "result.txt"
+    target.write_text("checkpoint\n", encoding="utf-8")
+    initialize_artifact_repository(workspace, "review-boundary")
+    target.write_text("reviewed output\n", encoding="utf-8")
+    review = create_patch_bundle(
+        workspace, tmp_path / "receipt", run_id="review-boundary"
+    )
+
+    if mutation in {"worktree", "staged"}:
+        target.write_text("unreviewed output\n", encoding="utf-8")
+        if mutation == "staged":
+            _git(workspace, "add", "result.txt")
+    elif mutation == "untracked":
+        (workspace / "late-file.txt").write_text("not reviewed\n", encoding="utf-8")
+    elif mutation == "branch":
+        _git(workspace, "switch", "-c", "changed-after-review")
+    else:
+        _git(
+            workspace,
+            "-c",
+            "user.name=Fixture",
+            "-c",
+            "user.email=fixture@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "unreviewed checkpoint",
+        )
+
+    head_before = _git(workspace, "rev-parse", "HEAD")
+    index_before = (workspace / ".git" / "index").read_bytes()
+    with pytest.raises(ArtifactError):
+        accept_artifact(workspace, "review-boundary", reviewed_manifest=review)
+
+    assert _git(workspace, "rev-parse", "HEAD") == head_before
+    assert (workspace / ".git" / "index").read_bytes() == index_before
+    if mutation in {"worktree", "staged"}:
+        assert target.read_text(encoding="utf-8") == "unreviewed output\n"
+    if mutation == "untracked":
+        assert (workspace / "late-file.txt").read_text(encoding="utf-8") == "not reviewed\n"
 
 
 def test_patch_bundle_preserves_unusual_git_paths(tmp_path):
@@ -1271,7 +1326,7 @@ def test_real_worktree_keeps_source_checkout_on_its_branch(tmp_path, layout):
     assert (target / "README.md").read_text(encoding="utf-8") == "fixture\n"
     (target / "README.md").write_text("reviewed worktree change\n", encoding="utf-8")
     bundle = create_patch_bundle(target, tmp_path / "review", run_id="real-task")
-    accepted = accept_artifact(target, "real-task")
+    accepted = accept_artifact(target, "real-task", reviewed_manifest=bundle)
     assert bundle["changed_paths"] == [{"status": "M", "path": "README.md"}]
     assert accepted["commit"] != source_head
     assert _git(source, "rev-parse", "HEAD") == source_head
@@ -1284,7 +1339,7 @@ def test_pr_preview_contains_receipt_evidence_and_requires_exact_confirmation(tm
     initialize_artifact_repository(workspace, "run-pr")
     _git(workspace, "remote", "add", "origin", "https://example.invalid/lightclaw.git")
     (workspace / "health.py").write_text("STATUS = 'ok'\n", encoding="utf-8")
-    create_patch_bundle(workspace, tmp_path / "artifact", run_id="run-pr")
+    bundle = create_patch_bundle(workspace, tmp_path / "artifact", run_id="run-pr")
     receipt_path, _, _ = write_receipt(_receipt("run-pr"), tmp_path / "receipt")
     other_receipt_path, _, _ = write_receipt(
         _receipt("another-run"), tmp_path / "another-receipt"
@@ -1308,7 +1363,7 @@ def test_pr_preview_contains_receipt_evidence_and_requires_exact_confirmation(tm
     with pytest.raises(ArtifactError, match="accepted local artifact"):
         publish_pull_request(unaccepted, confirmation="run-pr")
 
-    accept_artifact(workspace, "run-pr")
+    accept_artifact(workspace, "run-pr", reviewed_manifest=bundle)
     preview = build_pull_request_preview(
         workspace,
         receipt_path,
@@ -1565,6 +1620,60 @@ def test_artifact_cli_refuses_a_symlinked_run_workspace(tmp_path, monkeypatch, c
     store.accept.assert_not_called()
     store.reject.assert_not_called()
     store.close.assert_called_once()
+
+
+@pytest.mark.parametrize("changed_after_review", [False, True])
+def test_artifact_cli_accepts_only_the_reviewed_patch(
+    tmp_path, monkeypatch, capsys, changed_after_review
+):
+    workspace = tmp_path / "task"
+    workspace.mkdir()
+    result_file = workspace / "result.txt"
+    result_file.write_text("checkpoint\n", encoding="utf-8")
+    initialize_artifact_repository(workspace, "run-123")
+    result_file.write_text("reviewed result\n", encoding="utf-8")
+    receipt_dir = tmp_path / "receipts"
+    bundle = create_patch_bundle(workspace, receipt_dir, run_id="run-123")
+    receipt = receipt_dir / "receipt.json"
+    receipt.write_text(
+        json.dumps({"run_id": "run-123", "artifacts": [bundle["manifest"]]}),
+        encoding="utf-8",
+    )
+    if changed_after_review:
+        result_file.write_text("later unreviewed result\n", encoding="utf-8")
+    head = _git(workspace, "rev-parse", "HEAD")
+    store = SimpleNamespace(
+        get_job=lambda _run_id: {"workspace": str(workspace), "status": "succeeded"},
+        accept=Mock(),
+        reject=Mock(),
+        close=Mock(),
+    )
+    config = SimpleNamespace(
+        memory_db_path=str(tmp_path / "memory.db"), workspace_path=str(tmp_path)
+    )
+    monkeypatch.setenv("LIGHTCLAW_HOME", "")
+    monkeypatch.setenv("LIGHTCLAW_CONFIG", "")
+    monkeypatch.setattr("config.load_config", lambda: config)
+    monkeypatch.setattr("core.jobs.JobStore", lambda _path: store)
+    argv = [
+        "artifact", "accept", "run-123", "--home", str(tmp_path / "home"),
+        "--receipt", str(receipt), "--apply",
+    ]
+
+    result = cmd_artifact(build_parser().parse_args(argv))
+
+    if changed_after_review:
+        assert result == 2
+        assert "unreviewed edits" in capsys.readouterr().out
+        assert _git(workspace, "rev-parse", "HEAD") == head
+        assert result_file.read_text(encoding="utf-8") == "later unreviewed result\n"
+        store.accept.assert_not_called()
+    else:
+        assert result == 0
+        assert "\"applied\": true" in capsys.readouterr().out
+        assert _git(workspace, "rev-parse", "HEAD") != head
+        assert _git(workspace, "show", "HEAD:result.txt") == "reviewed result"
+        store.accept.assert_called_once_with("run-123")
 
 
 def test_artifact_cli_passes_the_confirmed_plan_to_selected_apply(tmp_path, monkeypatch, capsys):

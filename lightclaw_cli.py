@@ -1538,6 +1538,7 @@ def cmd_artifact(args: argparse.Namespace) -> int:
         apply_selected_files,
         build_pull_request_preview,
         publish_pull_request,
+        read_review_manifest,
         reject_artifact,
     )
     from core.jobs import JobStateError, JobStore
@@ -1574,16 +1575,21 @@ def cmd_artifact(args: argparse.Namespace) -> int:
         elif action == "accept":
             if job["status"] != "succeeded":
                 raise JobStateError(f"run is {job['status']}, not succeeded")
+            reviewed_manifest = read_review_manifest(receipt, run_id=args.run_id)
             if not args.apply:
                 payload = {
                     "applied": False,
                     "action": "accept",
                     "run_id": args.run_id,
                     "workspace": workspace.as_posix(),
-                    "effect": "commit staged changes on the local LightClaw branch only",
+                    "effect": "commit only the exact reviewed patch on the local branch",
                 }
             else:
-                payload = accept_artifact(workspace, args.run_id)
+                payload = accept_artifact(
+                    workspace,
+                    args.run_id,
+                    reviewed_manifest=reviewed_manifest,
+                )
                 store.accept(args.run_id)
                 payload["applied"] = True
         elif action == "reject":

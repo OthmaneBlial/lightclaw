@@ -84,7 +84,7 @@ Voice transcription is limited to 20 MB and six requests per Telegram user per m
 
 ## Result controls
 
-Completed runs show View diff, Retry failed lane when applicable, Accept result, and Cancel. Retry still obeys durable idempotency and attempt bounds; unsafe retries fail closed. Accept changes only the local durable disposition and never pushes or publishes.
+Completed runs show View diff, Retry failed lane when applicable, Accept result, and Cancel. Retry still obeys durable idempotency and attempt bounds; unsafe retries fail closed. Accept verifies the private review manifest and refuses unexpected workspace, branch, checkpoint, or patch changes. It commits only the reviewed patch and never pushes or publishes; retrying the same commit after a failed job-state write is safe.
 
 Responses larger than 6,000 characters or detected as large code dumps are written to an owner-only Markdown artifact and attached to Telegram. If attachment fails, the artifact stays local and LightClaw does not split the response into chat walls.
 

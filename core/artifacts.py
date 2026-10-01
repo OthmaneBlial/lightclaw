@@ -166,7 +166,7 @@ def _git(
             if (
                 not trusted_repository
                 and command_index < len(args)
-                and args[command_index] in {"add", "checkout", "commit", "reset", "restore", "switch"}
+                and args[command_index] in {"add", "checkout", "commit", "diff", "reset", "restore", "switch"}
             ):
                 configured = run_git(
                     "config",
@@ -367,10 +367,99 @@ def create_patch_bundle(
     return manifest
 
 
-def accept_artifact(workspace: str | Path, run_id: str) -> dict[str, object]:
-    """Commit the staged result locally; never push."""
+def _git_patch_sha256(workspace: Path, *diff_args: str) -> str:
+    patch_fd, raw_patch = tempfile.mkstemp(prefix="lightclaw-reviewed-", suffix=".patch")
+    os.close(patch_fd)
+    patch_path = Path(raw_patch)
+    args = list(diff_args)
+    option_count = 0
+    while option_count < len(args) and args[option_count].startswith("-"):
+        option_count += 1
+    args.insert(option_count, f"--output={patch_path}")
+    try:
+        result = _git(workspace, "diff", *args, timeout=120)
+        if result.returncode != 0:
+            raise ArtifactError("could not verify changes against the reviewed patch")
+        return sha256_file(patch_path)
+    finally:
+        patch_path.unlink(missing_ok=True)
+
+
+def read_review_manifest(
+    receipt_path: str | Path, *, run_id: str
+) -> dict[str, object]:
+    """Load the review manifest paired with a private receipt."""
+    path = Path(receipt_path).expanduser()
+    try:
+        receipt = read_receipt(path)
+        manifest_path = path.with_name("artifact.json")
+        manifest = read_receipt(manifest_path)
+    except (OSError, ValueError) as exc:
+        raise ArtifactError("the reviewed artifact manifest is unavailable") from exc
+    listed_artifacts = receipt.get("artifacts")
+    if (
+        receipt.get("run_id") != run_id
+        or manifest.get("run_id") != run_id
+        or not isinstance(listed_artifacts, list)
+        or manifest_path.absolute().as_posix() not in listed_artifacts
+    ):
+        raise ArtifactError("the receipt does not match this reviewed artifact")
+    return manifest
+
+
+def accept_artifact(
+    workspace: str | Path,
+    run_id: str,
+    *,
+    reviewed_manifest: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """Commit only the exact locally reviewed result; never push."""
     root = Path(workspace).expanduser().absolute()
-    _require_git(root, "add", "-A")
+    base_commit = _require_git(root, "rev-parse", "HEAD")
+    branch = _require_git(root, "branch", "--show-current")
+    if reviewed_manifest is None:
+        raise ArtifactError("acceptance requires the reviewed artifact manifest")
+    if (
+        reviewed_manifest.get("run_id") != run_id
+        or reviewed_manifest.get("workspace") != root.as_posix()
+        or reviewed_manifest.get("branch") != branch
+    ):
+        raise ArtifactError("workspace branch changed since review")
+    reviewed_base = reviewed_manifest.get("base_commit")
+    expected_patch_sha256 = reviewed_manifest.get("patch_sha256")
+    if not isinstance(reviewed_base, str) or not re.fullmatch(
+        r"(?:[0-9a-f]{40}|[0-9a-f]{64})", reviewed_base
+    ) or not isinstance(expected_patch_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", expected_patch_sha256
+    ):
+        raise ArtifactError("review manifest has no valid patch hash")
+    if base_commit != reviewed_base:
+        commit_details = _require_git(root, "rev-list", "--parents", "-n", "1", "HEAD").split()
+        subject = _require_git(root, "show", "-s", "--format=%s", "HEAD")
+        if (
+            commit_details != [base_commit, reviewed_base]
+            or subject != f"LightClaw accepted result {run_id}"
+            or _git_patch_sha256(root, "--binary", reviewed_base, "HEAD")
+            != expected_patch_sha256
+        ):
+            raise ArtifactError("workspace checkpoint changed since review")
+        return {
+            "run_id": run_id,
+            "workspace": root.as_posix(),
+            "branch": branch,
+            "commit": base_commit,
+            "published": False,
+        }
+    unstaged = _git(root, "diff", "--quiet")
+    untracked = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    if unstaged.returncode == 1:
+        raise ArtifactError("workspace has unreviewed edits; generate a new review")
+    if unstaged.returncode != 0 or untracked.returncode != 0:
+        raise ArtifactError("could not verify workspace against the reviewed patch")
+    if untracked.stdout:
+        raise ArtifactError("workspace has unreviewed files; generate a new review")
+    if _git_patch_sha256(root, "--cached", "--binary", "HEAD") != expected_patch_sha256:
+        raise ArtifactError("staged changes differ from the reviewed patch; review them again")
     staged = _git(root, "diff", "--cached", "--quiet", "HEAD")
     if staged.returncode not in {0, 1}:
         raise ArtifactError("could not inspect staged artifact")

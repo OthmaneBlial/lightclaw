@@ -15,7 +15,12 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
-from ..artifacts import ArtifactError, accept_artifact, reject_artifact
+from ..artifacts import (
+    ArtifactError,
+    accept_artifact,
+    read_review_manifest,
+    reject_artifact,
+)
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
 from ..fs import open_regular_file_at
 from ..jobs import JobStateError
@@ -792,7 +797,17 @@ class BotApprovalsMixin:
             if job["status"] != "succeeded":
                 raise JobStateError(f"run is {job['status']}, not succeeded")
             workspace = str(job["workspace"])
-            artifact = await asyncio.to_thread(accept_artifact, workspace, run_id)
+            reviewed_manifest = await asyncio.to_thread(
+                read_review_manifest,
+                self._last_run_receipts_by_session.get(session_id) or "",
+                run_id=run_id,
+            )
+            artifact = await asyncio.to_thread(
+                accept_artifact,
+                workspace,
+                run_id,
+                reviewed_manifest=reviewed_manifest,
+            )
             job = await asyncio.to_thread(self.jobs.accept, run_id)
         except (ArtifactError, JobStateError) as exc:
             await self._reply_logged(update, f"Accept refused: {_escape_html(str(exc))}")
