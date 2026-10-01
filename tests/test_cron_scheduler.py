@@ -186,6 +186,7 @@ async def test_cron_store_reads_and_writes_run_off_event_loop(tmp_path, monkeypa
     await bot.cmd_cron(
         update, SimpleNamespace(args=["add", "every", "1", "Check releases"], bot=SimpleNamespace())
     )
+    assert str(jobs_path) not in bot._reply_logged.await_args.args[1]
 
     write_store(
         jobs_path,

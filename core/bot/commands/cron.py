@@ -541,14 +541,12 @@ class CommandsCronMixin:
                 )
                 return
 
-            jobs_path = await await_thread_completion(self._cron_jobs_path)
             await self._reply_logged(
                 update,
                 "\n".join(
                     [
                         f"⏰ Cron job added: <code>{_escape_html(str(job['id']))}</code>",
                         f"Schedule: {schedule_desc}",
-                        f"Store: <code>{_escape_html(jobs_path.as_posix())}</code>",
                     ]
                 ),
                 parse_mode=ParseMode.HTML,
