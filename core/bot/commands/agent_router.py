@@ -132,10 +132,25 @@ class CommandsAgentRouterMixin:
         page: int = 0,
         has_more: bool = False,
         snapshot_rowid: int | None = None,
+        allow_cancel: bool = False,
     ) -> InlineKeyboardMarkup | None:
         buttons = []
         for job in jobs:
             run_id = str(job.get("run_id") or "")
+            if (
+                allow_cancel
+                and snapshot_rowid is not None
+                and job.get("status") == "queued"
+                and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id)
+            ):
+                callback = (
+                    f"lc:history:cancel:{page}:{snapshot_rowid}:"
+                    f"{self._run_action_token(run_id)}"
+                )
+                if len(callback.encode("utf-8")) <= 64:
+                    buttons.append(
+                        [InlineKeyboardButton("Cancel queued run", callback_data=callback)]
+                    )
             if (
                 job.get("status") in {"succeeded", "failed", "accepted", "rejected"}
                 and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id)
@@ -194,6 +209,7 @@ class CommandsAgentRouterMixin:
         self._log_user_message(session_id, f"/agent {' '.join(args)}".strip())
 
         sub = args[0].lower() if args else "status"
+        effective_chat = getattr(update, "effective_chat", None)
 
         if sub in {"runs", "jobs"}:
             jobs, has_more, snapshot_rowid = await self._load_recent_runs_page(
@@ -204,7 +220,10 @@ class CommandsAgentRouterMixin:
                 self._render_recent_runs(jobs),
                 parse_mode=ParseMode.HTML,
                 reply_markup=self._recent_runs_keyboard(
-                    jobs, has_more=has_more, snapshot_rowid=snapshot_rowid
+                    jobs,
+                    has_more=has_more,
+                    snapshot_rowid=snapshot_rowid,
+                    allow_cancel=getattr(effective_chat, "type", None) == "private",
                 ),
             )
             return

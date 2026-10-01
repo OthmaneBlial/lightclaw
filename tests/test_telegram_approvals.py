@@ -2227,6 +2227,76 @@ async def test_history_page_callback_edits_message_in_place_for_current_chat():
 
 
 @pytest.mark.asyncio
+async def test_queued_history_cancel_is_private_only_and_refreshes_status(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    job = store.create_job(
+        workspace=tmp_path / "repo",
+        session_id="chat-one",
+        goal="queued task",
+        approved_scope="fixture",
+        risk_level="low",
+        capability_profile="workspace-write",
+        plan=[
+            {
+                "label": "delegation",
+                "worker": "codex",
+                "depends_on": [],
+                "owned_paths": [],
+                "idempotent": False,
+                "resumable": False,
+                "max_attempts": 1,
+            }
+        ],
+        status="queued",
+    )
+    snapshot = store.history_snapshot("chat-one")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = store
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
+    bot._reply_logged = AsyncMock()
+    bot._log_bot_message = Mock()
+    callback = bot._recent_runs_keyboard(
+        [job], snapshot_rowid=snapshot, allow_cancel=True
+    ).inline_keyboard[0][0].callback_data
+    assert callback.startswith("lc:history:cancel:0:")
+    assert len(callback.encode("utf-8")) <= 64
+    assert bot._recent_runs_keyboard(
+        [job], snapshot_rowid=snapshot, allow_cancel=False
+    ) is None
+
+    query = SimpleNamespace(
+        data=callback,
+        message=SimpleNamespace(),
+        answer=AsyncMock(),
+        edit_message_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=7),
+        effective_chat=SimpleNamespace(id=42, type="supergroup"),
+    )
+    await bot.handle_run_action(update, SimpleNamespace())
+    assert store.get_job(job["run_id"])["status"] == "queued"
+    assert "private chat only" in bot._reply_logged.await_args.args[1]
+
+    bot._reply_logged.reset_mock()
+    update.effective_chat.type = "private"
+    await bot.handle_run_action(update, SimpleNamespace())
+    canceled = store.get_job(job["run_id"])
+    assert canceled["status"] == "canceled"
+    assert canceled["lanes"][0]["status"] == "canceled"
+    assert "canceled" in query.edit_message_text.await_args.args[0]
+    refreshed_keyboard = query.edit_message_text.await_args.kwargs["reply_markup"]
+    assert refreshed_keyboard is None or all(
+        button.text != "Cancel queued run"
+        for row in refreshed_keyboard.inline_keyboard
+        for button in row
+    )
+    store.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "callback_data",
     ["lc:history:page:1:9223372036854775808", "lc:history:page:01:123"],

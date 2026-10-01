@@ -335,6 +335,82 @@ class BotApprovalsMixin:
         except asyncio.CancelledError:
             await self._reply_logged(proxy, "Canceled active run and its delegated process tree.")
 
+    async def _cancel_queued_history_run(
+        self,
+        update: Update,
+        session_id: str,
+        page: int,
+        snapshot_rowid: int,
+        token: str,
+    ) -> None:
+        proxy = self._callback_proxy(update)
+        if update.effective_chat.type != "private":
+            await self._reply_logged(
+                proxy, "Queued-run cancellation is available in private chat only."
+            )
+            return
+        jobs, _has_more, _snapshot = await self._load_recent_runs_page(
+            session_id, page, snapshot_rowid
+        )
+        job = next(
+            (
+                item
+                for item in jobs
+                if secrets.compare_digest(
+                    token, self._run_action_token(str(item.get("run_id") or ""))
+                )
+            ),
+            None,
+        )
+        if not job or job.get("status") != "queued":
+            await self._reply_logged(
+                proxy, "This queued run is no longer available to cancel."
+            )
+            return
+        run_id = str(job.get("run_id") or "")
+        try:
+            canceled = await asyncio.to_thread(self.jobs.request_cancel, run_id)
+        except JobStateError:
+            await self._reply_logged(
+                proxy, "This run changed state. Refresh /agent runs and try again."
+            )
+            return
+        except Exception:
+            log.exception("Could not cancel queued run %s", run_id)
+            await self._reply_logged(
+                proxy, "Could not save the cancellation. Check job storage and retry."
+            )
+            return
+        if canceled["status"] == "cancel_requested":
+            active_ids = getattr(self, "_active_run_ids_by_session", {})
+            task = getattr(self, "_active_run_tasks_by_session", {}).get(session_id)
+            if (
+                active_ids.get(session_id) == run_id
+                and task
+                and task is not asyncio.current_task()
+                and not task.done()
+            ):
+                self._cancel_task_once(task)
+        jobs, has_more, snapshot_rowid = await self._load_recent_runs_page(
+            session_id, page, snapshot_rowid
+        )
+        text = redact_text(
+            self._render_recent_runs(jobs, page),
+            getattr(getattr(self, "config", None), "__dict__", {}),
+        )
+        await update.callback_query.edit_message_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=self._recent_runs_keyboard(
+                jobs,
+                page=page,
+                has_more=has_more,
+                snapshot_rowid=snapshot_rowid,
+                allow_cancel=True,
+            ),
+        )
+        self._log_bot_message(session_id, self._strip_html_for_log(text))
+
     async def handle_run_action(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         if not query or not update.effective_user or not update.effective_chat:
@@ -429,6 +505,9 @@ class BotApprovalsMixin:
                             page=page,
                             has_more=has_more,
                             snapshot_rowid=snapshot_rowid,
+                            allow_cancel=(
+                                getattr(update.effective_chat, "type", None) == "private"
+                            ),
                         ),
                     )
                 except BadRequest as exc:
@@ -437,6 +516,26 @@ class BotApprovalsMixin:
                     return
                 self._log_bot_message(
                     session_id, self._strip_html_for_log(text)
+                )
+                return
+
+            if len(parts) == 6 and parts[2] == "cancel":
+                page = _history_number(parts[3], _MAX_HISTORY_PAGE)
+                snapshot_rowid = _history_number(
+                    parts[4], _MAX_HISTORY_SNAPSHOT
+                )
+                token = parts[5]
+                if (
+                    page is None
+                    or snapshot_rowid is None
+                    or not re.fullmatch(r"[0-9a-f]{16}", token)
+                ):
+                    await self._reply_logged(
+                        proxy, "This queued-run button is invalid or expired."
+                    )
+                    return
+                await self._cancel_queued_history_run(
+                    update, session_id, page, snapshot_rowid, token
                 )
                 return
 

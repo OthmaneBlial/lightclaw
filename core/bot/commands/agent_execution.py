@@ -459,7 +459,8 @@ class CommandsAgentExecutionMixin:
             await self._reply_logged(
                 update,
                 f"⏳ Run <code>{_escape_html(run_id)}</code> was not started; it remains queued and will not auto-start. "
-                "Cancel this and any stale queued jobs with <code>lightclaw jobs cancel &lt;run-id&gt;</code>, "
+                "Private-chat <code>/agent runs</code> offers one-tap cancellation for jobs in that chat; "
+                "otherwise use <code>lightclaw jobs cancel &lt;run-id&gt;</code> on the host, "
                 "then resubmit after the workspace is clear.",
                 parse_mode=ParseMode.HTML,
             )
