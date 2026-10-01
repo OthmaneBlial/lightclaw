@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://othmaneblial.github.io/lightclaw/">⚡ Meet LightClaw</a> ·
+  <a href="https://othmaneblial.github.io/lightclaw/">🐾 Meet LightClaw</a> ·
   <a href="#-try-the-demo">🧪 Run the demo</a> ·
   <a href="docs/INSTALL.md">📦 Install</a> ·
   <a href="docs/THREAT_MODEL.md">🛡️ Security</a> ·
