@@ -2332,6 +2332,9 @@ async def test_legacy_queued_group_run_stays_cli_only(tmp_path):
         [job], snapshot_rowid=snapshot, requester_user_id=7
     )
     assert callback is None
+    assert "Cancel is requester-only; legacy group jobs need host CLI." in (
+        bot._render_recent_runs([job])
+    )
     query = SimpleNamespace(
         data=f"lc:history:cancel:0:{snapshot}:{bot._run_action_token(job['run_id'])}",
         message=SimpleNamespace(),

@@ -124,6 +124,8 @@ class CommandsAgentRouterMixin:
                     for lane_status, count in sorted(lane_counts.items())
                 )
                 lines.append(f"Lanes: {progress}")
+        if any(job.get("status") == "queued" for job in jobs):
+            lines.append("Cancel is requester-only; legacy group jobs need host CLI.")
         return "\n\n".join(lines)
 
     def _recent_runs_keyboard(

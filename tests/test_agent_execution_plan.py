@@ -82,6 +82,7 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
     assert "stalled" in rendered
     assert "&lt;repo&gt;" in rendered
     assert "Lanes: 1 running · 1 succeeded" in rendered
+    assert "Cancel is requester-only" not in rendered
     assert "\u202e" not in rendered
     keyboard = bot._reply_logged.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].callback_data == (

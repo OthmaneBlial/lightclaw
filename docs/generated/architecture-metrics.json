@@ -64,7 +64,7 @@
     },
     {
       "branch_points": 52,
-      "line": 200,
+      "line": 202,
       "lines": 323,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
@@ -85,7 +85,7 @@
     },
     {
       "branch_points": 48,
-      "line": 524,
+      "line": 526,
       "lines": 209,
       "name": "_cmd_agent_multi",
       "path": "core/bot/commands/agent_router.py"
@@ -164,7 +164,7 @@
     },
     {
       "branch_points": 52,
-      "line": 200,
+      "line": 202,
       "lines": 323,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
@@ -206,7 +206,7 @@
     },
     {
       "branch_points": 48,
-      "line": 524,
+      "line": 526,
       "lines": 209,
       "name": "_cmd_agent_multi",
       "path": "core/bot/commands/agent_router.py"
@@ -261,7 +261,7 @@
       "path": "memory.py"
     },
     {
-      "lines": 791,
+      "lines": 793,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22847,
+  "runtime_lines": 22849,
   "schema_version": 1
 }
