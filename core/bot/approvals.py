@@ -376,6 +376,46 @@ class BotApprovalsMixin:
                 )
             return
 
+        if action.startswith("lc:history:"):
+            parts = action.split(":")
+            if (
+                len(parts) != 4
+                or parts[2] != "diff"
+                or not re.fullmatch(r"[0-9a-f]{16}", parts[3])
+            ):
+                await self._reply_logged(proxy, "This run is no longer in the recent list for this chat.")
+                return
+            jobs = await asyncio.to_thread(
+                self.jobs.list_jobs, session_id=session_id, limit=10
+            )
+            job = next(
+                (
+                    item
+                    for item in jobs
+                    if secrets.compare_digest(
+                        parts[3], self._run_action_token(str(item.get("run_id") or ""))
+                    )
+                ),
+                None,
+            )
+            if not job:
+                await self._reply_logged(proxy, "This run is no longer in the recent list for this chat.")
+                return
+            run_id = str(job.get("run_id") or "")
+            if job.get("status") not in {"succeeded", "failed", "accepted", "rejected"}:
+                await self._reply_logged(proxy, "The run diff is available after the run finishes.")
+                return
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id):
+                await self._reply_logged(proxy, "The local run receipt is unavailable.")
+                return
+            receipt_path = (
+                Path(".lightclaw-meta") / "receipts" / run_id / "receipt.json"
+            )
+            await self._send_last_run_diff(
+                proxy, session_id, run_id, receipt_value=receipt_path
+            )
+            return
+
         if action.startswith("lc:plan:"):
             parts = action.split(":")
             if len(parts) != 4 or parts[2] not in {
@@ -528,13 +568,26 @@ class BotApprovalsMixin:
 
         await self._reply_logged(proxy, "Unknown or expired LightClaw action.")
 
-    async def _send_last_run_diff(self, update, session_id: str, run_id: str) -> None:
-        receipt_value = self._last_run_receipts_by_session.get(session_id)
+    async def _send_last_run_diff(
+        self,
+        update,
+        session_id: str,
+        run_id: str,
+        *,
+        receipt_value: str | Path | None = None,
+    ) -> None:
+        receipt_value = receipt_value or self._last_run_receipts_by_session.get(session_id)
         if not receipt_value:
             await self._reply_logged(update, "No completed run receipt is available.")
             return
         try:
-            receipt = await await_thread_completion(read_receipt, receipt_value)
+            workspace = Path(self.config.workspace_path).expanduser().resolve()
+            relative_receipt = Path(receipt_value)
+            if relative_receipt.is_absolute():
+                relative_receipt = relative_receipt.relative_to(workspace)
+            receipt = await await_thread_completion(
+                read_receipt, relative_receipt, root=workspace
+            )
         except ValueError:
             await self._reply_logged(update, "The local run receipt is unavailable.")
             return

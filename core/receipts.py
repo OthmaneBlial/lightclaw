@@ -64,10 +64,12 @@ def _write_private(path: Path, content: str) -> None:
     atomic_write_text(path, content, mode=0o600)
 
 
-def read_receipt(path: str | Path) -> dict[str, object]:
+def read_receipt(
+    path: str | Path, *, root: str | Path | None = None
+) -> dict[str, object]:
     """Load one bounded receipt object from a regular non-symlink file."""
     try:
-        receipt = read_json_object(path, max_bytes=MAX_RECEIPT_BYTES)
+        receipt = read_json_object(path, max_bytes=MAX_RECEIPT_BYTES, root=root)
     except (OSError, ValueError) as exc:
         raise ValueError("receipt is missing, too large, or invalid JSON") from exc
     if not receipt:

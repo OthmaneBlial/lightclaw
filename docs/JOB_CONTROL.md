@@ -25,7 +25,7 @@ lightclaw jobs list --status queued --json
 lightclaw jobs status <run-id>
 ```
 
-Telegram `/agent runs` shows status and bounded goal previews for the ten most recent jobs in the current chat; multi-agent jobs also include lane-state counts. `/show` gives counts; neither command exposes other chats' activity.
+Telegram `/agent runs` shows status and bounded goal previews for the ten most recent jobs in the current chat; multi-agent jobs also include lane-state counts. Finished runs have a chat-scoped **View diff** button that remains available after a bot restart. `/show` gives counts; neither command exposes other chats' activity.
 
 ## Control a job
 

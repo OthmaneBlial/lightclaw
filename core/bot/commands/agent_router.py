@@ -7,7 +7,7 @@ import re
 import secrets
 import time
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
@@ -97,6 +97,26 @@ class CommandsAgentRouterMixin:
                 lines.append(f"Lanes: {progress}")
         return "\n\n".join(lines)
 
+    def _recent_runs_keyboard(
+        self, jobs: list[dict[str, object]]
+    ) -> InlineKeyboardMarkup | None:
+        buttons = []
+        for job in jobs:
+            run_id = str(job.get("run_id") or "")
+            if (
+                job.get("status") in {"succeeded", "failed", "accepted", "rejected"}
+                and re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id)
+            ):
+                buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            f"View diff · {run_id[-8:]}",
+                            callback_data=f"lc:history:diff:{self._run_action_token(run_id)}",
+                        )
+                    ]
+                )
+        return InlineKeyboardMarkup(buttons) if buttons else None
+
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user or not update.message:
             return
@@ -120,7 +140,10 @@ class CommandsAgentRouterMixin:
                 self.jobs.list_jobs, session_id=session_id, limit=10
             )
             await self._reply_logged(
-                update, self._render_recent_runs(jobs), parse_mode=ParseMode.HTML
+                update,
+                self._render_recent_runs(jobs),
+                parse_mode=ParseMode.HTML,
+                reply_markup=self._recent_runs_keyboard(jobs),
             )
             return
 

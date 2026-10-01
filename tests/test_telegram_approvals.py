@@ -6,6 +6,7 @@ import os
 import sqlite3
 import stat
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -1890,6 +1891,7 @@ async def test_view_diff_handles_oversized_receipt(tmp_path, monkeypatch):
     receipt_path = tmp_path / "receipt.json"
     receipt_path.write_bytes(b" " * 9)
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
     bot._last_run_receipts_by_session = {"456": str(receipt_path)}
     bot._reply_logged = AsyncMock()
 
@@ -1898,6 +1900,125 @@ async def test_view_diff_handles_oversized_receipt(tmp_path, monkeypatch):
     bot._reply_logged.assert_awaited_once_with(
         SimpleNamespace(message=None), "The local run receipt is unavailable."
     )
+
+
+@pytest.mark.asyncio
+async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
+    run_id = "run-0123456789abcdef"
+    receipt_dir = tmp_path / ".lightclaw-meta" / "receipts" / run_id
+    receipt_dir.mkdir(parents=True)
+    patch_path = receipt_dir / "changes.patch"
+    patch_path.write_text(
+        "diff --git a/file.txt b/file.txt\n@@ -1 +1 @@\n-old\n+new\n",
+        encoding="utf-8",
+    )
+    (receipt_dir / "receipt.json").write_text(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "diff_summary": "1 file changed, 1 insertion(+), 1 deletion(-)",
+                "file_changes": [{"change": "modified", "path": "file.txt"}],
+                "artifacts": [str(patch_path)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    jobs = SimpleNamespace(
+        list_jobs=Mock(
+            return_value=[{"run_id": run_id, "status": "succeeded"}]
+        )
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path))
+    bot.jobs = jobs
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
+    bot._last_run_receipts_by_session = {}
+    bot._reply_logged = AsyncMock()
+    message = SimpleNamespace(reply_document=AsyncMock())
+    query = SimpleNamespace(
+        data=f"lc:history:diff:{bot._run_action_token(run_id)}",
+        message=message,
+        answer=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=7),
+        effective_chat=SimpleNamespace(id=42),
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    jobs.list_jobs.assert_called_once_with(session_id="chat-one", limit=10)
+    message.reply_document.assert_awaited_once()
+    assert bot._reply_logged.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
+    run_id = "run-0123456789abcdef"
+    jobs = SimpleNamespace(list_jobs=Mock(return_value=[]))
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.jobs = jobs
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="chat-two")
+    bot._reply_logged = AsyncMock()
+    message = SimpleNamespace(reply_document=AsyncMock())
+    query = SimpleNamespace(
+        data=f"lc:history:diff:{bot._run_action_token(run_id)}",
+        message=message,
+        answer=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=8),
+        effective_chat=SimpleNamespace(id=43),
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    jobs.list_jobs.assert_called_once_with(session_id="chat-two", limit=10)
+    message.reply_document.assert_not_awaited()
+    assert "no longer in the recent list" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_history_diff_refuses_symlinked_receipt_parent(tmp_path):
+    root = tmp_path / "workspace"
+    outside = tmp_path / "outside"
+    external_run = outside / "run-0123456789abcdef"
+    external_run.mkdir(parents=True)
+    outside_patch = external_run / "changes.patch"
+    outside_patch.write_text("private patch", encoding="utf-8")
+    (external_run / "receipt.json").write_text(
+        json.dumps(
+            {
+                "run_id": "run-0123456789abcdef",
+                "artifacts": [str(outside_patch)],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / ".lightclaw-meta").mkdir(parents=True)
+    (root / ".lightclaw-meta" / "receipts").symlink_to(
+        outside, target_is_directory=True
+    )
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(root))
+    bot._last_run_receipts_by_session = {}
+    bot._reply_logged = AsyncMock()
+    message = SimpleNamespace(reply_document=AsyncMock())
+
+    await bot._send_last_run_diff(
+        SimpleNamespace(message=message),
+        "chat-one",
+        "run-0123456789abcdef",
+        receipt_value=Path(".lightclaw-meta/receipts/run-0123456789abcdef/receipt.json"),
+    )
+
+    message.reply_document.assert_not_awaited()
+    bot._reply_logged.assert_awaited_once()
+    assert bot._reply_logged.await_args.args[1] == "The local run receipt is unavailable."
 
 
 @pytest.mark.asyncio

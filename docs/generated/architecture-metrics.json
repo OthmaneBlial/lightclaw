@@ -22,8 +22,8 @@
     },
     {
       "branch_points": 93,
-      "line": 100,
-      "lines": 502,
+      "line": 120,
+      "lines": 505,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -42,6 +42,13 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
+      "branch_points": 64,
+      "line": 322,
+      "lines": 248,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 58,
       "line": 863,
       "lines": 209,
@@ -54,13 +61,6 @@
       "lines": 343,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 56,
-      "line": 322,
-      "lines": 208,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 52,
@@ -129,8 +129,8 @@
     },
     {
       "branch_points": 93,
-      "line": 100,
-      "lines": 502,
+      "line": 120,
+      "lines": 505,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -184,6 +184,13 @@
       "path": "lightclaw_cli.py"
     },
     {
+      "branch_points": 64,
+      "line": 322,
+      "lines": 248,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 29,
       "line": 335,
       "lines": 227,
@@ -196,13 +203,6 @@
       "lines": 209,
       "name": "_normalize_multi_plan_payload",
       "path": "core/bot/delegation/planning.py"
-    },
-    {
-      "branch_points": 56,
-      "line": 322,
-      "lines": 208,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 52,
@@ -261,11 +261,11 @@
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 688,
+      "lines": 741,
       "path": "core/bot/approvals.py"
     },
     {
-      "lines": 660,
+      "lines": 683,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21847,
+  "runtime_lines": 21925,
   "schema_version": 1
 }

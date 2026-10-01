@@ -21,12 +21,20 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
     bot._session_scope_from_update = AsyncMock(return_value="chat-one")
     bot._log_user_message = Mock()
     bot.jobs = SimpleNamespace(
-        list_jobs=Mock(return_value=[{
-            "run_id": "0123456789abcdef",
-            "status": "stalled",
-            "goal": "Inspect <repo>\u202efiles",
-            "lanes": [{"status": "succeeded"}, {"status": "running"}],
-        }])
+        list_jobs=Mock(return_value=[
+            {
+                "run_id": "0123456789abcdef",
+                "status": "stalled",
+                "goal": "Inspect <repo>\u202efiles",
+                "lanes": [{"status": "succeeded"}, {"status": "running"}],
+            },
+            {
+                "run_id": "run-0123456789abcdef",
+                "status": "succeeded",
+                "goal": "Finished change",
+                "lanes": [],
+            },
+        ])
     )
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
@@ -40,6 +48,11 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
     assert "&lt;repo&gt;" in rendered
     assert "Lanes: 1 running · 1 succeeded" in rendered
     assert "\u202e" not in rendered
+    keyboard = bot._reply_logged.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[0][0].callback_data == (
+        "lc:history:diff:"
+        + bot._run_action_token("run-0123456789abcdef")
+    )
 
 
 @pytest.mark.parametrize("swap", ["workspace", "file", "existing"])
