@@ -108,6 +108,24 @@ def test_list_jobs_offset_is_stable_when_creation_times_tie(tmp_path, monkeypatc
         store.close()
 
 
+def test_job_history_query_uses_session_order_index(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    try:
+        plan = store.db.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM jobs WHERE session_id = ? "
+            "ORDER BY created_at DESC, run_id DESC LIMIT ? OFFSET ?",
+            ("chat-one", 11, 0),
+        ).fetchall()
+
+        assert any(
+            "USING INDEX jobs_by_session_history" in str(row["detail"])
+            for row in plan
+        )
+        assert all("TEMP B-TREE" not in str(row["detail"]) for row in plan)
+    finally:
+        store.close()
+
+
 def test_job_read_uses_empty_values_for_recursively_nested_json(tmp_path, monkeypatch):
     store = JobStore(tmp_path / "jobs.db")
     try:

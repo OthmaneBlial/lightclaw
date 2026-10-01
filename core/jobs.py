@@ -234,6 +234,11 @@ class JobStore:
                 self.db.execute(
                     "UPDATE jobs SET schema_version = ?", (JOB_SCHEMA_VERSION,)
                 )
+            if "session_id" in columns:
+                self.db.execute(
+                    "CREATE INDEX IF NOT EXISTS jobs_by_session_history "
+                    "ON jobs(session_id, created_at DESC, run_id DESC)"
+                )
             self.db.commit()
 
     def close(self) -> None:
