@@ -180,17 +180,34 @@ def test_legacy_skill_migration_skips_unsafe_instruction_file(tmp_path, monkeypa
     assert not (directory / "skill.json").exists()
 
 
-@pytest.mark.parametrize("unsafe_file", ["symlink", "oversized"])
-def test_legacy_skill_copy_skips_symlinked_or_oversized_files(tmp_path, unsafe_file):
+@pytest.mark.parametrize("unsafe_file", ["symlink", "symlink-swap", "oversized"])
+def test_legacy_skill_copy_skips_symlinked_or_oversized_files(
+    tmp_path, monkeypatch, unsafe_file
+):
     runtime = tmp_path / "runtime"
     workspace = runtime / "workspace"
     directory = workspace / "skills" / "local" / "legacy-skill"
     directory.mkdir(parents=True)
     skill_path = directory / "SKILL.md"
-    if unsafe_file == "symlink":
+    if unsafe_file in {"symlink", "symlink-swap"}:
         secret = tmp_path / "outside.txt"
         secret.write_text("private content", encoding="utf-8")
-        skill_path.symlink_to(secret)
+        if unsafe_file == "symlink":
+            skill_path.symlink_to(secret)
+        else:
+            skill_path.write_text("# Legacy skill\n", encoding="utf-8")
+            open_regular_file = skills_module.open_regular_file_at
+
+            def swap_before_open(root, relative):
+                if (
+                    Path(root) == workspace / "skills"
+                    and Path(relative).as_posix() == "local/legacy-skill/SKILL.md"
+                ):
+                    skill_path.unlink()
+                    skill_path.symlink_to(secret)
+                return open_regular_file(root, relative)
+
+            monkeypatch.setattr(skills_module, "open_regular_file_at", swap_before_open)
     else:
         skill_path.write_bytes(b"x" * (MAX_DOWNLOAD_BYTES + 1))
 
