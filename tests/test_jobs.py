@@ -659,6 +659,18 @@ def test_cancel_resume_and_bounded_idempotent_lane_retry(tmp_path):
     store.close()
 
 
+def test_cancel_queued_job_cancels_unstarted_lanes_atomically(tmp_path):
+    store = JobStore(tmp_path / "jobs.db")
+    job = _create(store, tmp_path / "repo")
+
+    canceled = store.request_cancel(job["run_id"])
+
+    assert canceled["status"] == "canceled"
+    assert all(lane["status"] == "canceled" for lane in canceled["lanes"])
+    assert store.claim_next(workspace=tmp_path / "repo") is None
+    store.close()
+
+
 def test_non_resumable_lane_and_stale_worker_are_visible(tmp_path):
     store = JobStore(tmp_path / "jobs.db")
     job = _create(store, tmp_path / "repo", plan=_plan(resumable=False))

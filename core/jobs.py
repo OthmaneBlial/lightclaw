@@ -469,6 +469,11 @@ class JobStore:
                     "UPDATE lanes SET status = 'queued' WHERE run_id = ? AND status = 'running'",
                     (run_id,),
                 )
+            if target == "canceled":
+                self.db.execute(
+                    "UPDATE lanes SET status = 'canceled' WHERE run_id = ? AND status IN ('queued', 'running')",
+                    (run_id,),
+                )
             self._event(run_id, event, {"from": current_status, "to": target})
         return self.get_job(run_id)
 
