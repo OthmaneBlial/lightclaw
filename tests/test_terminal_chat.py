@@ -119,7 +119,8 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
     monkeypatch.setenv("LIGHTCLAW_CHAT_MODE", "0")
     lines = iter([
         "/help", "/recall amberfalcon", "/heartbeat show",
-        "/wipe_memory", "/wipe_memory confirm", "/agent multi inspect docs", "yes",
+        "/skills create Local Reviewer", "/wipe_memory", "/wipe_memory confirm",
+        "/agent multi inspect docs", "yes",
         "/agent trusted codex inspect external files", "/exit"
     ])
     monkeypatch.setattr("builtins.input", lambda _prompt: next(lines))
@@ -130,6 +131,7 @@ def test_terminal_commands_use_local_authority_and_keep_cli_memory_scope(
     assert "LightClaw Commands" in output
     assert "terminal secret amberfalcon <draft> & review" in output
     assert "HEARTBEAT.md" in output
+    assert "Created local skill" in output
     assert "All memory wiped." in output
     assert "Trusted host execution requested" in output
     assert "Command failed" not in output

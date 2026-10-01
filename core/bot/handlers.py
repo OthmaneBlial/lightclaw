@@ -48,11 +48,16 @@ class BotHandlersMixin:
             asyncio.to_thread(self.skills.list_skills),
             asyncio.to_thread(self.jobs.diagnostics, session_id=session_id),
         )
+        public_update = self.is_public_telegram_update(update)
+        if public_update:
+            installed_skills = [skill for skill in installed_skills if skill.source == "hub"]
         summary_status = "✅" if await self._get_session_summary(session_id) else "—"
         try:
             active_skills = await asyncio.to_thread(
                 self.skills.active_records, session_id
             )
+            if public_update:
+                active_skills = [skill for skill in active_skills if skill.source == "hub"]
             skills_status = f"{len(active_skills)} active / {len(installed_skills)} installed"
         except SkillError:
             skills_status = "unavailable; check skills_state.json"
@@ -454,7 +459,14 @@ class BotHandlersMixin:
         # 4. Get session summary
         summary = await self._get_session_summary(session_id)
         try:
-            skills_text = await asyncio.to_thread(self.skills.prompt_context, session_id)
+            if self.is_public_telegram_update(update):
+                skills_text = await asyncio.to_thread(
+                    self.skills.prompt_context, session_id, include_local=False
+                )
+            else:
+                skills_text = await asyncio.to_thread(
+                    self.skills.prompt_context, session_id
+                )
         except SkillError:
             await self._send_response(
                 placeholder,

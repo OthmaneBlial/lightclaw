@@ -96,6 +96,17 @@ def test_local_skill_requires_hash_review_and_stale_approval_is_removed(tmp_path
     assert manager.list_active("chat") == []
 
 
+def test_public_prompt_context_excludes_local_skills_without_deactivating_them(tmp_path):
+    manager = _manager(tmp_path)
+    record = manager.create_local_skill("Private Notes", "Host-only guidance")
+    preview = manager.preview_activation(record.skill_id)
+    manager.activate("public-chat", record.skill_id, str(preview["activation_token"]))
+
+    assert "Host-only guidance" in manager.prompt_context("public-chat")
+    assert manager.prompt_context("public-chat", include_local=False) == ""
+    assert manager.list_active("public-chat") == [record.skill_id]
+
+
 @pytest.mark.parametrize("replacement", ["modified", "symlink"])
 def test_active_skill_rechecks_reviewed_bytes_before_prompt_use(
     tmp_path, monkeypatch, replacement
@@ -283,9 +294,10 @@ def test_remove_active_skill_deactivates_it_before_deleting_files(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_invalid_skill_state_stops_chat_before_llm_request():
+@pytest.mark.parametrize("public_mode", [False, True])
+async def test_invalid_skill_state_stops_chat_before_llm_request(public_mode):
     bot = LightClawBot.__new__(LightClawBot)
-    bot.config = SimpleNamespace(memory_top_k=5)
+    bot.config = SimpleNamespace(memory_top_k=5, telegram_public_bot_ack=public_mode)
     bot._session_id_from_update = lambda _update: "chat"
     bot._log_user_message = Mock()
     bot._log_bot_message = Mock()
@@ -303,7 +315,10 @@ async def test_invalid_skill_state_stops_chat_before_llm_request():
     bot._filter_recent_context = lambda messages: messages
     bot._get_session_summary = AsyncMock(return_value="")
 
-    def invalid_state(_session_id):
+    skill_context_calls = []
+
+    def invalid_state(_session_id, **kwargs):
+        skill_context_calls.append(kwargs)
         raise SkillError("skills state is invalid; no changes were made")
 
     bot.skills = SimpleNamespace(prompt_context=invalid_state)
@@ -319,6 +334,7 @@ async def test_invalid_skill_state_stops_chat_before_llm_request():
     bot.llm.chat.assert_not_awaited()
     bot._send_response.assert_awaited_once()
     assert "not sent to an agent" in bot._send_response.await_args.args[2]
+    assert skill_context_calls == ([{"include_local": False}] if public_mode else [{}])
 
 
 def test_manifest_change_invalidates_existing_approval(tmp_path):
@@ -477,3 +493,44 @@ async def test_skill_list_splits_large_html_reply():
     assert len(messages) > 1
     assert all(len(message.encode("utf-16-le")) // 2 < 4096 for message in messages)
     assert all(skill_id in "".join(messages) for skill_id in skill_ids)
+
+
+@pytest.mark.asyncio
+async def test_public_skills_hide_local_content_and_block_catalog_changes(tmp_path):
+    manager = _manager(tmp_path)
+    record = manager.create_local_skill("Host Private", "Private host workflow")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(telegram_public_bot_ack=True)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_scope_from_update = AsyncMock(return_value="456")
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    bot.skills = manager
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=7),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_skills(update, SimpleNamespace(args=["list"]))
+    listing = "\n".join(call.args[1] for call in bot._reply_logged.await_args_list)
+    assert record.skill_id not in listing
+    assert "Private host workflow" not in listing
+    assert "local skills are hidden" in listing
+    assert "/skills add" not in listing
+    assert "/skills create" not in listing
+
+    for args in (["show", record.skill_id], ["use", record.skill_id], ["off", record.skill_id]):
+        await bot.cmd_skills(update, SimpleNamespace(args=list(args)))
+        assert "Skill not found" in bot._reply_logged.await_args.args[1]
+
+    for args in (
+        ["add", "remote-skill"],
+        ["create", "Another Local Skill"],
+        ["remove", record.skill_id],
+    ):
+        await bot.cmd_skills(update, SimpleNamespace(args=args))
+        assert "shared skill catalog is disabled" in bot._reply_logged.await_args.args[1]
+
+    assert manager.resolve_skill(record.skill_id) is not None

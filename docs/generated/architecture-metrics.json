@@ -35,9 +35,9 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "branch_points": 75,
-      "line": 282,
-      "lines": 389,
+      "branch_points": 76,
+      "line": 287,
+      "lines": 396,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -47,6 +47,13 @@
       "lines": 409,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
+    },
+    {
+      "branch_points": 59,
+      "line": 124,
+      "lines": 354,
+      "name": "cmd_skills",
+      "path": "core/bot/commands/skills.py"
     },
     {
       "branch_points": 58,
@@ -68,13 +75,6 @@
       "lines": 177,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
-    },
-    {
-      "branch_points": 50,
-      "line": 106,
-      "lines": 333,
-      "name": "cmd_skills",
-      "path": "core/bot/commands/skills.py"
     },
     {
       "branch_points": 50,
@@ -142,11 +142,18 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 75,
-      "line": 282,
-      "lines": 389,
+      "branch_points": 76,
+      "line": 287,
+      "lines": 396,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
+    },
+    {
+      "branch_points": 59,
+      "line": 124,
+      "lines": 354,
+      "name": "cmd_skills",
+      "path": "core/bot/commands/skills.py"
     },
     {
       "branch_points": 87,
@@ -161,13 +168,6 @@
       "lines": 344,
       "name": "cmd_chat",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 50,
-      "line": 106,
-      "lines": 333,
-      "name": "cmd_skills",
-      "path": "core/bot/commands/skills.py"
     },
     {
       "branch_points": 50,
@@ -225,7 +225,7 @@
       "path": "lightclaw_cli.py"
     },
     {
-      "lines": 1302,
+      "lines": 1306,
       "path": "skills.py"
     },
     {
@@ -273,7 +273,7 @@
       "path": "core/bot/base.py"
     },
     {
-      "lines": 672,
+      "lines": 684,
       "path": "core/bot/handlers.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22548,
+  "runtime_lines": 22603,
   "schema_version": 1
 }

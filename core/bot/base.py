@@ -269,7 +269,7 @@ class BotBaseMixin:
     def is_public_telegram_update(self, update: Update | None) -> bool:
         """Apply public-bot restrictions to Telegram, not trusted local CLI input."""
         return bool(
-            self.config.telegram_public_bot_ack
+            getattr(getattr(self, "config", None), "telegram_public_bot_ack", False)
             and not getattr(update, "is_local_terminal", False)
         )
 

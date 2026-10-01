@@ -1237,8 +1237,12 @@ class SkillManager:
         chat_id: str,
         max_total_chars: int = 22000,
         max_per_skill_chars: int = 6000,
+        *,
+        include_local: bool = True,
     ) -> str:
         active = self.active_records(chat_id)
+        if not include_local:
+            active = [skill for skill in active if skill.source == "hub"]
         if not active:
             return ""
 

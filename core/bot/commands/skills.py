@@ -16,22 +16,38 @@ from ..messaging import _TelegramHTMLChunker
 
 class CommandsSkillsMixin:
     @staticmethod
-    def _skills_usage_text() -> str:
-        return (
-            "<b>Usage</b>\n"
-            "<code>/skills</code> - list installed + active skills\n"
-            "<code>/skills search &lt;query&gt;</code> - search ClawHub\n"
-            "<code>/skills add &lt;slug|owner/slug|url|slug@version&gt;</code> - install from ClawHub\n"
-            "<code>/skills use &lt;id&gt; [hash-token]</code> - preview, then activate\n"
-            "<code>/skills off &lt;id&gt;</code> - deactivate skill in this chat\n"
-            "<code>/skills create &lt;name&gt; [description]</code> - create local skill\n"
-            "<code>/skills show &lt;id&gt;</code> - preview SKILL.md\n"
-            "<code>/skills remove &lt;id&gt;</code> - uninstall skill"
+    def _skills_usage_text(*, public_mode: bool = False) -> str:
+        commands = [
+            "<code>/skills</code> - list available + active skills",
+            "<code>/skills search &lt;query&gt;</code> - search ClawHub",
+        ]
+        if not public_mode:
+            commands.append(
+                "<code>/skills add &lt;slug|owner/slug|url|slug@version&gt;</code> - install from ClawHub"
+            )
+        commands.extend(
+            [
+                "<code>/skills use &lt;id&gt; [hash-token]</code> - preview, then activate",
+                "<code>/skills off &lt;id&gt;</code> - deactivate skill in this chat",
+            ]
         )
+        if not public_mode:
+            commands.append(
+                "<code>/skills create &lt;name&gt; [description]</code> - create local skill"
+            )
+        commands.append("<code>/skills show &lt;id&gt;</code> - preview SKILL.md")
+        if not public_mode:
+            commands.append("<code>/skills remove &lt;id&gt;</code> - uninstall skill")
+        return "<b>Usage</b>\n" + "\n".join(commands)
 
-    def _render_skills_overview(self, session_id: str) -> str:
+    def _render_skills_overview(
+        self, session_id: str, *, include_local: bool = True
+    ) -> str:
         installed = self.skills.list_skills()
         active = self.skills.active_records(session_id)
+        if not include_local:
+            installed = [skill for skill in installed if skill.source == "hub"]
+            active = [skill for skill in active if skill.source == "hub"]
         active_ids = {s.skill_id for s in active}
 
         lines = ["🧩 <b>Skills</b>", ""]
@@ -67,7 +83,9 @@ class CommandsSkillsMixin:
             lines.append("No skills installed yet.")
 
         lines.append("")
-        lines.append(self._skills_usage_text())
+        lines.append(self._skills_usage_text(public_mode=not include_local))
+        if not include_local:
+            lines.append("Public mode: local skills are hidden; catalog changes are disabled.")
         return "\n".join(lines)
 
     @staticmethod
@@ -119,13 +137,29 @@ class CommandsSkillsMixin:
         args = context.args or []
         self._log_user_message(session_id, f"/skills {' '.join(args)}".strip())
         sub = args[0].lower() if args else "list"
+        public_update = self.is_public_telegram_update(update)
+
+        if public_update and sub in {
+            "add", "install", "grab", "create", "new",
+            "remove", "delete", "rm", "uninstall",
+        }:
+            await self._reply_logged(
+                update,
+                "Public mode can use preinstalled ClawHub skills only. "
+                "Changing the shared skill catalog is disabled.",
+            )
+            return
 
         if sub in {"list", "ls"} and len(args) == 1:
             sub = "list"
 
         if sub == "list":
             try:
-                text = await asyncio.to_thread(self._render_skills_overview, session_id)
+                text = await asyncio.to_thread(
+                    self._render_skills_overview,
+                    session_id,
+                    include_local=not public_update,
+                )
             except SkillError as exc:
                 await self._reply_logged(
                     update,
@@ -179,7 +213,11 @@ class CommandsSkillsMixin:
                 if summary:
                     lines.append(f"  {summary}")
             lines.append("")
-            lines.append("Install: <code>/skills add &lt;slug&gt;</code>")
+            lines.append(
+                "Ask the host operator to install a skill before use."
+                if public_update
+                else "Install: <code>/skills add &lt;slug&gt;</code>"
+            )
             await self._reply_logged(update, "\n".join(lines), parse_mode=ParseMode.HTML)
             return
 
@@ -243,7 +281,7 @@ class CommandsSkillsMixin:
 
             ref = args[1]
             skill = await asyncio.to_thread(self.skills.resolve_skill, ref)
-            if not skill:
+            if not skill or (public_update and skill.source != "hub"):
                 await self._reply_logged(
                     update,
                     f"⚠️ Skill not found: <code>{_escape_html(ref)}</code>",
@@ -292,7 +330,7 @@ class CommandsSkillsMixin:
 
             ref = args[1]
             skill = await asyncio.to_thread(self.skills.resolve_skill, ref)
-            if not skill:
+            if not skill or (public_update and skill.source != "hub"):
                 await self._reply_logged(
                     update,
                     f"⚠️ Skill not found: <code>{_escape_html(ref)}</code>",
@@ -367,7 +405,7 @@ class CommandsSkillsMixin:
 
             ref = args[1]
             skill = await asyncio.to_thread(self.skills.resolve_skill, ref)
-            if not skill:
+            if not skill or (public_update and skill.source != "hub"):
                 await self._reply_logged(
                     update,
                     f"⚠️ Skill not found: <code>{_escape_html(ref)}</code>",
@@ -433,6 +471,7 @@ class CommandsSkillsMixin:
 
         await self._reply_logged(
             update,
-            "Unknown /skills subcommand.\n\n" + self._skills_usage_text(),
+            "Unknown /skills subcommand.\n\n"
+            + self._skills_usage_text(public_mode=public_update),
             parse_mode=ParseMode.HTML,
         )
