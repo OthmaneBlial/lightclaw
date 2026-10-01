@@ -7,6 +7,9 @@ set -euo pipefail
 
 REPOSITORY_URL="https://github.com/OthmaneBlial/lightclaw.git"
 INSTALL_ROOT="${LIGHTCLAW_INSTALL_ROOT:-${HOME}/.local/share/lightclaw}"
+while [ "$INSTALL_ROOT" != "/" ] && [ "${INSTALL_ROOT%/}" != "$INSTALL_ROOT" ]; do
+    INSTALL_ROOT="${INSTALL_ROOT%/}"
+done
 SOURCE_DIR="${INSTALL_ROOT}/source"
 VENV_DIR="${INSTALL_ROOT}/venv"
 BIN_DIR="${HOME}/.local/bin"
@@ -39,17 +42,43 @@ if [ -n "$SCRIPT_SOURCE" ] && [ -f "$SCRIPT_SOURCE" ]; then
     fi
 fi
 
-mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
-printf 'managed-by=lightclaw\n' > "$OWNERSHIP_MARKER"
+case "$INSTALL_ROOT" in
+    /*) ;;
+    *) fail "LIGHTCLAW_INSTALL_ROOT must be an absolute path." ;;
+esac
+
+if [ -L "$INSTALL_ROOT" ]; then
+    fail "$INSTALL_ROOT is a symlink; choose a real install directory."
+elif [ -e "$INSTALL_ROOT" ]; then
+    if [ -L "$OWNERSHIP_MARKER" ] || [ ! -f "$OWNERSHIP_MARKER" ]; then
+        fail "$INSTALL_ROOT already exists and is not marked as a LightClaw install. Move it and retry."
+    fi
+    cmp -s "$OWNERSHIP_MARKER" <(printf 'managed-by=lightclaw\n') \
+        || fail "$INSTALL_ROOT has an invalid ownership marker. Move it and retry."
+else
+    mkdir -p "$INSTALL_ROOT"
+    printf 'managed-by=lightclaw\n' > "$OWNERSHIP_MARKER"
+fi
+mkdir -p "$BIN_DIR"
 
 if [ -n "$LOCAL_SOURCE" ]; then
     PACKAGE_SOURCE="$LOCAL_SOURCE"
     say "Installing from local checkout: $PACKAGE_SOURCE"
 else
     command -v git >/dev/null 2>&1 || fail "git is required for remote bootstrap."
+    if [ -L "$SOURCE_DIR" ]; then
+        fail "$SOURCE_DIR is a symlink; move it and retry."
+    fi
+    if [ -L "${SOURCE_DIR}/.git" ]; then
+        fail "${SOURCE_DIR}/.git is a symlink; move it and retry."
+    fi
     if [ -d "${SOURCE_DIR}/.git" ]; then
+        source_remote="$(git -C "$SOURCE_DIR" remote get-url origin 2>/dev/null)" \
+            || fail "$SOURCE_DIR is not a valid managed LightClaw checkout."
+        [ "$source_remote" = "$REPOSITORY_URL" ] \
+            || fail "$SOURCE_DIR does not use the official LightClaw remote."
         say "Updating managed source checkout..."
-        git -C "$SOURCE_DIR" pull --ff-only origin main
+        git -c core.hooksPath=/dev/null -C "$SOURCE_DIR" pull --ff-only origin main
     elif [ -e "$SOURCE_DIR" ]; then
         fail "$SOURCE_DIR exists but is not a LightClaw Git checkout. Move it and retry."
     else
@@ -59,6 +88,12 @@ else
     PACKAGE_SOURCE="$SOURCE_DIR"
 fi
 
+if [ -L "$VENV_DIR" ]; then
+    fail "$VENV_DIR is a symlink; move it and retry."
+fi
+if [ -e "$VENV_DIR" ] && [ ! -f "${VENV_DIR}/pyvenv.cfg" ]; then
+    fail "$VENV_DIR exists but is not a Python virtual environment. Move it and retry."
+fi
 if [ ! -x "${VENV_DIR}/bin/python" ]; then
     say "Creating isolated environment: $VENV_DIR"
     python3 -m venv "$VENV_DIR"

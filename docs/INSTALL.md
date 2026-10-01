@@ -43,6 +43,10 @@ cd lightclaw
 bash setup.sh
 ```
 
+Set `LIGHTCLAW_INSTALL_ROOT` to an absolute path for a custom install location. The installer
+refuses to claim an existing unmarked directory and verifies the official remote before it
+updates its managed source checkout.
+
 Do not use `curl | sh` for privileged tooling unless you first download, inspect, and pin the script to a trusted commit.
 
 ## First run and paths

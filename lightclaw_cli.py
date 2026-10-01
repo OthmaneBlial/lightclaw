@@ -24,7 +24,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from core.fs import atomic_write_text
+from core.fs import atomic_write_text, read_text_bounded_at
 from core.paths import config_path as app_config_path
 from core.paths import legacy_config_path
 from core.workspaces import WorkspaceSafetyError, undo_owned_task
@@ -1173,23 +1173,37 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
 
 def _managed_uninstall_targets(home: Path, purge_data: bool = False) -> list[tuple[Path, str]]:
-    install_root = Path(
+    configured_install_root = Path(
         os.getenv("LIGHTCLAW_INSTALL_ROOT", str(home / ".local" / "share" / "lightclaw"))
-    ).expanduser().resolve()
+    ).expanduser()
+    try:
+        install_root = (
+            None
+            if configured_install_root.is_symlink()
+            else configured_install_root.resolve()
+        )
+    except (OSError, RuntimeError):
+        install_root = None
     command_path = home / ".local" / "bin" / "lightclaw"
     targets: list[tuple[Path, str]] = []
-
-    if command_path.is_symlink():
+    managed_install = False
+    if install_root is not None:
         try:
-            resolved_target = command_path.resolve(strict=False)
-            resolved_target.relative_to(install_root)
-            targets.append((command_path, "managed command symlink"))
-        except ValueError:
+            marker = read_text_bounded_at(install_root, ".lightclaw-install", 64)
+        except (OSError, UnicodeError, ValueError):
             pass
+        else:
+            if marker == "managed-by=lightclaw\n":
+                managed_install = True
+                targets.append((install_root, "managed isolated environment and source"))
 
-    marker = install_root / ".lightclaw-install"
-    if marker.is_file():
-        targets.append((install_root, "managed isolated environment and source"))
+    if managed_install and command_path.is_symlink():
+        expected_command = install_root / "venv" / "bin" / "lightclaw"
+        try:
+            if command_path.resolve(strict=False) == expected_command:
+                targets.append((command_path, "managed command symlink"))
+        except (OSError, RuntimeError):
+            pass
 
     if purge_data:
         targets.extend(
