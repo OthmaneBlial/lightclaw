@@ -413,15 +413,22 @@ class SkillManager:
                 manifest_path = directory / SKILL_MANIFEST_NAME
                 if not skill_path.is_file() or skill_path.is_symlink() or manifest_path.exists():
                     continue
+                try:
+                    skill_bytes = _read_skill_file(
+                        directory, "SKILL.md", MAX_SKILL_TEXT_BYTES
+                    )
+                except OSError:
+                    continue
                 source_path = directory / "source.json"
                 source: dict[str, Any] = {}
-                if source_path.is_file() and not source_path.is_symlink():
-                    try:
-                        loaded = json.loads(source_path.read_text(encoding="utf-8"))
-                        source = loaded if isinstance(loaded, dict) else {}
-                    except (OSError, json.JSONDecodeError):
-                        source = {}
-                content = skill_path.read_text(encoding="utf-8", errors="replace")
+                try:
+                    loaded = json.loads(
+                        _read_skill_file(directory, "source.json", MAX_SKILL_META_BYTES)
+                    )
+                    source = loaded if isinstance(loaded, dict) else {}
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    pass
+                content = skill_bytes.decode("utf-8", errors="replace")
                 frontmatter, body = _frontmatter(content)
                 name = _first_non_empty(
                     str(frontmatter.get("name") or ""),
@@ -441,6 +448,9 @@ class SkillManager:
                     version=version,
                     owner=owner,
                 )
+                manifest_bytes = json.dumps(
+                    manifest, indent=2, sort_keys=True
+                ).encode("utf-8")
                 _atomic_write_json(manifest_path, manifest)
                 source.update(
                     {
@@ -449,14 +459,9 @@ class SkillManager:
                         "display_name": name,
                         "owner": owner,
                         "version": version,
-                        "instructions_sha256": _sha256_bytes(skill_path.read_bytes()),
-                        "content_sha256": _review_sha256(
-                            skill_path.read_bytes(),
-                            json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"),
-                        ),
-                        "manifest_sha256": _sha256_bytes(
-                            json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
-                        ),
+                        "instructions_sha256": _sha256_bytes(skill_bytes),
+                        "content_sha256": _review_sha256(skill_bytes, manifest_bytes),
+                        "manifest_sha256": _sha256_bytes(manifest_bytes),
                         "manifest_migrated": True,
                     }
                 )

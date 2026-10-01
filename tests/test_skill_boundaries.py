@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -144,6 +145,38 @@ def test_skill_preview_rejects_symlink_swap_after_hash_validation(tmp_path, monk
     assert preview["activation_token"] is None
     assert preview["source_preview"] == ""
     assert "credential" not in preview["source_preview"]
+
+
+@pytest.mark.parametrize("unsafe_file", ["oversized", "symlink-swap"])
+def test_legacy_skill_migration_skips_unsafe_instruction_file(tmp_path, monkeypatch, unsafe_file):
+    runtime = tmp_path / "runtime"
+    workspace = runtime / "workspace"
+    directory = runtime / "skills" / "local" / "legacy-skill"
+    directory.mkdir(parents=True)
+    skill_path = directory / "SKILL.md"
+    skill_path.write_text("# Legacy skill\n", encoding="utf-8")
+
+    if unsafe_file == "oversized":
+        skill_path.write_bytes(b"x" * (MAX_SKILL_TEXT_BYTES + 1))
+    else:
+        secret = tmp_path / "outside.txt"
+        secret.write_text("private content", encoding="utf-8")
+        read_skill_file = skills_module._read_skill_file
+
+        def swap_before_read(path, name, max_bytes):
+            if Path(path) == directory and name == "SKILL.md":
+                skill_path.unlink()
+                skill_path.symlink_to(secret)
+            return read_skill_file(path, name, max_bytes)
+
+        monkeypatch.setattr(skills_module, "_read_skill_file", swap_before_read)
+
+    SkillManager(
+        workspace_path=str(workspace),
+        skills_state_path=str(runtime / "skills_state.json"),
+    )
+
+    assert not (directory / "skill.json").exists()
 
 
 @pytest.mark.parametrize(

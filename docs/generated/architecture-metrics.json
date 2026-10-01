@@ -229,12 +229,12 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1253,
-      "path": "core/bot/delegation/execution.py"
+      "lines": 1257,
+      "path": "skills.py"
     },
     {
-      "lines": 1252,
-      "path": "skills.py"
+      "lines": 1253,
+      "path": "core/bot/delegation/execution.py"
     },
     {
       "lines": 1088,
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21704,
+  "runtime_lines": 21709,
   "schema_version": 1
 }
