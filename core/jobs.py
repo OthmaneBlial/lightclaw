@@ -68,7 +68,7 @@ def _json(value: object) -> str:
 def _decode(value: str | None, fallback):
     try:
         return json.loads(value or "")
-    except (TypeError, json.JSONDecodeError):
+    except (TypeError, json.JSONDecodeError, RecursionError):
         return fallback
 
 

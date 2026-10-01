@@ -76,6 +76,24 @@ def test_jobs_persist_across_restart_with_private_database(tmp_path):
     second.close()
 
 
+def test_job_read_uses_empty_values_for_recursively_nested_json(tmp_path, monkeypatch):
+    store = JobStore(tmp_path / "jobs.db")
+    try:
+        job = _create(store, tmp_path / "repo")
+
+        def reject_nested_json(_content):
+            raise RecursionError("maximum recursion depth exceeded")
+
+        monkeypatch.setattr("core.jobs.json.loads", reject_nested_json)
+        restored = store.get_job(job["run_id"])
+
+        assert restored["plan"] == []
+        assert all(lane["owned_paths"] == [] for lane in restored["lanes"])
+        assert all(lane["depends_on"] == [] for lane in restored["lanes"])
+    finally:
+        store.close()
+
+
 def test_job_store_keeps_wal_sidecars_private_in_shared_parent(tmp_path):
     parent = tmp_path / "shared"
     parent.mkdir()
