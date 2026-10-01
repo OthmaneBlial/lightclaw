@@ -460,6 +460,7 @@ async def test_memory_diagnostic_commands_query_sqlite_off_event_loop(chat_type,
 @pytest.mark.asyncio
 async def test_confirmed_global_wipe_revokes_pending_actions_across_chats():
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"])
     bot.is_update_allowed = lambda _update: True
     bot._session_id_from_update = lambda _update: "current"
     bot._log_user_message = Mock()
@@ -504,43 +505,52 @@ async def test_confirmed_global_wipe_revokes_pending_actions_across_chats():
 
 
 @pytest.mark.asyncio
-async def test_global_wipe_confirmation_cannot_be_completed_by_another_group_user():
+@pytest.mark.parametrize("chat_type", ["private", "group"])
+@pytest.mark.parametrize("args", [[], ["confirm"]])
+async def test_public_mode_cannot_start_or_confirm_global_wipe(chat_type, args):
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_public_bot_ack=True)
     bot.is_update_allowed = lambda _update: True
-    bot._session_id_from_update = lambda _update: "-group-7"
+    session_id = "42" if chat_type == "private" else "-group-7"
+    chat_id = 42 if chat_type == "private" else -7
+    bot._session_id_from_update = lambda _update: session_id
     bot._log_user_message = Mock()
-    bot._pending_wipe_confirm = {
-        "-group-7": {
-            "user_id": 17,
-            "expires_at": 9_999_999_999,
-            "expires_monotonic": 9_999_999_999,
+    pending = (
+        {
+            session_id: {
+                "user_id": 42,
+                "expires_at": 9_999_999_999,
+                "expires_monotonic": 9_999_999_999,
+            }
         }
-    }
+        if args
+        else {}
+    )
+    bot._pending_wipe_confirm = dict(pending)
     bot.memory = SimpleNamespace(clear_all=Mock())
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=42),
-        effective_chat=SimpleNamespace(id=-7, type="group"),
+        effective_chat=SimpleNamespace(id=chat_id, type=chat_type),
         message=SimpleNamespace(),
     )
 
-    await bot.cmd_wipe_memory(update, SimpleNamespace(args=["confirm"]))
+    await bot.cmd_wipe_memory(update, SimpleNamespace(args=args))
 
     bot.memory.clear_all.assert_not_called()
-    assert bot._pending_wipe_confirm["-group-7"]["user_id"] == 17
-    assert "No active wipe confirmation for your Telegram user" in (
-        bot._reply_logged.await_args.args[1]
-    )
+    assert bot._pending_wipe_confirm == pending
+    assert "disabled while Telegram access is public" in bot._reply_logged.await_args.args[1]
 
 
 @pytest.mark.asyncio
 async def test_global_wipe_confirmation_uses_monotonic_expiry():
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"])
     bot.is_update_allowed = lambda _update: True
-    bot._session_id_from_update = lambda _update: "-group-7"
+    bot._session_id_from_update = lambda _update: "42"
     bot._log_user_message = Mock()
     bot._pending_wipe_confirm = {
-        "-group-7": {
+        "42": {
             "user_id": 42,
             "expires_at": 9_999_999_999,
             "expires_monotonic": 0,
@@ -550,7 +560,7 @@ async def test_global_wipe_confirmation_uses_monotonic_expiry():
     bot._reply_logged = AsyncMock()
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=42),
-        effective_chat=SimpleNamespace(id=-7, type="group"),
+        effective_chat=SimpleNamespace(id=42, type="private"),
         message=SimpleNamespace(),
     )
 

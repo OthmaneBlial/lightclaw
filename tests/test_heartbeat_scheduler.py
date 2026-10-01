@@ -421,11 +421,14 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
         )
 
         saved = bot.memory.get_recent(session_id)
-        if erase in {"other", "none"}:
+        global_wipe_blocked = erase == "global" and group_chat
+        if erase in {"other", "none"} or global_wipe_blocked:
             assert any("[heartbeat]" in entry["content"] for entry in saved)
         else:
             assert saved == []
-        if phase == "skills" and erase in {"current", "global"}:
+        if phase == "skills" and (
+            erase == "current" or (erase == "global" and not global_wipe_blocked)
+        ):
             bot.llm.chat.assert_not_awaited()
             transport.send_message.assert_not_awaited()
         else:

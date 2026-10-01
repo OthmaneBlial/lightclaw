@@ -170,10 +170,11 @@ def test_readme_and_site_disclose_persistent_memory_retention_and_controls() -> 
     assert "MEMORY_RETENTION_DAYS" in html
     assert "<code>/clear</code>" in html and "<code>/wipe_memory</code>" in html
     assert "current chat or forum-topic session" in html
-    assert "initiating Telegram user" in html and "90 seconds" in html
+    assert "public mode blocks it" in html
     assert "90 days by default" in llms and "MEMORY_RETENTION_DAYS" in llms
     assert "/clear" in llms and "/wipe_memory" in llms
-    assert "initiating Telegram user" in llms and "90 seconds" in llms
+    assert "public mode blocks it" in llms
+    assert "only when public access is disabled" in llms
     assert "persisted summaries" in readme and "90-day default retention" in readme
 
 

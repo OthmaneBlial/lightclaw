@@ -30,7 +30,7 @@ class CommandsBasicMixin:
             "<b>Commands:</b>\n"
             "/help - Show this message\n"
             "/clear - Clear this chat's history and pending approvals\n"
-            "/wipe_memory - Wipe all memory and pending approvals (active runs continue)\n"
+            "/wipe_memory - Wipe all memory (private allowlist mode only)\n"
             "/memory - Show memory stats\n"
             "/recall &lt;query&gt; - Search my memories\n"
             "/skills - Manage skills (install/use/create)\n"
@@ -59,7 +59,7 @@ class CommandsBasicMixin:
             "/start - Welcome message\n"
             "/help - This help message\n"
             "/clear - Clear this chat's history and pending approvals\n"
-            "/wipe_memory - Wipe all memory and pending approvals (active runs continue)\n"
+            "/wipe_memory - Wipe all memory (private allowlist mode only)\n"
             "/memory - Show memory statistics\n"
             "/recall &lt;query&gt; - Search past conversations\n"
             "/skills - Install/use/create skills\n"
@@ -121,6 +121,13 @@ class CommandsBasicMixin:
         if not update.effective_user or not update.message:
             return
         if not self.is_update_allowed(update):
+            return
+        if self.config.telegram_public_bot_ack:
+            await self._reply_logged(
+                update,
+                "Global memory wipe is disabled while Telegram access is public. "
+                "Use /clear for this chat or switch to private allowlist mode.",
+            )
             return
 
         session_id = await self._session_scope_from_update(update)

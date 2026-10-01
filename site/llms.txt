@@ -12,7 +12,7 @@ Memory and job SQLite databases, including existing WAL/SHM sidecars, are restri
 
 Telegram `/agent runs` lists up to ten durable jobs for the current chat, with status and a short goal preview; multi-agent jobs include lane-state counts, and completed runs have a **View diff** button. The SQLite session filter keeps other chats out of the list, and history actions remain available after bot restarts.
 
-Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes the current chat or forum-topic session; global /wipe_memory erases saved chat memory across chats. A group confirmation lasts 90 seconds and must come from the initiating Telegram user.
+Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes the current chat or forum-topic session. Global /wipe_memory erases saved chat memory across chats only when public access is disabled and a user allowlist is configured; public mode blocks it.
 
 Automatic edit retries omit common credential paths and file contents with detectable secrets. Model-generated file blocks refuse common credential paths; detection is heuristic.
 

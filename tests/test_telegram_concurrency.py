@@ -325,6 +325,7 @@ async def test_clear_drops_inflight_and_queued_chat_history(
         context_window=128,
         llm_provider="fixture",
         workspace_path="/tmp",
+        telegram_public_bot_ack=False,
     )
     bot.personality = None
     bot.is_update_allowed = lambda _update: True
@@ -433,6 +434,7 @@ async def test_clear_drops_inflight_and_queued_chat_history(
 @pytest.mark.parametrize("cancel_count", [1, 2, 3])
 async def test_cancelled_global_wipe_finishes_before_new_chat_is_admitted(cancel_count):
     bot = LightClawBot.__new__(LightClawBot)
+    bot.config = Config(telegram_allowed_users=["42"])
     bot.is_update_allowed = lambda _update: True
     bot._session_id_from_update = lambda _update: "chat-42"
     bot._log_user_message = Mock()
