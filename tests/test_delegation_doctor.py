@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
-from types import SimpleNamespace
+import sys
 
 import pytest
 
@@ -13,51 +14,60 @@ def test_local_cli_probe_gets_minimal_environment(tmp_path, monkeypatch):
     codex_home = tmp_path / ".codex"
     monkeypatch.setenv("OPENAI_API_KEY", secret)
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
-    observed = {}
-
-    def fake_popen(_cmd, **kwargs):
-        observed.update(kwargs)
-        return SimpleNamespace(
-            pid=1,
-            returncode=0,
-            communicate=lambda **_kwargs: ("codex 1.0", ""),
-        )
-
-    monkeypatch.setattr(
-        "core.bot.delegation.doctor.subprocess.Popen", fake_popen
-    )
     bot = LightClawBot.__new__(LightClawBot)
 
-    result = bot._run_probe_command(["codex", "--version"])
+    result = bot._run_probe_command(
+        [
+            sys.executable,
+            "-c",
+            "import json,os; print(json.dumps({'provider_key_was_inherited': "
+            "bool(os.getenv('OPENAI_API_KEY')), 'CODEX_HOME': os.getenv('CODEX_HOME'), "
+            "'CI': os.getenv('CI'), 'HOME': os.getenv('HOME')}))",
+        ]
+    )
+    observed = json.loads(result["stdout"])
 
     assert result["ok"] is True
-    assert "OPENAI_API_KEY" not in observed["env"]
-    assert observed["env"]["CODEX_HOME"] == str(codex_home)
-    assert observed["env"]["CI"] == "1"
-    assert observed["env"].get("HOME") == os.environ.get("HOME")
+    assert observed["provider_key_was_inherited"] is False
+    assert observed["CODEX_HOME"] == str(codex_home)
+    assert observed["CI"] == "1"
+    assert observed["HOME"] == os.environ.get("HOME")
 
 
-def test_codex_doctor_redacts_secret_echoed_by_login_probe(tmp_path, monkeypatch):
+def test_codex_doctor_redacts_secret_echoed_by_login_probe(monkeypatch):
     secret = "fixture-auth-token-that-must-not-leak"
-    auth_path = tmp_path / "missing-auth.json"
     bot = LightClawBot.__new__(LightClawBot)
-    bot._resolve_codex_auth_path = lambda: auth_path
     monkeypatch.setenv("OPENAI_API_KEY", secret)
-    monkeypatch.setattr(
-        "core.bot.delegation.doctor.subprocess.Popen",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            pid=1,
-            returncode=1,
-            communicate=lambda **_kwargs: (
-                "", f"Login probe failed: OPENAI_API_KEY={secret}"
-            ),
-        ),
+
+    result = bot._run_probe_command(
+        [
+            sys.executable,
+            "-c",
+            "import sys; print(sys.argv[1], file=sys.stderr)",
+            f"Login probe failed: OPENAI_API_KEY={secret}",
+        ]
     )
 
-    _status, message, _fix = bot._codex_doctor_auth_status()
+    assert secret not in result["stderr"]
+    assert "[REDACTED]" in result["stderr"]
 
-    assert secret not in message
-    assert "[REDACTED]" in message
+
+def test_codex_doctor_treats_truncated_login_probe_as_unclear(tmp_path):
+    auth_path = tmp_path / "auth.json"
+    auth_path.write_text('{"tokens":{"access_token":"fixture-token"}}')
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._resolve_codex_auth_path = lambda: auth_path
+    bot._run_probe_command = lambda *_args, **_kwargs: {
+        "stdout": "Logged in",
+        "stderr": "",
+        "output_truncated": True,
+        "timed_out": False,
+    }
+
+    status, message, _fix = bot._codex_doctor_auth_status()
+
+    assert status == "warn"
+    assert "status is unclear" in message
 
 
 def test_claude_doctor_skips_oversized_settings_file(tmp_path, monkeypatch):

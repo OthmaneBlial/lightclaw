@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-import signal
-import subprocess
 import time
 from pathlib import Path
 
 from ...fs import read_text_bounded
 from ...markdown import _escape_html
 from ...security import delegated_process_env, redact_text
+from .workspace import stop_process_tree
 
 MAX_AGENT_AUTH_FILE_BYTES = 1024 * 1024
+MAX_PROBE_OUTPUT_BYTES = 64 * 1024
 
 
 class DelegationDoctorMixin:
@@ -39,84 +40,76 @@ class DelegationDoctorMixin:
         self,
         cmd: list[str],
         timeout_sec: int = 8,
-        input_text: str | None = None,
     ) -> dict:
         """Run a short-lived local CLI probe command."""
         extra_env = {"CI": "1"}
         if codex_home := os.getenv("CODEX_HOME", "").strip():
             extra_env["CODEX_HOME"] = codex_home
         env = delegated_process_env(extra=extra_env)
-        process = None
 
-        def stop_process_tree() -> None:
-            if process is None:
-                return
-            if os.name == "posix":
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-                except OSError:
-                    if process.poll() is None:
-                        process.kill()
-            elif process.poll() is None:
-                process.kill()
-
-        def collect_after_stop():
-            try:
-                return process.communicate(timeout=0.25)
-            except subprocess.TimeoutExpired as cleanup_error:
-                if process.stdin:
-                    process.stdin.close()
-                process.stdout.close()
-                process.stderr.close()
-                process.wait()
-                return cleanup_error.output, cleanup_error.stderr
-
-        try:
-            process = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE if input_text is not None else subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
+        async def run_probe() -> dict:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
                 env=env,
                 start_new_session=os.name == "posix",
             )
-            stdout, stderr = process.communicate(
-                input=input_text, timeout=max(1, int(timeout_sec))
-            )
+
+            async def capture(stream) -> tuple[str, bool]:
+                output = bytearray()
+                truncated = False
+                while chunk := await stream.read(65536):
+                    remaining = MAX_PROBE_OUTPUT_BYTES - len(output)
+                    output.extend(chunk[:remaining])
+                    truncated |= len(chunk) > remaining
+                return output.decode("utf-8", errors="replace"), truncated
+
+            readers = [
+                asyncio.create_task(capture(process.stdout)),
+                asyncio.create_task(capture(process.stderr)),
+            ]
+            waiter = asyncio.create_task(process.wait())
+            try:
+                _, pending = await asyncio.wait(
+                    [*readers, waiter], timeout=max(1, int(timeout_sec))
+                )
+            except BaseException:
+                await stop_process_tree(process, force=True, wait_task=waiter)
+                for task in readers:
+                    task.cancel()
+                await asyncio.gather(*readers, return_exceptions=True)
+                raise
+            if pending:
+                await stop_process_tree(process, force=True, wait_task=waiter)
+                for task in readers:
+                    if not task.done():
+                        task.cancel()
+            outputs = await asyncio.gather(*readers, return_exceptions=True)
+            stdout = outputs[0][0] if isinstance(outputs[0], tuple) else ""
+            stderr = outputs[1][0] if isinstance(outputs[1], tuple) else ""
             return {
-                "ok": process.returncode == 0,
-                "exit_code": int(process.returncode),
-                "stdout": redact_text(stdout or "", os.environ),
-                "stderr": redact_text(stderr or "", os.environ),
-                "timed_out": False,
-                "error": "",
+                "ok": not pending and waiter.result() == 0,
+                "exit_code": 124 if pending else int(waiter.result()),
+                "stdout": redact_text(stdout, os.environ),
+                "stderr": redact_text(stderr, os.environ),
+                "output_truncated": any(
+                    output[1] for output in outputs if isinstance(output, tuple)
+                ),
+                "timed_out": bool(pending),
+                "error": f"timed out after {int(timeout_sec)}s" if pending else "",
             }
-        except subprocess.TimeoutExpired as e:
-            if process is not None:
-                stop_process_tree()
-                stdout, stderr = collect_after_stop()
-            else:
-                stdout, stderr = e.stdout, e.stderr
-            return {
-                "ok": False,
-                "exit_code": 124,
-                "stdout": redact_text(str(stdout or ""), os.environ),
-                "stderr": redact_text(str(stderr or ""), os.environ),
-                "timed_out": True,
-                "error": f"timed out after {int(timeout_sec)}s",
-            }
+
+        try:
+            return asyncio.run(run_probe())
         except Exception as e:
-            if process is not None:
-                stop_process_tree()
-                collect_after_stop()
             return {
                 "ok": False,
                 "exit_code": 1,
                 "stdout": "",
                 "stderr": "",
+                "output_truncated": False,
                 "timed_out": False,
                 "error": redact_text(str(e), os.environ),
             }
@@ -188,6 +181,13 @@ class DelegationDoctorMixin:
         age_note = ""
         if age_known:
             age_note = f" (auth file age: {self._format_age(age_seconds)})"
+
+        if login_probe.get("output_truncated"):
+            return (
+                "warn",
+                "Login status output exceeded the 64 KiB probe limit; status is unclear.",
+                "codex login status",
+            )
 
         if logged_in and token_present:
             if age_known and age_seconds > 3600:

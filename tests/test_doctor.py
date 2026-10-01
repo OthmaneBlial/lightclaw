@@ -81,6 +81,24 @@ def test_doctor_reports_missing_optional_provider_sdk(tmp_path, monkeypatch):
     assert "lightclaw-ai[gemini]" in provider_check["detail"]
 
 
+def test_agent_doctor_probe_bounds_large_output():
+    output_size = 3 * 1024 * 1024
+    result = DelegationDoctorMixin()._run_probe_command(
+        [
+            sys.executable,
+            "-c",
+            f"import sys; sys.stdout.write('x' * {output_size}); "
+            f"sys.stderr.write('y' * {output_size})",
+        ],
+        timeout_sec=6,
+    )
+
+    assert result["ok"] is True
+    assert len(result["stdout"].encode()) <= 64 * 1024
+    assert len(result["stderr"].encode()) <= 64 * 1024
+    assert result["output_truncated"] is True
+
+
 def test_agent_doctor_timeout_kills_probe_process_group(tmp_path):
     marker = tmp_path / "child-survived-timeout"
     child_code = (
