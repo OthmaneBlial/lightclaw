@@ -226,7 +226,7 @@ def test_workspace_candidates_rank_newest_files(tmp_path):
     ]
 
 
-def test_recent_credentials_do_not_hide_safe_workspace_candidates(tmp_path):
+def test_recent_private_and_generated_files_do_not_hide_safe_candidates(tmp_path):
     bot = BotBaseMixin.__new__(BotBaseMixin)
     bot.config = SimpleNamespace(workspace_path=str(tmp_path))
     bot._last_file_by_session = {}
@@ -238,6 +238,9 @@ def test_recent_credentials_do_not_hide_safe_workspace_candidates(tmp_path):
         (".git", "config"),
         (".lightclaw", "memory.txt"),
         (".lightclaw-meta/messages", "response.md"),
+        ("node_modules/pkg", "bundle.js"),
+        (".venv/lib", "module.py"),
+        ("build", "generated.txt"),
     ):
         path = tmp_path / directory / name
         path.parent.mkdir(parents=True, exist_ok=True)

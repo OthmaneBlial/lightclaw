@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import heapq
+import os
 import re
 import secrets
+import stat
 import time
 import weakref
 from contextlib import ExitStack, asynccontextmanager
@@ -29,6 +31,9 @@ from .delegation.workspace import await_thread_completion
 # ponytail: bounded in-process LRU; use shared storage if public traffic exceeds this ceiling.
 MAX_PRIVILEGED_RATE_LIMIT_KEYS = 4096
 _LEGACY_CANCELLED_TASKS = weakref.WeakSet()
+_RECENT_FILE_SCAN_IGNORED_DIRS = frozenset(
+    {".venv", "venv", "env", "node_modules", "__pycache__", ".tox", ".pytest_cache", ".mypy_cache", ".ruff_cache", "build", "dist"}
+)
 
 
 class BotBaseMixin:
@@ -489,15 +494,28 @@ class BotBaseMixin:
         workspace = Path(self.config.workspace_path).resolve()
 
         def recent_files():
-            for path in workspace.rglob("*"):
-                try:
+            for root, directories, filenames in os.walk(workspace):
+                directories[:] = [
+                    name for name in directories
+                    if name.lower() not in _RECENT_FILE_SCAN_IGNORED_DIRS
+                    and not is_sensitive_path(name)
+                ]
+                root_path = Path(root)
+                for filename in filenames:
+                    path = root_path / filename
                     rel_path = path.relative_to(workspace).as_posix()
-                    if path.is_file() and not is_sensitive_path(rel_path):
-                        yield path.stat().st_mtime, path
-                except OSError:
-                    continue
+                    if is_sensitive_path(rel_path):
+                        continue
+                    try:
+                        metadata = path.lstat()
+                    except OSError:
+                        continue
+                    if stat.S_ISREG(metadata.st_mode):
+                        yield metadata.st_mtime, path
 
-        for _, path in heapq.nlargest(20, recent_files(), key=lambda item: item[0]):
+        for _, path in heapq.nlargest(
+            20, recent_files(), key=lambda item: (item[0], item[1].as_posix())
+        ):
             rel = path.relative_to(workspace).as_posix()
             candidates.append(rel)
             if len(candidates) >= limit * 3:
