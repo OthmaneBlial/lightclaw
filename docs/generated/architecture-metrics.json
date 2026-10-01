@@ -7,18 +7,18 @@
   "direct_dependency_count": 3,
   "highest_branch_functions": [
     {
-      "branch_points": 94,
-      "line": 250,
-      "lines": 509,
-      "name": "_process_file_blocks",
-      "path": "core/bot/file_ops.py"
-    },
-    {
       "branch_points": 87,
       "line": 338,
       "lines": 352,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
+    },
+    {
+      "branch_points": 84,
+      "line": 311,
+      "lines": 456,
+      "name": "_process_file_blocks",
+      "path": "core/bot/file_ops.py"
     },
     {
       "branch_points": 83,
@@ -121,9 +121,9 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "branch_points": 94,
-      "line": 250,
-      "lines": 509,
+      "branch_points": 84,
+      "line": 311,
+      "lines": 456,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
     },
@@ -237,7 +237,7 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "lines": 1088,
+      "lines": 1096,
       "path": "core/bot/file_ops.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22654,
+  "runtime_lines": 22662,
   "schema_version": 1
 }
