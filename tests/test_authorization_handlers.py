@@ -44,6 +44,7 @@ async def test_help_marks_publicly_unavailable_commands(handler_name: str):
     lines = {line.split(" - ", 1)[0]: line for line in text.splitlines() if " - " in line}
     assert "unavailable in public Telegram mode" in lines["/agent doctor"]
     assert "unavailable in public Telegram mode" in lines["/heartbeat"]
+    assert "public: use preinstalled ClawHub only" in lines["/skills"]
 
 
 @pytest.mark.parametrize("handler_name", HANDLERS)
