@@ -122,12 +122,19 @@ def test_site_explains_allowlisted_group_chat_boundary() -> None:
     assert "public mode disables process-wide <code>/heartbeat</code> controls" in html
     assert "shared skill-catalog changes" in html and "host-local skill content stays private" in html
     assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in html
+    assert "cancel queued or active runs" in html
+    assert "requester-only cancellation of queued runs in group or private chats" in html
     assert "all group members can view run diffs" in html
     assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in llms
+    assert "cancel queued or active runs" in llms
+    assert "original requester can cancel queued jobs from group or private history" in llms
+    assert "Older group jobs without a saved requester remain CLI-only" in llms
     assert "public mode disables process-wide /heartbeat controls" in llms
     assert "shared skill-catalog changes" in llms and "host-local skill content stays private" in llms
     assert "all group members can view run diffs" in llms
     assert "Only the requester can use or replace a pending plan, voice request, or trusted-run review" in readme
+    assert "cancel queued or active runs" in readme
+    assert "requesters can cancel queued runs from group or private history" in readme
     assert "global `/wipe_memory`, process-wide `/heartbeat`, and shared skill-catalog changes are disabled in public mode" in readme
     assert "shared skill-catalog changes are disabled in public mode" in readme
 

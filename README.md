@@ -104,8 +104,8 @@ See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorizat
 - 🧪 Codex and Claude profiles: `observe`, `workspace-write`, and `trusted-command`.
 - 🧾 Private JSON/Markdown receipts with commands, results, hashes, artifacts, and recovery context.
 - 📚 Paginated per-chat run history via `/agent runs`, with status and per-lane progress.
-  Pages and completed-run diff buttons stay stable through new jobs and bot restarts; rerun
-  the command to refresh.
+  Pages and completed-run diff buttons stay stable through new jobs and bot restarts. Original
+  requesters can cancel queued runs from group or private history; rerun the command to refresh.
 - 📱 Phone-friendly diff previews, full patch attachments, local accept/reject, and selective file apply.
 - 🧠 Namespaced SQLite FTS5 memory and persisted summaries with 90-day default retention, export, and selective delete.
 - 🧰 Permission-manifest skills, inactive by default, with provenance and hash review.
@@ -113,7 +113,7 @@ See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorizat
 
 ## 🛡️ Safety, without magic claims
 
-- Telegram startup requires a numeric user allowlist or explicitly acknowledged public-group mode. Allowlisted bots reject group chats. Public-group conversation and memory stay within each session; global `/wipe_memory`, process-wide `/heartbeat`, and shared skill-catalog changes are disabled in public mode. Public chats can use preinstalled ClawHub skills, while host-local skills stay private. Only the requester can use or replace a pending plan, voice request, or trusted-run review, cancel active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topics have separate sessions, and scheduled messages return to their topic. Local terminal chat uses a separate memory scope.
+- Telegram startup requires a numeric user allowlist or explicitly acknowledged public-group mode. Allowlisted bots reject group chats. Public-group conversation and memory stay within each session; global `/wipe_memory`, process-wide `/heartbeat`, and shared skill-catalog changes are disabled in public mode. Public chats can use preinstalled ClawHub skills, while host-local skills stay private. Only the requester can use or replace a pending plan, voice request, or trusted-run review, cancel queued or active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topics have separate sessions, and scheduled messages return to their topic. Local terminal chat uses a separate memory scope.
 - Delegated workers get a minimal environment without Telegram/provider keys. Workspaces, output, callbacks, files, receipts, and SQLite permissions have explicit bounds.
 - Plans and trusted runs require approval of a specific complete review; approvals expire if the clock changes or the machine sleeps. Trusted host runs show the complete task and require the requester to approve that specific review.
 - **Acceptance commands run on your host and are not sandboxed by LightClaw.** Review them and use OS/container isolation for untrusted repositories.

@@ -2,7 +2,7 @@
 
 > LightClaw is an alpha, self-hosted Telegram control surface for reviewed and verified work by local Codex and Claude coding agents. Telegram and configured hosted model providers remain external services. Workspaces and private run receipts stay local by default. The deterministic demo uses fixtures, costs zero, and does not prove live-provider quality. LightClaw never pushes or publishes a demo result.
 
-Allowlisted bots accept commands only in private Telegram chats. Public groups require explicit public mode and no user allowlist. Conversation and memory are shared within each session; public mode disables process-wide /heartbeat controls and shared skill-catalog changes. Public chats can use preinstalled ClawHub skills, while host-local skill content stays private. Only the requester can use or replace a pending plan, voice request, or trusted-run review, cancel active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topic IDs create separate sessions.
+Allowlisted bots accept commands only in private Telegram chats. Public groups require explicit public mode and no user allowlist. Conversation and memory are shared within each session; public mode disables process-wide /heartbeat controls and shared skill-catalog changes. Public chats can use preinstalled ClawHub skills, while host-local skill content stays private. Only the requester can use or replace a pending plan, voice request, or trusted-run review, cancel queued or active runs, or accept, reject, and retry results; all group members can view run diffs. Forum topic IDs create separate sessions.
 
 Plan, voice, and trusted-run approvals expire even if the clock changes or the machine sleeps.
 
@@ -10,7 +10,7 @@ Text requests are limited to 20 per Telegram user per minute before model proces
 
 Memory and job SQLite databases, including existing WAL/SHM sidecars, are restricted to owner-only permissions before use.
 
-Telegram `/agent runs` lists up to ten durable jobs for the current chat, with status and a short goal preview; multi-agent jobs include lane-state counts, and completed runs have a **View diff** button. The SQLite session filter keeps other chats out of the list, and history actions remain available after bot restarts.
+Telegram `/agent runs` lists up to ten durable jobs for the current chat, with status and a short goal preview; multi-agent jobs include lane-state counts, completed runs have a **View diff** button, and the original requester can cancel queued jobs from group or private history. The SQLite session filter keeps other chats out of the list, and history actions remain available after bot restarts. Older group jobs without a saved requester remain CLI-only for cancellation.
 
 Chat history and session summaries live in namespaced local SQLite memory. They expire after 90 days by default; MEMORY_RETENTION_DAYS changes the limit. Telegram /clear removes the current chat or forum-topic session. Global /wipe_memory erases saved chat memory across chats only when public access is disabled and a user allowlist is configured; public mode blocks it.
 
