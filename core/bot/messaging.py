@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import secrets
 import time
@@ -10,6 +11,7 @@ import traceback
 from html import escape, unescape
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import BinaryIO
 
 from telegram import InputFile, Update
 from telegram.constants import ParseMode
@@ -17,11 +19,12 @@ from telegram.error import BadRequest, Conflict, NetworkError, RetryAfter, Timed
 from telegram.ext import ContextTypes
 
 from ..constants import TELEGRAM_BOT_API_MAX_FILE_BYTES
-from ..fs import atomic_write_text_at
+from ..fs import atomic_write_text_at, open_regular_file_at
 from ..logging_setup import log
 from ..markdown import markdown_to_telegram_html
 from ..security import redact_text
 from ..workspaces import WorkspaceSafetyError, ensure_private_workspace_dir
+from .delegation.workspace import await_thread_completion
 
 
 class _TelegramHTMLChunker(HTMLParser):
@@ -98,6 +101,16 @@ class BotMessagingMixin:
         )
         return path
 
+    def _open_long_response_artifact(self, path: Path) -> tuple[BinaryIO, int]:
+        workspace = Path(self.config.workspace_path).expanduser().resolve()
+        relative = path.absolute().relative_to(workspace)
+        file_fd, file_stat = open_regular_file_at(workspace, relative)
+        try:
+            return os.fdopen(file_fd, "rb"), file_stat.st_size
+        except BaseException:
+            os.close(file_fd)
+            raise
+
     async def _send_response(self, placeholder, update: Update, markdown_response: str):
         """Send bounded Telegram HTML chunks while preserving formatting."""
         markdown_response = redact_text(
@@ -112,7 +125,9 @@ class BotMessagingMixin:
 
         if len(markdown_response) > 6000 or self._is_large_code_leak(markdown_response):
             try:
-                artifact = self._write_long_response_artifact(markdown_response)
+                artifact = await await_thread_completion(
+                    self._write_long_response_artifact, markdown_response
+                )
             except (OSError, WorkspaceSafetyError):
                 log.warning("Could not save long result under private workspace metadata")
                 failure = (
@@ -129,10 +144,12 @@ class BotMessagingMixin:
                 await self._try_send(placeholder.edit_text, summary)
             if update.message:
                 try:
-                    artifact_size = artifact.stat().st_size
-                except OSError:
-                    artifact_size = None
-                if artifact_size is None or artifact_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
+                    artifact_handle, artifact_size = self._open_long_response_artifact(artifact)
+                except (OSError, RuntimeError, ValueError):
+                    artifact_handle, artifact_size = None, None
+                if artifact_handle is None or artifact_size > TELEGRAM_BOT_API_MAX_FILE_BYTES:
+                    if artifact_handle is not None:
+                        artifact_handle.close()
                     failure = (
                         "Telegram cannot attach this result because it is too large "
                         "or its size could not be checked. It remains saved locally as "
@@ -141,7 +158,7 @@ class BotMessagingMixin:
                     await report_failure(failure)
                     return
                 try:
-                    with artifact.open("rb") as handle:
+                    with artifact_handle as handle:
                         await update.message.reply_document(
                             document=InputFile(
                                 handle,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import timedelta
 from html.parser import HTMLParser
 from types import SimpleNamespace
@@ -238,6 +239,50 @@ async def test_oversized_long_response_is_kept_local(tmp_path, monkeypatch):
     message.reply_text.assert_awaited_once()
     assert "too large" in message.reply_text.await_args.args[0]
     assert "saved locally" in message.reply_text.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_long_response_artifact_write_runs_off_event_loop(tmp_path, monkeypatch):
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(workspace_path=str(tmp_path / "workspace"))
+    loop_thread = threading.get_ident()
+    worker_threads = []
+    write_artifact = bot._write_long_response_artifact
+
+    def track_write(text):
+        worker_threads.append(threading.get_ident())
+        return write_artifact(text)
+
+    monkeypatch.setattr(bot, "_write_long_response_artifact", track_write)
+
+    await bot._send_response(None, SimpleNamespace(message=None), "evidence\n" * 1000)
+
+    assert worker_threads and all(thread != loop_thread for thread in worker_threads)
+
+
+@pytest.mark.asyncio
+async def test_long_response_attachment_rejects_symlink_swap(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    outside = tmp_path / "private.txt"
+    outside.write_text("private data", encoding="utf-8")
+    bot = MessagingHarness()
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+    write_artifact = bot._write_long_response_artifact
+
+    def replace_artifact_with_symlink(text):
+        artifact = write_artifact(text)
+        artifact.unlink()
+        artifact.symlink_to(outside)
+        return artifact
+
+    monkeypatch.setattr(bot, "_write_long_response_artifact", replace_artifact_with_symlink)
+    message = SimpleNamespace(reply_document=AsyncMock(), reply_text=AsyncMock())
+
+    await bot._send_response(None, SimpleNamespace(message=message), "evidence\n" * 1000)
+
+    message.reply_document.assert_not_awaited()
+    message.reply_text.assert_awaited_once()
+    assert "could not be checked" in message.reply_text.await_args.args[0]
 
 
 def test_long_response_artifact_rejects_symlinked_parent_swap(tmp_path, monkeypatch):
