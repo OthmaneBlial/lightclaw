@@ -159,6 +159,11 @@ roadmap's “proof over claims” rule.
   workspace snapshot error now cancels its claimed durable job without invoking the agent; runtime
   usage and the reviewed architecture cap are both 22,674 lines. One existing third-party
   `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `ede9ef1` passed on macOS arm64 Python 3.14.7:
+  957 tests and all local quality, audit, package-build, and clean-wheel checks. Unexpected
+  post-run evidence errors now fail the durable job and release active-run tracking instead of
+  leaving a dead `running` row; runtime usage and the reviewed cap are both 22,684 lines. One
+  existing third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
