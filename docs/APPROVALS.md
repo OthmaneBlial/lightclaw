@@ -35,8 +35,9 @@ without executing or recording an approval. Terminal `yes` still confirms the la
 fully printed review by passing its ID to the command handler.
 
 In explicitly enabled public group sessions, only the requester can use a plan's
-approve, edit, deny, or cancel controls. A new `/agent multi` request still replaces
-the group's older pending plan. Voice approval and discard controls are bound to the
+approve, edit, deny, or cancel controls. Their new `/agent multi` request can replace
+their older pending plan; another member cannot supersede it or revoke it with
+`/agent off`. Voice approval and discard controls are bound to the
 user who sent the voice request. Only the requester can cancel a run or accept,
 reject, or retry its result; any group member can view its diff. `/clear` clears the
 shared group memory but discards only the caller's pending actions; other members'

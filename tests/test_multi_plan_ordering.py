@@ -250,6 +250,49 @@ async def test_public_group_plan_actions_require_the_requester(entry):
 
 
 @pytest.mark.asyncio
+async def test_public_group_member_cannot_replace_another_users_plan():
+    bot = _bot()
+    bot.config = Config(telegram_public_bot_ack=True)
+    pending = _set_pending_plan(
+        bot, "456", bot._decorate_pending_plan(_payload("first member's plan"))
+    )
+    bot._plan_multi_agent_payload = AsyncMock(
+        return_value=(_payload("replacement plan"), "")
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=99),
+        effective_chat=SimpleNamespace(id=456, type="group"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_agent(update, SimpleNamespace(args=["multi", "replacement plan"]))
+
+    assert bot._pending_multi_plan_by_session["456"] is pending
+    bot._plan_multi_agent_payload.assert_not_awaited()
+    assert "only the requester" in bot._reply_logged.await_args.args[1].lower()
+
+
+@pytest.mark.asyncio
+async def test_public_group_agent_off_does_not_discard_another_users_plan():
+    bot = _bot()
+    bot.config = Config(telegram_public_bot_ack=True)
+    bot._agent_mode_by_session = {}
+    bot.memory.delete_delegation_transcripts = Mock(return_value=0)
+    pending = _set_pending_plan(
+        bot, "456", bot._decorate_pending_plan(_payload("first member's plan"))
+    )
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=99),
+        effective_chat=SimpleNamespace(id=456, type="group"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_agent(update, SimpleNamespace(args=["off"]))
+
+    assert bot._pending_multi_plan_by_session["456"] is pending
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["slash", "text", "approve", "confirm-risk"])
 @pytest.mark.parametrize("high_risk", [False, True])
 async def test_incomplete_review_cannot_execute_or_prime_second_confirmation(action, high_risk):

@@ -264,7 +264,12 @@ class CommandsAgentRouterMixin:
 
         if sub in {"off", "disable", "stop"}:
             previous = self._agent_mode_by_session.pop(session_id, None)
-            self._clear_pending_multi_plan(session_id)
+            pending = self._pending_multi_plan_by_session.get(session_id)
+            if pending and (
+                update.effective_chat.type == "private"
+                or self._is_pending_requester(update, pending)
+            ):
+                self._clear_pending_multi_plan(session_id)
             removed = await asyncio.to_thread(
                 self.memory.delete_delegation_transcripts,
                 session_id,
@@ -309,12 +314,13 @@ class CommandsAgentRouterMixin:
             )
 
             if (
-                action in {"confirm", "cancel", "edit"}
+                action in {"confirm", "cancel", "edit", "proposal"}
                 and pending_for_action
                 and not self._is_pending_requester(update, pending_for_action)
             ):
                 await self._reply_logged(
-                    update, "Only the requester can act on this plan."
+                    update,
+                    "Only the requester can act on or replace this plan.",
                 )
                 return
 
