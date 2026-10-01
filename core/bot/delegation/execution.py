@@ -1015,9 +1015,21 @@ class DelegationExecutionMixin:
                     )
                 except Exception:
                     pass
-            before = await await_thread_completion(
-                self._snapshot_workspace_state, target_workspace
-            )
+            try:
+                before = await await_thread_completion(
+                    self._snapshot_workspace_state, target_workspace
+                )
+            except Exception as exc:
+                if durable_store is None:
+                    raise
+                return await self._handle_durable_setup_failure(
+                    exc,
+                    durable_store,
+                    session_id,
+                    run_id,
+                    target_workspace,
+                    owns_workspace,
+                )
             result = await self._invoke_local_agent_streaming(
                 agent=agent,
                 task=task,

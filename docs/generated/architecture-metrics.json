@@ -35,9 +35,9 @@
       "path": "core/bot/handlers.py"
     },
     {
-      "branch_points": 71,
+      "branch_points": 73,
       "line": 857,
-      "lines": 409,
+      "lines": 421,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -128,9 +128,9 @@
       "path": "core/bot/file_ops.py"
     },
     {
-      "branch_points": 71,
+      "branch_points": 73,
       "line": 857,
-      "lines": 409,
+      "lines": 421,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -233,7 +233,7 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1265,
+      "lines": 1277,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22662,
+  "runtime_lines": 22674,
   "schema_version": 1
 }

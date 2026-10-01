@@ -234,6 +234,48 @@ async def test_cancel_during_single_run_start_notice_cancels_job_and_heartbeat(
 
 
 @pytest.mark.asyncio
+async def test_snapshot_failure_cancels_claimed_job_without_launching_agent(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(
+        workspace_path=str(root),
+        local_agent_timeout_sec=30,
+        local_agent_progress_interval_sec=10,
+        local_agent_capability_profile="workspace-write",
+    )
+    bot._available_local_agents = lambda: {"codex": "/fixture/codex"}
+    bot._delegation_safety_block_reason = lambda _task: ""
+    bot.jobs = JobStore(tmp_path / "jobs.db")
+
+    def fail_snapshot(_workspace):
+        raise OSError("workspace snapshot unavailable")
+
+    monkeypatch.setattr(
+        "core.bot.delegation.workspace.initialize_artifact_repository",
+        lambda *_args, **_kwargs: {"type": "fixture-checkpoint"},
+    )
+    monkeypatch.setattr(bot, "_snapshot_workspace_state", fail_snapshot, raising=False)
+    bot._invoke_local_agent_streaming = AsyncMock()
+    try:
+        result = await bot._run_local_agent_task(
+            "456", "codex", "recover from snapshot failure"
+        )
+
+        job = bot.jobs.list_jobs()[0]
+        assert "local agent was not started" in result
+        assert job["status"] == "canceled"
+        assert job["lanes"][0]["status"] == "canceled"
+        bot._invoke_local_agent_streaming.assert_not_awaited()
+        assert bot._active_run_ids_by_session == {}
+        assert bot._active_run_tasks_by_session == {}
+    finally:
+        bot.jobs.close()
+
+
+@pytest.mark.asyncio
 async def test_sqlite_error_after_single_run_claim_cancels_durable_job(
     tmp_path, monkeypatch
 ):
