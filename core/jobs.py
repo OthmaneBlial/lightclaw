@@ -390,6 +390,7 @@ class JobStore:
         workspace: str | Path | None = None,
         session_id: str | None = None,
         limit: int = 50,
+        offset: int = 0,
     ) -> list[dict[str, object]]:
         clauses: list[str] = []
         params: list[object] = []
@@ -403,8 +404,12 @@ class JobStore:
             clauses.append("session_id = ?")
             params.append(session_id)
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        query = f"SELECT * FROM jobs{where} ORDER BY created_at DESC LIMIT ?"
+        query = (
+            f"SELECT * FROM jobs{where} "
+            "ORDER BY created_at DESC, run_id DESC LIMIT ? OFFSET ?"
+        )
         params.append(max(1, min(500, int(limit))))
+        params.append(max(0, int(offset)))
         with self._lock:
             rows = self.db.execute(query, params).fetchall()
             return [self._row_to_job(row) for row in rows]

@@ -41,7 +41,9 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
 
     await bot.cmd_agent(update, SimpleNamespace(args=["runs"]))
 
-    bot.jobs.list_jobs.assert_called_once_with(session_id="chat-one", limit=10)
+    bot.jobs.list_jobs.assert_called_once_with(
+        session_id="chat-one", limit=11, offset=0
+    )
     rendered = bot._reply_logged.await_args.args[1]
     assert "0123456789abcdef" in rendered
     assert "stalled" in rendered
@@ -50,9 +52,60 @@ async def test_agent_runs_lists_bounded_html_safe_jobs_for_current_chat():
     assert "\u202e" not in rendered
     keyboard = bot._reply_logged.await_args.kwargs["reply_markup"]
     assert keyboard.inline_keyboard[0][0].callback_data == (
-        "lc:history:diff:"
+        "lc:history:diff:0:"
         + bot._run_action_token("run-0123456789abcdef")
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_runs_navigate_history_pages_and_keep_diff_page_scoped():
+    first_page = [
+        {
+            "run_id": f"run-{index:02}",
+            "status": "running",
+            "goal": f"Current page task {index}",
+            "lanes": [],
+        }
+        for index in range(11)
+    ]
+    older_run = {
+        "run_id": "run-older",
+        "status": "succeeded",
+        "goal": "Older completed task",
+        "lanes": [],
+    }
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = lambda _update: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_scope_from_update = AsyncMock(return_value="chat-one")
+    bot._log_user_message = Mock()
+    bot.jobs = SimpleNamespace(list_jobs=Mock(side_effect=[first_page, [older_run]]))
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(effective_user=SimpleNamespace(id=1), message=object())
+
+    await bot.cmd_agent(update, SimpleNamespace(args=["runs"]))
+    first_keyboard = bot._reply_logged.await_args.kwargs["reply_markup"]
+    assert first_keyboard.inline_keyboard[-1][0].callback_data == "lc:history:page:1"
+    assert "Current page task 10" not in bot._reply_logged.await_args.args[1]
+
+    older_jobs, has_more = await bot._load_recent_runs_page("chat-one", 1)
+    second_keyboard = bot._recent_runs_keyboard(
+        older_jobs, page=1, has_more=has_more
+    )
+    assert second_keyboard.inline_keyboard[0][0].callback_data == (
+        f"lc:history:diff:1:{bot._run_action_token('run-older')}"
+    )
+    assert second_keyboard.inline_keyboard[-1][0].callback_data == "lc:history:page:0"
+    assert bot.jobs.list_jobs.call_args_list[0].kwargs == {
+        "session_id": "chat-one",
+        "limit": 11,
+        "offset": 0,
+    }
+    assert bot.jobs.list_jobs.call_args_list[1].kwargs == {
+        "session_id": "chat-one",
+        "limit": 11,
+        "offset": 10,
+    }
 
 
 @pytest.mark.parametrize("swap", ["workspace", "file", "existing"])

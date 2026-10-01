@@ -14,6 +14,8 @@ from telegram.ext import ContextTypes
 from ...markdown import _escape_html
 from ..messaging import _TelegramHTMLChunker
 
+_RUN_HISTORY_PAGE_SIZE = 10
+
 
 class CommandsAgentRouterMixin:
     async def _plan_current_multi_request(
@@ -64,10 +66,23 @@ class CommandsAgentRouterMixin:
         pending["review_message_id"] = getattr(sent, "message_id", None)
         pending["review_delivered"] = True
 
-    def _render_recent_runs(self, jobs: list[dict[str, object]]) -> str:
+    async def _load_recent_runs_page(
+        self, session_id: str, page: int
+    ) -> tuple[list[dict[str, object]], bool]:
+        jobs = await asyncio.to_thread(
+            self.jobs.list_jobs,
+            session_id=session_id,
+            limit=_RUN_HISTORY_PAGE_SIZE + 1,
+            offset=page * _RUN_HISTORY_PAGE_SIZE,
+        )
+        return jobs[:_RUN_HISTORY_PAGE_SIZE], len(jobs) > _RUN_HISTORY_PAGE_SIZE
+
+    def _render_recent_runs(
+        self, jobs: list[dict[str, object]], page: int = 0
+    ) -> str:
         if not jobs:
-            return "No durable runs for this chat yet."
-        lines = ["<b>Recent runs for this chat</b>"]
+            return f"<b>Run history · page {page + 1}</b>\nNo durable runs on this page."
+        lines = [f"<b>Run history · page {page + 1}</b>"]
         for job in jobs:
             run_id = _escape_html(str(job.get("run_id") or "unknown"))
             status = _escape_html(str(job.get("status") or "unknown"))
@@ -98,7 +113,7 @@ class CommandsAgentRouterMixin:
         return "\n\n".join(lines)
 
     def _recent_runs_keyboard(
-        self, jobs: list[dict[str, object]]
+        self, jobs: list[dict[str, object]], page: int = 0, has_more: bool = False
     ) -> InlineKeyboardMarkup | None:
         buttons = []
         for job in jobs:
@@ -111,10 +126,28 @@ class CommandsAgentRouterMixin:
                     [
                         InlineKeyboardButton(
                             f"View diff · {run_id[-8:]}",
-                            callback_data=f"lc:history:diff:{self._run_action_token(run_id)}",
+                            callback_data=(
+                                f"lc:history:diff:{page}:"
+                                f"{self._run_action_token(run_id)}"
+                            ),
                         )
                     ]
                 )
+        navigation = []
+        if page:
+            navigation.append(
+                InlineKeyboardButton(
+                    "Previous", callback_data=f"lc:history:page:{page - 1}"
+                )
+            )
+        if has_more:
+            navigation.append(
+                InlineKeyboardButton(
+                    "Next", callback_data=f"lc:history:page:{page + 1}"
+                )
+            )
+        if navigation:
+            buttons.append(navigation)
         return InlineKeyboardMarkup(buttons) if buttons else None
 
     async def cmd_agent(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -136,14 +169,12 @@ class CommandsAgentRouterMixin:
         sub = args[0].lower() if args else "status"
 
         if sub in {"runs", "jobs"}:
-            jobs = await asyncio.to_thread(
-                self.jobs.list_jobs, session_id=session_id, limit=10
-            )
+            jobs, has_more = await self._load_recent_runs_page(session_id, 0)
             await self._reply_logged(
                 update,
                 self._render_recent_runs(jobs),
                 parse_mode=ParseMode.HTML,
-                reply_markup=self._recent_runs_keyboard(jobs),
+                reply_markup=self._recent_runs_keyboard(jobs, has_more=has_more),
             )
             return
 

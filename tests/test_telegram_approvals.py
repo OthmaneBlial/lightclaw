@@ -1937,7 +1937,7 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
     bot._reply_logged = AsyncMock()
     message = SimpleNamespace(reply_document=AsyncMock())
     query = SimpleNamespace(
-        data=f"lc:history:diff:{bot._run_action_token(run_id)}",
+        data=f"lc:history:diff:1:{bot._run_action_token(run_id)}",
         message=message,
         answer=AsyncMock(),
     )
@@ -1949,7 +1949,9 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
 
     await bot.handle_run_action(update, SimpleNamespace())
 
-    jobs.list_jobs.assert_called_once_with(session_id="chat-one", limit=10)
+    jobs.list_jobs.assert_called_once_with(
+        session_id="chat-one", limit=11, offset=10
+    )
     message.reply_document.assert_awaited_once()
     assert bot._reply_logged.await_count == 1
 
@@ -1977,9 +1979,56 @@ async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
 
     await bot.handle_run_action(update, SimpleNamespace())
 
-    jobs.list_jobs.assert_called_once_with(session_id="chat-two", limit=10)
+    jobs.list_jobs.assert_called_once_with(
+        session_id="chat-two", limit=11, offset=0
+    )
     message.reply_document.assert_not_awaited()
-    assert "no longer in the recent list" in bot._reply_logged.await_args.args[1]
+    assert "no longer on the history page" in bot._reply_logged.await_args.args[1]
+
+
+@pytest.mark.asyncio
+async def test_history_page_callback_edits_message_in_place_for_current_chat():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace()
+    bot.jobs = SimpleNamespace(
+        list_jobs=Mock(
+            return_value=[
+                {
+                    "run_id": "run-older",
+                    "status": "succeeded",
+                    "goal": "Older task",
+                    "lanes": [],
+                }
+            ]
+        )
+    )
+    bot.is_update_allowed = lambda _update: True
+    bot._session_scope_from_update = AsyncMock(return_value="chat-two")
+    bot._log_bot_message = Mock()
+    bot._reply_logged = AsyncMock()
+    query = SimpleNamespace(
+        data="lc:history:page:1",
+        message=SimpleNamespace(),
+        answer=AsyncMock(),
+        edit_message_text=AsyncMock(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=8),
+        effective_chat=SimpleNamespace(id=43),
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    bot.jobs.list_jobs.assert_called_once_with(
+        session_id="chat-two", limit=11, offset=10
+    )
+    query.edit_message_text.assert_awaited_once()
+    assert "page 2" in query.edit_message_text.await_args.args[0]
+    keyboard = query.edit_message_text.await_args.kwargs["reply_markup"]
+    assert keyboard.inline_keyboard[-1][0].callback_data == "lc:history:page:0"
+    bot._reply_logged.assert_not_awaited()
+    bot._log_bot_message.assert_called_once()
 
 
 @pytest.mark.asyncio

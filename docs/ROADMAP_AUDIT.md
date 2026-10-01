@@ -66,9 +66,9 @@ roadmap's “proof over claims” rule.
   versions. Python 3.10 is unavailable in this environment; its last full run is recorded above.
   Tests cover immediate local cancellation before delayed SQLite persistence, clear reporting when
   persistence fails, visible cancel controls during preflight and queued/waiting/repair states,
-  and workspace cleanup when preflight fails. Telegram `/agent runs` lists up to ten durable jobs
-  in the current chat with escaped bounded goal previews, per-lane state counts, and chat-scoped
-  buttons for opening completed-run diffs after restart; the session filter is applied in SQLite,
+  and workspace cleanup when preflight fails. Telegram `/agent runs` lists ten durable jobs per
+  page in the current chat with escaped bounded goal previews, per-lane state counts, and chat- and
+  page-scoped buttons for opening completed-run diffs after restart; the session filter is applied in SQLite,
   and receipt reads are pinned below the configured workspace. Agent timeout cleanup gives output
   streams a 250ms drain window, then cancels readers instead of waiting for detached descendants
   holding inherited pipes. Synchronous doctor probes also cap post-timeout pipe draining, close

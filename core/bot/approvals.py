@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
 from telegram.constants import ParseMode
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from ..artifacts import ArtifactError, accept_artifact, reject_artifact
@@ -21,6 +22,7 @@ from ..jobs import JobStateError
 from ..logging_setup import log
 from ..markdown import _escape_html
 from ..receipts import read_receipt
+from ..security import redact_text
 from .delegation.workspace import await_thread_completion
 
 MAX_REVIEWED_COMMANDS = 6
@@ -378,28 +380,72 @@ class BotApprovalsMixin:
 
         if action.startswith("lc:history:"):
             parts = action.split(":")
-            if (
-                len(parts) != 4
-                or parts[2] != "diff"
-                or not re.fullmatch(r"[0-9a-f]{16}", parts[3])
-            ):
-                await self._reply_logged(proxy, "This run is no longer in the recent list for this chat.")
+            if len(parts) == 4 and parts[2] == "page":
+                if not re.fullmatch(r"(?:0|[1-9][0-9]{0,4})", parts[3]):
+                    await self._reply_logged(proxy, "This history page is invalid.")
+                    return
+                page = int(parts[3])
+                jobs, has_more = await self._load_recent_runs_page(
+                    session_id, page
+                )
+                text = redact_text(
+                    self._render_recent_runs(jobs, page),
+                    getattr(getattr(self, "config", None), "__dict__", {}),
+                )
+                try:
+                    await query.edit_message_text(
+                        text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=self._recent_runs_keyboard(
+                            jobs, page=page, has_more=has_more
+                        ),
+                    )
+                except BadRequest as exc:
+                    if "message is not modified" not in str(exc).lower():
+                        raise
+                    return
+                self._log_bot_message(
+                    session_id, self._strip_html_for_log(text)
+                )
                 return
-            jobs = await asyncio.to_thread(
-                self.jobs.list_jobs, session_id=session_id, limit=10
+
+            page = 0
+            if len(parts) == 5 and parts[2] == "diff":
+                if not re.fullmatch(r"(?:0|[1-9][0-9]{0,4})", parts[3]):
+                    await self._reply_logged(
+                        proxy, "This run is no longer on the history page for this chat."
+                    )
+                    return
+                page = int(parts[3])
+                token = parts[4]
+            elif len(parts) == 4 and parts[2] == "diff":
+                token = parts[3]
+            else:
+                token = ""
+            if (
+                not re.fullmatch(r"[0-9a-f]{16}", token)
+            ):
+                await self._reply_logged(
+                    proxy, "This run is no longer on the history page for this chat."
+                )
+                return
+            jobs, _has_more = await self._load_recent_runs_page(
+                session_id, page
             )
             job = next(
                 (
                     item
                     for item in jobs
                     if secrets.compare_digest(
-                        parts[3], self._run_action_token(str(item.get("run_id") or ""))
+                        token, self._run_action_token(str(item.get("run_id") or ""))
                     )
                 ),
                 None,
             )
             if not job:
-                await self._reply_logged(proxy, "This run is no longer in the recent list for this chat.")
+                await self._reply_logged(
+                    proxy, "This run is no longer on the history page for this chat."
+                )
                 return
             run_id = str(job.get("run_id") or "")
             if job.get("status") not in {"succeeded", "failed", "accepted", "rejected"}:

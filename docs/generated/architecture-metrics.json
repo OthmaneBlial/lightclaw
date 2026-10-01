@@ -22,10 +22,17 @@
     },
     {
       "branch_points": 93,
-      "line": 120,
-      "lines": 505,
+      "line": 153,
+      "lines": 503,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
+    },
+    {
+      "branch_points": 73,
+      "line": 324,
+      "lines": 292,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 72,
@@ -40,13 +47,6 @@
       "lines": 404,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
-    },
-    {
-      "branch_points": 64,
-      "line": 322,
-      "lines": 248,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 58,
@@ -129,8 +129,8 @@
     },
     {
       "branch_points": 93,
-      "line": 120,
-      "lines": 505,
+      "line": 153,
+      "lines": 503,
       "name": "cmd_agent",
       "path": "core/bot/commands/agent_router.py"
     },
@@ -170,6 +170,13 @@
       "path": "core/artifacts.py"
     },
     {
+      "branch_points": 73,
+      "line": 324,
+      "lines": 292,
+      "name": "handle_run_action",
+      "path": "core/bot/approvals.py"
+    },
+    {
       "branch_points": 42,
       "line": 500,
       "lines": 284,
@@ -182,13 +189,6 @@
       "lines": 249,
       "name": "build_parser",
       "path": "lightclaw_cli.py"
-    },
-    {
-      "branch_points": 64,
-      "line": 322,
-      "lines": 248,
-      "name": "handle_run_action",
-      "path": "core/bot/approvals.py"
     },
     {
       "branch_points": 29,
@@ -249,7 +249,7 @@
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 885,
+      "lines": 890,
       "path": "core/jobs.py"
     },
     {
@@ -257,15 +257,15 @@
       "path": "memory.py"
     },
     {
+      "lines": 787,
+      "path": "core/bot/approvals.py"
+    },
+    {
       "lines": 774,
       "path": "core/bot/commands/agent_acceptance.py"
     },
     {
-      "lines": 741,
-      "path": "core/bot/approvals.py"
-    },
-    {
-      "lines": 683,
+      "lines": 714,
       "path": "core/bot/commands/agent_router.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 21967,
+  "runtime_lines": 22049,
   "schema_version": 1
 }

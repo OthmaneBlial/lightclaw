@@ -89,6 +89,25 @@ def test_list_jobs_can_be_scoped_to_one_telegram_session(tmp_path):
         store.close()
 
 
+def test_list_jobs_offset_is_stable_when_creation_times_tie(tmp_path, monkeypatch):
+    monkeypatch.setattr("core.jobs.time.time", lambda: 123.0)
+    store = JobStore(tmp_path / "jobs.db")
+    try:
+        created = [
+            _create(store, tmp_path / f"repo-{index}", session_id="chat-one")
+            for index in range(3)
+        ]
+        jobs = store.list_jobs(session_id="chat-one")
+
+        assert [job["run_id"] for job in jobs] == sorted(
+            (job["run_id"] for job in created), reverse=True
+        )
+        assert store.list_jobs(session_id="chat-one", limit=1, offset=1) == jobs[1:2]
+        assert store.list_jobs(session_id="chat-one", limit=1, offset=-1) == jobs[:1]
+    finally:
+        store.close()
+
+
 def test_job_read_uses_empty_values_for_recursively_nested_json(tmp_path, monkeypatch):
     store = JobStore(tmp_path / "jobs.db")
     try:
