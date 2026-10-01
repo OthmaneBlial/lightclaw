@@ -8,10 +8,17 @@
   "highest_branch_functions": [
     {
       "branch_points": 91,
-      "line": 425,
+      "line": 410,
       "lines": 376,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
+    },
+    {
+      "branch_points": 84,
+      "line": 334,
+      "lines": 681,
+      "name": "_execute_multi_agent_plan_impl",
+      "path": "core/bot/commands/agent_execution.py"
     },
     {
       "branch_points": 84,
@@ -19,13 +26,6 @@
       "lines": 456,
       "name": "_process_file_blocks",
       "path": "core/bot/file_ops.py"
-    },
-    {
-      "branch_points": 83,
-      "line": 334,
-      "lines": 674,
-      "name": "_execute_multi_agent_plan_impl",
-      "path": "core/bot/commands/agent_execution.py"
     },
     {
       "branch_points": 76,
@@ -114,9 +114,9 @@
   ],
   "largest_functions": [
     {
-      "branch_points": 83,
+      "branch_points": 84,
       "line": 334,
-      "lines": 674,
+      "lines": 681,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -143,7 +143,7 @@
     },
     {
       "branch_points": 91,
-      "line": 425,
+      "line": 410,
       "lines": 376,
       "name": "handle_run_action",
       "path": "core/bot/approvals.py"
@@ -245,11 +245,11 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 1007,
+      "lines": 1014,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
-      "lines": 982,
+      "lines": 967,
       "path": "core/bot/approvals.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22849,
+  "runtime_lines": 22841,
   "schema_version": 1
 }

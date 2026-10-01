@@ -545,9 +545,7 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
     run_token = bot._run_action_token(run_id)
     result_data = [
         button.callback_data
-        for row in bot._inline_result_keyboard(
-            run_id, ["a" + "b" * 31]
-        ).inline_keyboard
+        for row in bot._inline_result_keyboard(run_id).inline_keyboard
         for button in row
     ]
     assert {
@@ -558,10 +556,9 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
     assert {
         f"lc:run:diff:{run_token}",
         f"lc:run:accept:{run_token}",
+        f"lc:run:reject:{run_token}",
     } <= set(result_data)
-    retry_action = f"lc:run:retry:{run_token}:a{'b' * 31}"
-    assert retry_action in result_data
-    assert len(retry_action.encode("utf-8")) <= 64
+    assert not any(action.startswith("lc:run:retry:") for action in result_data)
     cancel_data = [
         button.callback_data
         for row in bot._inline_cancel_keyboard(run_id).inline_keyboard
@@ -571,7 +568,7 @@ def test_inline_keyboards_cover_required_plan_and_result_actions():
 
 
 @pytest.mark.asyncio
-async def test_32_character_retry_button_reaches_job_store():
+async def test_legacy_retry_callback_reaches_job_store_guard():
     bot = LightClawBot.__new__(LightClawBot)
     run_id, label = "multi-run-42", "a" + "b" * 31
     bot.is_update_allowed = lambda _update: True

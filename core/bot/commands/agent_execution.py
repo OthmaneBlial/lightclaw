@@ -830,6 +830,13 @@ class CommandsAgentExecutionMixin:
             final_lines.append("")
 
         final_lines.append(multi_delta)
+        if failed:
+            final_lines.extend(
+                [
+                    "",
+                    "Failed lanes cannot be replayed safely; create and review a new plan to retry.",
+                ]
+            )
 
         file_changes = await asyncio.to_thread(
             self._workspace_file_changes,
@@ -1003,5 +1010,5 @@ class CommandsAgentExecutionMixin:
         await self._reply_logged(
             update,
             "Review the evidence before accepting the result.",
-            reply_markup=self._inline_result_keyboard(run_id, sorted(failed)),
+            reply_markup=self._inline_result_keyboard(run_id),
         )

@@ -167,10 +167,7 @@ class BotApprovalsMixin:
         )
 
     @staticmethod
-    def _inline_result_keyboard(
-        run_id: str,
-        failed_lanes: list[str] | None = None,
-    ) -> InlineKeyboardMarkup:
+    def _inline_result_keyboard(run_id: str) -> InlineKeyboardMarkup:
         run_token = BotApprovalsMixin._run_action_token(run_id)
         rows = [
             [
@@ -187,18 +184,6 @@ class BotApprovalsMixin:
                 ),
             ],
         ]
-        if failed_lanes:
-            safe_label = re.sub(r"[^a-z0-9_-]", "", failed_lanes[0].lower())[:32]
-            if safe_label:
-                rows.insert(
-                    1,
-                    [
-                        InlineKeyboardButton(
-                            f"Retry {safe_label}",
-                            callback_data=f"lc:run:retry:{run_token}:{safe_label}",
-                        )
-                    ],
-                )
         return InlineKeyboardMarkup(rows)
 
     def _decorate_pending_plan(self, payload: dict[str, object]) -> dict[str, object]:
