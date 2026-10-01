@@ -136,6 +136,10 @@ roadmap's “proof over claims” rule.
   dependency resolution, dependency audit, sdist/wheel build, and clean-wheel installation. Cron
   reminders are capped at ten per Telegram chat/topic; runtime-line cap: 22,617. One existing
   third-party `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `43574f3` passed on macOS arm64 Python 3.14.7:
+  954 tests and all local quality, audit, package-build, and clean-wheel checks. Concurrent cron
+  read-modify-write operations now serialize across Telegram and terminal processes; runtime-line
+  cap: 22,649. One existing third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
