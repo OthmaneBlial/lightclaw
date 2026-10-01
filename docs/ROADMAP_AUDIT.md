@@ -115,6 +115,11 @@ roadmap's “proof over claims” rule.
   acceptance after a repair attempt. Receipt assembly also keeps the main orchestrator at 694 lines,
   within the documented 700-line function ceiling; the runtime-line cap is 22,179. One third-party
   `google-genai` deprecation warning remains.
+- Latest canonical `scripts/quality.py` run for `254820a` passed on macOS arm64 Python 3.14.7:
+  890 tests, all local quality and audit checks, sdist/wheel build, and clean-wheel installation. A
+  privacy regression now restricts public-group memory recall, interaction counts, and heartbeat context to
+  that group session; private chats retain cross-chat recall. Runtime-line cap: 22,213. The same
+  third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
