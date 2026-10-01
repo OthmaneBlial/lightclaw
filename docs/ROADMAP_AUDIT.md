@@ -126,6 +126,11 @@ roadmap's “proof over claims” rule.
   retries an already-created matching commit if durable job-state recording failed. Git content
   filters remain disabled during verification. Runtime-line cap: 22,323; the existing third-party
   `google-genai` deprecation warning remains.
+- Telegram forum-topic sessions passed the full local `scripts/quality.py` gate on macOS arm64
+  Python 3.14.7: 923 tests, lint, documentation, architecture, dependency, showcase, packaging, and
+  clean-wheel checks. Session state, approvals, work serialization, and memory are topic-scoped;
+  cron, heartbeat, and typing updates target the originating topic. Runtime-line cap: 22,364; one
+  existing third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24

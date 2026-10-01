@@ -305,14 +305,19 @@ async def test_unexpected_heartbeat_error_does_not_stop_scheduler(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["skills", "model", "delivery"])
 @pytest.mark.parametrize("erase", ["current", "other", "global", "none"])
-@pytest.mark.parametrize("session_id", ["123", "-100"])
+@pytest.mark.parametrize(
+    "session_id", ["123", "-100", "-100:topic:84", "123:topic:84"]
+)
 async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
     tmp_path, monkeypatch, phase, erase, session_id
 ):
     heartbeat = tmp_path / "HEARTBEAT.md"
     heartbeat.write_text("Summarize the last conversation.")
     bot = LightClawBot.__new__(LightClawBot)
-    group_chat = int(session_id) < 0
+    chat_id_raw, separator, topic_id_raw = session_id.partition(":topic:")
+    chat_id = int(chat_id_raw)
+    topic_id = int(topic_id_raw) if separator else None
+    group_chat = chat_id < 0
     bot.config = Config(
         workspace_path=str(tmp_path),
         telegram_allowed_users=[] if group_chat else ["42"],
@@ -394,12 +399,12 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
         update = SimpleNamespace(
             effective_user=SimpleNamespace(id=42),
             effective_chat=SimpleNamespace(
-                id=(int(session_id) - 1 if group_chat else 456)
+                id=(chat_id - 1 if group_chat else 456)
                 if erase == "other"
-                else int(session_id),
+                else chat_id,
                 type="group" if group_chat else "private",
             ),
-            message=SimpleNamespace(),
+            message=SimpleNamespace(message_thread_id=topic_id),
         )
         if erase == "global":
             await bot.cmd_wipe_memory(update, SimpleNamespace(args=[]))
@@ -411,7 +416,9 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
         await run
         assert len(recall_calls) == 1
         assert recall_calls[0][0] != loop_thread
-        assert recall_calls[0][1]["current_session_only"] is group_chat
+        assert recall_calls[0][1]["current_session_only"] is (
+            group_chat or topic_id is not None
+        )
 
         saved = bot.memory.get_recent(session_id)
         if erase in {"other", "none"}:
@@ -423,6 +430,9 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
             transport.send_message.assert_not_awaited()
         else:
             transport.send_message.assert_awaited_once()
+            if topic_id is not None:
+                assert transport.send_message.await_args.kwargs["chat_id"] == chat_id
+                assert transport.send_message.await_args.kwargs["message_thread_id"] == topic_id
         assert not getattr(bot, "_active_message_clear_events_by_session", {})
     finally:
         release.set()

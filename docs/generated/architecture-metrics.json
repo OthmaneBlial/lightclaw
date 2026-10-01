@@ -35,9 +35,9 @@
       "path": "core/bot/approvals.py"
     },
     {
-      "branch_points": 72,
-      "line": 264,
-      "lines": 381,
+      "branch_points": 74,
+      "line": 266,
+      "lines": 383,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -142,9 +142,9 @@
       "path": "core/bot/delegation/execution.py"
     },
     {
-      "branch_points": 72,
-      "line": 264,
-      "lines": 381,
+      "branch_points": 74,
+      "line": 266,
+      "lines": 383,
       "name": "_process_user_message_serialized",
       "path": "core/bot/handlers.py"
     },
@@ -192,7 +192,7 @@
     },
     {
       "branch_points": 29,
-      "line": 335,
+      "line": 339,
       "lines": 227,
       "name": "_cmd_cron",
       "path": "core/bot/commands/cron.py"
@@ -205,18 +205,18 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
+      "branch_points": 32,
+      "line": 118,
+      "lines": 179,
+      "name": "_run_heartbeat_once_impl",
+      "path": "core/bot/commands/heartbeat.py"
+    },
+    {
       "branch_points": 52,
       "line": 571,
       "lines": 177,
       "name": "_evaluate_multi_worker_acceptance",
       "path": "core/bot/commands/agent_acceptance.py"
-    },
-    {
-      "branch_points": 30,
-      "line": 118,
-      "lines": 176,
-      "name": "_run_heartbeat_once_impl",
-      "path": "core/bot/commands/heartbeat.py"
     }
   ],
   "largest_modules": [
@@ -269,18 +269,18 @@
       "path": "core/bot/commands/agent_router.py"
     },
     {
-      "lines": 646,
-      "path": "core/bot/handlers.py"
-    },
-    {
-      "lines": 633,
+      "lines": 667,
       "path": "core/bot/base.py"
     },
     {
-      "lines": 561,
+      "lines": 650,
+      "path": "core/bot/handlers.py"
+    },
+    {
+      "lines": 565,
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22323,
+  "runtime_lines": 22364,
   "schema_version": 1
 }

@@ -43,9 +43,7 @@ class BotHandlersMixin:
             asyncio.to_thread(
                 self.memory.stats,
                 session_id=session_id,
-                current_session_only=(
-                    getattr(update.effective_chat, "type", "private") != "private"
-                ),
+                current_session_only=self._memory_recall_current_session_only(update),
             ),
             asyncio.to_thread(self.skills.list_skills),
             asyncio.to_thread(self.jobs.diagnostics, session_id=session_id),
@@ -133,7 +131,11 @@ class BotHandlersMixin:
 
                 if update.effective_chat:
                     try:
-                        await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+                        target = self._telegram_target_from_session_id(session_id)
+                        kwargs = {"chat_id": chat_id, "action": ChatAction.TYPING}
+                        if target and target[1] is not None:
+                            kwargs["message_thread_id"] = target[1]
+                        await context.bot.send_chat_action(**kwargs)
                     except TelegramError:
                         log.debug("Could not send voice typing indicator")
 
@@ -330,7 +332,11 @@ class BotHandlersMixin:
         placeholder = None
         try:
             if update.effective_chat:
-                await context.bot.send_chat_action(chat_id=chat_id, action=ChatAction.TYPING)
+                target = self._telegram_target_from_session_id(session_id)
+                kwargs = {"chat_id": chat_id, "action": ChatAction.TYPING}
+                if target and target[1] is not None:
+                    kwargs["message_thread_id"] = target[1]
+                await context.bot.send_chat_action(**kwargs)
             self._log_bot_message(session_id, "Thinking... 💭")
             placeholder = await update.message.reply_text("Thinking... 💭")
         except Exception:
@@ -412,9 +418,7 @@ class BotHandlersMixin:
                 user_text,
                 top_k=self.config.memory_top_k,
                 session_id=session_id,
-                current_session_only=(
-                    getattr(update.effective_chat, "type", "private") != "private"
-                ),
+                current_session_only=self._memory_recall_current_session_only(update),
             ),
             asyncio.to_thread(self.memory.get_recent, session_id, limit=20),
         )

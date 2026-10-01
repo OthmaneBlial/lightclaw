@@ -294,8 +294,42 @@ class BotBaseMixin:
 
     def _session_id_from_update(self, update: Update | None) -> str:
         if update and update.effective_chat:
+            message = getattr(update, "effective_message", None) or getattr(
+                update, "message", None
+            )
+            topic_id = getattr(message, "message_thread_id", None)
+            if type(topic_id) is int and topic_id > 0:
+                return f"{update.effective_chat.id}:topic:{topic_id}"
             return str(update.effective_chat.id)
         return "unknown"
+
+    def _memory_recall_current_session_only(self, update: Update | None) -> bool:
+        chat = getattr(update, "effective_chat", None)
+        if not chat:
+            return True
+        if getattr(chat, "type", "private") != "private":
+            return True
+        message = getattr(update, "effective_message", None) or getattr(
+            update, "message", None
+        )
+        topic_id = getattr(message, "message_thread_id", None)
+        return type(topic_id) is int and topic_id > 0
+
+    @staticmethod
+    def _telegram_target_from_session_id(
+        session_id: str,
+    ) -> tuple[int, int | None] | None:
+        """Parse persisted Telegram session IDs for scheduled delivery."""
+        raw = str(session_id).strip()
+        chat_raw, separator, topic_raw = raw.rpartition(":topic:")
+        try:
+            chat_id = int(chat_raw if separator else raw)
+            topic_id = int(topic_raw) if separator else None
+        except ValueError:
+            return None
+        if chat_id == 0 or (topic_id is not None and topic_id <= 0):
+            return None
+        return chat_id, topic_id
 
     async def _session_scope_from_update(self, update: Update | None) -> str:
         session_id = self._session_id_from_update(update)

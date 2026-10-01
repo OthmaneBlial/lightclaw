@@ -27,6 +27,36 @@ class CronHarness(CommandsCronMixin, BotMessagingMixin, BotBaseMixin):
         self.config = Config(telegram_allowed_users=["123"])
 
 
+def test_forum_topic_session_ids_and_memory_scope():
+    bot = BotBaseMixin.__new__(BotBaseMixin)
+    topic_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=-100, type="supergroup"),
+        effective_message=SimpleNamespace(message_thread_id=84),
+    )
+    general_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=-100, type="supergroup"),
+        effective_message=SimpleNamespace(message_thread_id=1),
+    )
+    private_topic_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=42, type="private"),
+        effective_message=SimpleNamespace(message_thread_id=84),
+    )
+    private_update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=42, type="private"),
+        effective_message=SimpleNamespace(message_thread_id=None),
+    )
+
+    assert bot._session_id_from_update(topic_update) == "-100:topic:84"
+    assert bot._session_id_from_update(general_update) == "-100:topic:1"
+    assert bot._memory_recall_current_session_only(topic_update)
+    assert bot._memory_recall_current_session_only(private_topic_update)
+    assert not bot._memory_recall_current_session_only(private_update)
+    assert bot._telegram_target_from_session_id("-100") == (-100, None)
+    assert bot._telegram_target_from_session_id("-100:topic:84") == (-100, 84)
+    assert bot._telegram_target_from_session_id("-100:topic:1") == (-100, 1)
+    assert bot._telegram_target_from_session_id("terminal-session") is None
+
+
 @pytest.mark.asyncio
 async def test_cron_list_delivers_all_jobs_in_bounded_messages(tmp_path):
     bot = LightClawBot.__new__(LightClawBot)
@@ -183,6 +213,31 @@ async def test_saved_cron_jobs_respect_current_access_policy(
         assert remaining == []
     else:
         assert remaining[0]["next_run_at"] > time.time()
+
+
+@pytest.mark.asyncio
+async def test_saved_cron_topic_job_is_delivered_to_its_forum_topic(tmp_path):
+    bot = CronHarness()
+    bot.config = Config(telegram_public_bot_ack=True)
+    bot._cron_lock = asyncio.Lock()
+    bot._cron_iteration_lock = asyncio.Lock()
+    bot._cron_poll_sec = 15
+    bot._cron_last_run_at = 0
+    bot._cron_jobs_path = lambda: tmp_path / "jobs.json"
+    bot._write_cron_store({"jobs": [{
+        "id": "topic-reminder",
+        "chat_id": "-100:topic:84",
+        "mode": "at",
+        "text": "Review the topic",
+        "next_run_at": time.time() - 1,
+    }]})
+    telegram_bot = SimpleNamespace(send_message=AsyncMock())
+
+    await bot._run_due_cron_jobs(telegram_bot)
+
+    kwargs = telegram_bot.send_message.await_args.kwargs
+    assert kwargs["chat_id"] == -100
+    assert kwargs["message_thread_id"] == 84
 
 
 @pytest.mark.asyncio

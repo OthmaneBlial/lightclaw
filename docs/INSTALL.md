@@ -72,7 +72,7 @@ Malformed or unreadable skill state is preserved; LightClaw reports the problem 
 
 For the Telegram bot, at least one numeric `TELEGRAM_ALLOWED_USERS` ID is required. Intentionally public bots require `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and should still be isolated from sensitive host data.
 
-With an allowlist, LightClaw accepts commands and callbacks only in private chats. Group chats share conversation and approval state across members, so they are available only when the bot is intentionally public with `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and no user allowlist.
+With an allowlist, LightClaw accepts commands and callbacks only in private chats. Group chats share conversation and approval state among members of the same session, so they are available only when the bot is intentionally public with `LIGHTCLAW_PUBLIC_BOT_ACK=yes` and no user allowlist. Telegram forum topics with a topic ID have separate sessions; their scheduled reminders stay in the originating topic.
 
 ## Local terminal chat
 

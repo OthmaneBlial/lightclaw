@@ -207,11 +207,11 @@ class CommandsCronMixin:
                     updates[job_id] = None
                     continue
 
-                try:
-                    chat_id = int(chat_id_raw)
-                except ValueError:
+                target = self._telegram_target_from_session_id(chat_id_raw)
+                if target is None:
                     updates[job_id] = None
                     continue
+                chat_id, message_thread_id = target
 
                 # Persisted reminders must obey the policy of this bot startup.
                 if chat_id > 0:
@@ -231,12 +231,16 @@ class CommandsCronMixin:
                     text: str,
                     parse_mode: str | None = None,
                     target_chat_id=chat_id,
+                    target_thread_id=message_thread_id,
                 ):
-                    return await bot.send_message(
-                        chat_id=target_chat_id,
-                        text=text,
-                        parse_mode=parse_mode,
-                    )
+                    kwargs = {
+                        "chat_id": target_chat_id,
+                        "text": text,
+                        "parse_mode": parse_mode,
+                    }
+                    if target_thread_id is not None:
+                        kwargs["message_thread_id"] = target_thread_id
+                    return await bot.send_message(**kwargs)
 
                 mode = str(job.get("mode") or "").strip().lower()
                 retry_delay = max(60, int(self._cron_poll_sec))

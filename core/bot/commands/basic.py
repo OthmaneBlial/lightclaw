@@ -180,9 +180,7 @@ class CommandsBasicMixin:
         stats = await asyncio.to_thread(
             self.memory.stats,
             session_id=session_id,
-            current_session_only=(
-                getattr(update.effective_chat, "type", "private") != "private"
-            ),
+            current_session_only=self._memory_recall_current_session_only(update),
         )
         await self._reply_logged(
             update,
@@ -218,9 +216,7 @@ class CommandsBasicMixin:
             query,
             top_k=5,
             session_id=session_id,
-            current_session_only=(
-                getattr(update.effective_chat, "type", "private") != "private"
-            ),
+            current_session_only=self._memory_recall_current_session_only(update),
         )
         if not memories:
             await self._reply_logged(update, "🔍 No matching memories found.")

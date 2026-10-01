@@ -19,6 +19,7 @@ TRANSCRIPTION_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 @pytest.mark.parametrize("stage", ["typing", "file", "download", "transcription", "review"])
 async def test_shutdown_drains_voice_request_before_closing_resources(tmp_path, monkeypatch, stage):
     events = []
+    typing_kwargs = []
     llm = SimpleNamespace(close=Mock(side_effect=lambda: events.append("provider closed")))
     monkeypatch.setattr("core.bot.base.LLMClient", lambda _config: llm)
     bot = LightClawBot(Config(
@@ -48,6 +49,7 @@ async def test_shutdown_drains_voice_request_before_closing_resources(tmp_path, 
         return voice_file
 
     async def typing(**_kwargs):
+        typing_kwargs.append(_kwargs)
         await block_if_stage("typing")
 
     async def reply_text(*_args, **_kwargs):
@@ -63,7 +65,12 @@ async def test_shutdown_drains_voice_request_before_closing_resources(tmp_path, 
     client.post.side_effect = post
     update = SimpleNamespace(
         effective_user=SimpleNamespace(id=123), effective_chat=SimpleNamespace(id=123, type="private"),
-        message=SimpleNamespace(voice=SimpleNamespace(file_size=5, get_file=get_file), caption="", reply_text=reply_text),
+        message=SimpleNamespace(
+            voice=SimpleNamespace(file_size=5, get_file=get_file),
+            caption="",
+            message_thread_id=42,
+            reply_text=reply_text,
+        ),
     )
     context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=typing))
     task = asyncio.create_task(bot.handle_voice(update, context))
@@ -76,6 +83,7 @@ async def test_shutdown_drains_voice_request_before_closing_resources(tmp_path, 
         assert not bot._voice_request_ids_by_session
         assert not bot._active_message_clear_events_by_session
         assert events == ["voice drained", "provider closed"]
+        assert typing_kwargs[0]["message_thread_id"] == 42
         if stage in {"transcription", "review"}:
             client.__aexit__.assert_awaited_once()
         else:

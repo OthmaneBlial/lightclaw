@@ -142,18 +142,18 @@ class CommandsHeartbeatMixin:
         if self._llm_backoff_active():
             return
 
-        try:
-            chat_id = int(session_id)
-        except ValueError:
+        target = self._telegram_target_from_session_id(session_id)
+        if target is None:
             # Terminal chat sessions may use non-numeric IDs.
             return
+        chat_id, message_thread_id = target
 
         memories = await asyncio.to_thread(
             self.memory.recall,
             "heartbeat automation",
             top_k=max(1, min(self.config.memory_top_k, 4)),
             session_id=session_id,
-            current_session_only=chat_id < 0,
+            current_session_only=chat_id < 0 or message_thread_id is not None,
         )
         memories = self._filter_recalled_memories(memories)
         memories_text = self.memory.format_memories_for_prompt(memories)
@@ -275,7 +275,10 @@ class CommandsHeartbeatMixin:
         chunks.feed(markdown_to_telegram_html(final_markdown))
 
         async def _send_message(text: str, parse_mode: str | None = None):
-            return await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+            kwargs = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+            if message_thread_id is not None:
+                kwargs["message_thread_id"] = message_thread_id
+            return await bot.send_message(**kwargs)
 
         sent_ok = False
         for html_chunk in chunks.finish():

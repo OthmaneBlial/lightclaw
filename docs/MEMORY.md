@@ -11,6 +11,8 @@ Every interaction and summary carries both:
 
 Recall, recent history, summaries, export, and deletion require one exact pair. The same Telegram chat cannot leak one user’s records to another user, and the same user cannot recall records from another workspace. Pre-migration rows are retained in isolated `legacy-session:<session>` / `legacy-default` scopes instead of being guessed into a new identity.
 
+Group chats and Telegram forum topics use current-session-only recall and stats. Topic IDs are part of session identity, including in private bot forums, so their histories and summaries remain separate.
+
 ## Data map
 
 The default database is `~/.lightclaw/lightclaw.db` with mode `0600`; LightClaw rejects a symlink at the database path and refuses startup if it cannot secure the file. SQLite may create `lightclaw.db-wal` and `lightclaw.db-shm` beside it while the process is active. Anyone who can access the host account may read this data; LightClaw does not claim encryption at rest.
