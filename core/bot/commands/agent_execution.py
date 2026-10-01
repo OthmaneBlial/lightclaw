@@ -258,6 +258,12 @@ class CommandsAgentExecutionMixin:
 
     async def _begin_multi_run_progress(self, update, session_id: str, run_id: str):
         self._active_run_ids_by_session[session_id] = run_id
+        requesters = getattr(self, "_active_run_requesters_by_session", None)
+        if requesters is None:
+            requesters = self._active_run_requesters_by_session = {}
+        requesters[session_id] = getattr(
+            getattr(update, "effective_user", None), "id", None
+        )
         return await self._reply_logged(
             update,
             "⏳ Approved multi-agent run in progress. Preparation may take a moment.",
@@ -936,6 +942,12 @@ class CommandsAgentExecutionMixin:
         final_lines.append(f"JSON: `{receipt_json.as_posix()}`")
         self._last_run_ids_by_session[session_id] = run_id
         self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
+        requesters = getattr(self, "_last_run_requesters_by_session", None)
+        if requesters is None:
+            requesters = self._last_run_requesters_by_session = {}
+        requesters[session_id] = getattr(
+            getattr(update, "effective_user", None), "id", None
+        )
 
         self._cancel_task_once(durable_heartbeat)
         try:

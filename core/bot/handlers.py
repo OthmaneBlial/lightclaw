@@ -386,6 +386,7 @@ class BotHandlersMixin:
                 agent=active_agent,
                 task=user_text,
                 progress_cb=_delegation_progress_update,
+                requester_user_id=update.effective_user.id,
             )
             if not clear_event.is_set():
                 await self._ingest_memory(

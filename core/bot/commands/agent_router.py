@@ -735,6 +735,7 @@ class CommandsAgentRouterMixin:
                 task,
                 progress_cb=_delegation_progress_update,
                 capability_profile=capability_profile,
+                requester_user_id=update.effective_user.id,
             )
             if not clear_event.is_set():
                 request_entry = (

@@ -283,6 +283,7 @@ async def test_messages_serialize_per_forum_topic_without_blocking_other_topics(
     def make_update(chat_id: int, topic_id: int):
         placeholder = SimpleNamespace(edit_text=AsyncMock())
         return SimpleNamespace(
+            effective_user=SimpleNamespace(id=1),
             effective_chat=SimpleNamespace(id=chat_id, type="supergroup"),
             message=SimpleNamespace(
                 message_thread_id=topic_id,

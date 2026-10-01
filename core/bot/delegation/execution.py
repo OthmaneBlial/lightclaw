@@ -796,6 +796,7 @@ class DelegationExecutionMixin:
         manage_job: bool = True,
         initialize_artifact: bool = True,
         process_owner_run_id: str | None = None,
+        requester_user_id: int | None = None,
     ) -> str:
         if getattr(self, "_shutting_down", False):
             return "⏹ LightClaw is shutting down; no agent work was started."
@@ -813,6 +814,7 @@ class DelegationExecutionMixin:
                 manage_job=False,
                 initialize_artifact=initialize_artifact,
                 process_owner_run_id=process_owner_run_id,
+                requester_user_id=requester_user_id,
             )
 
         locks = getattr(self, "_session_run_locks", None)
@@ -843,6 +845,7 @@ class DelegationExecutionMixin:
                         manage_job=True,
                         initialize_artifact=initialize_artifact,
                         process_owner_run_id=process_owner_run_id,
+                        requester_user_id=requester_user_id,
                     )
                 finally:
                     if current and active.get(session_id) is current:
@@ -865,6 +868,7 @@ class DelegationExecutionMixin:
         manage_job: bool = True,
         initialize_artifact: bool = True,
         process_owner_run_id: str | None = None,
+        requester_user_id: int | None = None,
     ) -> str:
         available = self._available_local_agents()
         if agent not in available:
@@ -907,8 +911,10 @@ class DelegationExecutionMixin:
                 f"Task workspace preserved for inspection: {workspace_label}"
         for attribute in (
             "_active_run_ids_by_session",
+            "_active_run_requesters_by_session",
             "_active_run_tasks_by_session",
             "_last_run_ids_by_session",
+            "_last_run_requesters_by_session",
             "_last_run_receipts_by_session",
         ):
             if not hasattr(self, attribute):
@@ -951,6 +957,7 @@ class DelegationExecutionMixin:
                 if not claimed or claimed["run_id"] != durable["run_id"]:
                     return f"⏳ Delegation queued as `{run_id}`; another run is ahead of it or owns this workspace."
                 self._active_run_ids_by_session[session_id] = run_id
+                self._active_run_requesters_by_session[session_id] = requester_user_id
                 current_run_task = asyncio.current_task()
                 if current_run_task:
                     self._active_run_tasks_by_session[session_id] = current_run_task
@@ -1210,6 +1217,7 @@ class DelegationExecutionMixin:
             receipt_paths = (receipt_json, receipt_markdown)
             receipt = safe_receipt
             self._last_run_ids_by_session[session_id] = run_id
+            self._last_run_requesters_by_session[session_id] = requester_user_id
             self._last_run_receipts_by_session[session_id] = receipt_json.as_posix()
         if evidence_sink is not None:
             evidence_sink.clear()

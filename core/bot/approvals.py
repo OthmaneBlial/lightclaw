@@ -580,6 +580,19 @@ class BotApprovalsMixin:
                     proxy, "This cancel button belongs to a run that is no longer active."
                 )
                 return
+            if (
+                update.effective_chat.type != "private"
+                and not self._is_pending_requester(
+                    update,
+                    {
+                        "user_id": getattr(
+                            self, "_active_run_requesters_by_session", {}
+                        ).get(session_id)
+                    },
+                )
+            ):
+                await self._reply_logged(proxy, "Only the requester can cancel this run.")
+                return
             task = self._active_run_tasks_by_session.get(session_id)
             stopping_locally = bool(
                 task and task is not asyncio.current_task() and not task.done()
@@ -630,6 +643,19 @@ class BotApprovalsMixin:
                 return
             if decision == "diff":
                 await self._send_last_run_diff(proxy, session_id, run_id)
+                return
+            if (
+                update.effective_chat.type != "private"
+                and not self._is_pending_requester(
+                    update,
+                    {
+                        "user_id": getattr(
+                            self, "_last_run_requesters_by_session", {}
+                        ).get(session_id)
+                    },
+                )
+            ):
+                await self._reply_logged(proxy, "Only the requester can change this run result.")
                 return
             if run_id in self._result_actions_in_flight:
                 await self._reply_logged(

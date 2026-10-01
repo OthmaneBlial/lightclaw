@@ -598,6 +598,46 @@ async def test_32_character_retry_button_reaches_job_store():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["cancel", "accept", "reject", "retry"])
+async def test_public_group_run_mutations_are_limited_to_requester(action):
+    bot = LightClawBot.__new__(LightClawBot)
+    run_id = "public-run"
+    bot.is_update_allowed = lambda _update: True
+    bot._session_id_from_update = lambda _update: "456"
+    bot._active_run_ids_by_session = {"456": run_id}
+    bot._active_run_requesters_by_session = {"456": 123}
+    bot._active_run_tasks_by_session = {}
+    bot._last_run_ids_by_session = {"456": run_id}
+    bot._last_run_requesters_by_session = {"456": 123}
+    bot._result_actions_in_flight = set()
+    bot.jobs = SimpleNamespace(request_cancel=Mock(), retry_lane=Mock())
+    bot._accept_last_run_result = AsyncMock()
+    bot._reject_last_run_result = AsyncMock()
+    bot._reply_logged = AsyncMock()
+    suffix = ":builder" if action == "retry" else ""
+    query = SimpleNamespace(
+        data=f"lc:run:{action}:{bot._run_action_token(run_id)}{suffix}",
+        answer=AsyncMock(),
+        message=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        callback_query=query,
+        effective_user=SimpleNamespace(id=999),
+        effective_chat=SimpleNamespace(id=-456, type="supergroup"),
+        effective_message=query.message,
+    )
+
+    await bot.handle_run_action(update, SimpleNamespace())
+
+    bot._reply_logged.assert_awaited_once()
+    assert "Only the requester" in bot._reply_logged.await_args.args[1]
+    bot.jobs.request_cancel.assert_not_called()
+    bot.jobs.retry_lane.assert_not_called()
+    bot._accept_last_run_result.assert_not_awaited()
+    bot._reject_last_run_result.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_voice_transcription_survives_typing_failure_and_waits_for_approval(monkeypatch):
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = SimpleNamespace(groq_api_key="fixture")
