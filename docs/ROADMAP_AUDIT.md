@@ -60,7 +60,7 @@ roadmap's “proof over claims” rule.
   The three legacy skill migration cases cover symlink files, symlink swaps, and oversized files.
   The clean venv used the pinned pip from `requirements-pip.txt`; Python 3.10.21's bundled pip
   23.0.1 could not resolve one hashed transitive extra.
-- Latest canonical quality suite at `0e45b57` on 2026-10-01: all 859 tests passed on macOS
+- Latest canonical quality suite at `04de1f5` on 2026-10-01: all 860 tests passed on macOS
   arm64 with Python 3.14.7; lint, documentation links, architecture/runtime budgets,
   dependency audit, package build, and clean-wheel installation also passed. The cancel tests
   verify immediate local cancellation before delayed SQLite persistence, clear reporting when
@@ -72,6 +72,8 @@ roadmap's “proof over claims” rule.
   streams a 250ms drain window, then cancels readers instead of waiting for detached descendants
   holding inherited pipes. Synchronous doctor probes also cap post-timeout pipe draining, close
   inherited pipes held by detached descendants, preserve partial output, and reap the probe.
+  Git and GitHub artifact commands use the same bounded post-timeout pipe cleanup and preserve
+  partial output when detached descendants outlive their process group.
   Cron help shows local date/time, Unix seconds, and explicit-offset forms separately; nonexistent
   local times are rejected without falling back to date-only midnight, and numeric local UTC offsets
   appear in schedule displays. One third-party
