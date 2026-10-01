@@ -20,6 +20,7 @@ from ...fs import atomic_write_json as _atomic_write_json
 from ...logging_setup import log
 from ...markdown import _escape_html, markdown_to_telegram_html
 from ...personality import runtime_root_from_workspace
+from ..delegation.workspace import await_thread_completion
 from ..messaging import _TelegramHTMLChunker
 
 MAX_CRON_STORE_BYTES = 1024 * 1024
@@ -181,7 +182,9 @@ class CommandsCronMixin:
             now = time.time()
             updates: dict[str, dict[str, Any] | None] = {}
             async with self._cron_lock:
-                jobs = list(self._read_cron_store().get("jobs", []))
+                jobs = list(
+                    (await await_thread_completion(self._read_cron_store)).get("jobs", [])
+                )
 
             for job in jobs:
                 next_run_at = float(job.get("next_run_at", 0))
@@ -258,13 +261,17 @@ class CommandsCronMixin:
 
             if updates:
                 async with self._cron_lock:
-                    current_jobs = list(self._read_cron_store().get("jobs", []))
+                    current_jobs = list(
+                        (await await_thread_completion(self._read_cron_store)).get("jobs", [])
+                    )
                     merged_jobs = [
                         updated
                         for job in current_jobs
                         if (updated := updates.get(str(job["id"]), job)) is not None
                     ]
-                    self._write_cron_store({"jobs": merged_jobs})
+                    await await_thread_completion(
+                        self._write_cron_store, {"jobs": merged_jobs}
+                    )
 
 
     def _render_cron_list(self, session_id: str) -> str:
@@ -339,7 +346,7 @@ class CommandsCronMixin:
 
         if sub in {"list", "ls", "show", "status"}:
             async with self._cron_lock:
-                text = self._render_cron_list(session_id)
+                text = await await_thread_completion(self._render_cron_list, session_id)
             chunks = _TelegramHTMLChunker(max_len=3000)
             chunks.feed(text)
             for chunk in chunks.finish():
@@ -457,12 +464,12 @@ class CommandsCronMixin:
 
             assert job is not None
             async with self._cron_lock:
-                store = self._read_cron_store()
+                store = await await_thread_completion(self._read_cron_store)
                 jobs = list(store.get("jobs", []))
                 jobs.append(job)
-                self._write_cron_store({"jobs": jobs})
+                await await_thread_completion(self._write_cron_store, {"jobs": jobs})
 
-            jobs_path = self._cron_jobs_path()
+            jobs_path = await await_thread_completion(self._cron_jobs_path)
             await self._reply_logged(
                 update,
                 "\n".join(
@@ -495,7 +502,7 @@ class CommandsCronMixin:
                 return
 
             async with self._cron_lock:
-                store = self._read_cron_store()
+                store = await await_thread_completion(self._read_cron_store)
                 jobs = list(store.get("jobs", []))
                 updated = [
                     job
@@ -510,7 +517,7 @@ class CommandsCronMixin:
                     removed = False
                 else:
                     removed = True
-                    self._write_cron_store({"jobs": updated})
+                    await await_thread_completion(self._write_cron_store, {"jobs": updated})
 
             if removed:
                 await self._reply_logged(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import threading
 import time
 from datetime import datetime
 from html import unescape
@@ -15,6 +16,7 @@ from telegram.error import BadRequest, NetworkError, RetryAfter
 from config import Config
 from core.bot import LightClawBot
 from core.bot.base import BotBaseMixin
+from core.bot.commands import cron as cron_commands
 from core.bot.commands.cron import CommandsCronMixin
 from core.bot.messaging import BotMessagingMixin
 
@@ -66,6 +68,66 @@ async def test_cron_list_delivers_all_jobs_in_bounded_messages(tmp_path):
         assert result.count(f"job-{i}") == 1
         assert text in result
     assert "/cron remove <id>" in result
+
+
+@pytest.mark.asyncio
+async def test_cron_store_reads_and_writes_run_off_event_loop(tmp_path, monkeypatch):
+    loop_thread = threading.get_ident()
+    read_threads = []
+    write_threads = []
+    jobs_path = tmp_path / "cron" / "jobs.json"
+    read_store = cron_commands.read_json_object
+    write_store = cron_commands._atomic_write_json
+
+    def record_read_thread(*args, **kwargs):
+        read_threads.append(threading.get_ident())
+        return read_store(*args, **kwargs)
+
+    def record_write_thread(*args, **kwargs):
+        write_threads.append(threading.get_ident())
+        return write_store(*args, **kwargs)
+
+    monkeypatch.setattr(cron_commands, "read_json_object", record_read_thread)
+    monkeypatch.setattr(cron_commands, "_atomic_write_json", record_write_thread)
+    bot = CronHarness()
+    bot._cron_lock = asyncio.Lock()
+    bot._cron_iteration_lock = asyncio.Lock()
+    bot._cron_poll_sec = 15
+    bot._cron_last_run_at = 0
+    bot._cron_jobs_path = lambda: jobs_path
+    bot.is_update_allowed = lambda _update: True
+    bot.is_allowed = lambda _chat_id: True
+    bot._privileged_rate_limited = lambda *_args, **_kwargs: False
+    bot._session_id_from_update = lambda _update: "123"
+    bot._log_user_message = Mock()
+    bot._reply_logged = AsyncMock()
+    bot._try_send = AsyncMock(return_value=True)
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=123), message=SimpleNamespace()
+    )
+
+    await bot.cmd_cron(
+        update, SimpleNamespace(args=["add", "every", "1", "Check releases"], bot=SimpleNamespace())
+    )
+
+    write_store(
+        jobs_path,
+        {
+            "jobs": [{
+                "id": "due",
+                "chat_id": "123",
+                "mode": "at",
+                "text": "Check the release",
+                "next_run_at": time.time() - 1,
+            }]
+        },
+        max_bytes=cron_commands.MAX_CRON_STORE_BYTES,
+    )
+    await bot._run_due_cron_jobs(SimpleNamespace(send_message=AsyncMock()))
+
+    assert len(read_threads) >= 2
+    assert len(write_threads) >= 2
+    assert all(thread_id != loop_thread for thread_id in read_threads + write_threads)
 
 
 @pytest.mark.asyncio
