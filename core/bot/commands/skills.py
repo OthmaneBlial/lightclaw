@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 from skills import SkillError
 
 from ...markdown import _escape_html
+from ..messaging import _TelegramHTMLChunker
 
 
 class CommandsSkillsMixin:
@@ -132,7 +133,10 @@ class CommandsSkillsMixin:
                     parse_mode=ParseMode.HTML,
                 )
                 return
-            await self._reply_logged(update, text, parse_mode=ParseMode.HTML)
+            chunker = _TelegramHTMLChunker(max_len=3000)
+            chunker.feed(text)
+            for chunk in chunker.finish():
+                await self._reply_logged(update, chunk, parse_mode=ParseMode.HTML)
             return
 
         if sub in {"search", "find"}:

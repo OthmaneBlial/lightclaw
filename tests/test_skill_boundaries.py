@@ -283,3 +283,33 @@ def test_validator_refuses_symlinked_skill_and_cli_exposes_contract(tmp_path):
     assert "symlinked" in report["errors"][0]
     assert parsed.skills_action == "validate"
     assert parsed.path == "examples/safe-skill"
+
+
+@pytest.mark.asyncio
+async def test_skill_list_splits_large_html_reply():
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.is_update_allowed = Mock(return_value=True)
+    bot._privileged_rate_limited = Mock(return_value=False)
+    bot._session_id_from_update = Mock(return_value="456")
+    bot._log_user_message = Mock()
+    skill_ids = [f"skill-{index:03}" for index in range(60)]
+    bot._render_skills_overview = Mock(
+        return_value="<b>Skills</b>\n"
+        + "\n".join(
+            f"• <code>{skill_id}</code> — " + "Useful workflow guidance. " * 8
+            for skill_id in skill_ids
+        )
+    )
+    bot._reply_logged = AsyncMock()
+    update = SimpleNamespace(
+        effective_user=SimpleNamespace(id=42),
+        effective_chat=SimpleNamespace(id=456, type="private"),
+        message=SimpleNamespace(),
+    )
+
+    await bot.cmd_skills(update, SimpleNamespace(args=[]))
+
+    messages = [call.args[1] for call in bot._reply_logged.await_args_list]
+    assert len(messages) > 1
+    assert all(len(message.encode("utf-16-le")) // 2 < 4096 for message in messages)
+    assert all(skill_id in "".join(messages) for skill_id in skill_ids)
