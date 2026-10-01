@@ -40,7 +40,9 @@ def test_telegram_startup_reaches_polling_with_current_memory_stats(tmp_path, mo
 
     try:
         app.main()
-        application.run_polling.assert_called_once()
+        application.run_polling.assert_called_once_with(
+            drop_pending_updates=False, timeout=30, close_loop=False
+        )
         assert "sqlite-fts5-lexical" in caplog.text
     finally:
         for bot in bots:

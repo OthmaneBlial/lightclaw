@@ -1,6 +1,8 @@
 # Telegram Approval Contract
 
 LightClaw treats a Telegram request and an execution approval as separate events.
+Messages queued by Telegram while polling is stopped are processed after restart. Approval
+requests are process-local, so callbacks for requests lost with the old process are rejected.
 
 ## Plan review
 

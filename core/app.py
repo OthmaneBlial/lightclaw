@@ -183,8 +183,8 @@ def main():
             log.info("🦞 LightClaw is running! Press Ctrl+C to stop.")
 
             # Start polling
-            # Longer Telegram long-poll timeout reduces idle request churn.
-            app.run_polling(drop_pending_updates=True, timeout=30, close_loop=False)
+            # Retain queued user messages; in-memory approval callbacks still fail closed.
+            app.run_polling(drop_pending_updates=False, timeout=30, close_loop=False)
         finally:
             try:
                 loop.run_until_complete(bot.shutdown())
