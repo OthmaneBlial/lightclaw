@@ -103,8 +103,9 @@ See the [installation guide](docs/INSTALL.md) for Telegram bot setup, authorizat
 - 🧭 Reviewed multi-agent plans with owned paths, dependencies, acceptance checks, and bounded repair.
 - 🧪 Codex and Claude profiles: `observe`, `workspace-write`, and `trusted-command`.
 - 🧾 Private JSON/Markdown receipts with commands, results, hashes, artifacts, and recovery context.
-- 📚 Paginated per-chat run history via `/agent runs`, with status, per-lane progress, and
-  page-scoped **View diff** buttons for completed runs, including after bot restarts.
+- 📚 Paginated per-chat run history via `/agent runs`, with status and per-lane progress.
+  Pages and completed-run diff buttons stay stable through new jobs and bot restarts; rerun
+  the command to refresh.
 - 📱 Phone-friendly diff previews, full patch attachments, local accept/reject, and selective file apply.
 - 🧠 Namespaced SQLite FTS5 memory and persisted summaries with 90-day default retention, export, and selective delete.
 - 🧰 Permission-manifest skills, inactive by default, with provenance and hash review.
