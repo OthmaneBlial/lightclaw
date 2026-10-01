@@ -315,7 +315,7 @@ class BotFileOpsMixin:
             if is_sensitive_path(rel_path):
                 operations.append(
                     FileOperationResult(
-                        "error", rel_path, "credential-sensitive paths cannot be changed by model-generated file blocks"
+                        "error", rel_path, "protected paths cannot be changed by model-generated file blocks"
                     )
                 )
                 return f"[Save blocked: {rel_path}]"
@@ -521,7 +521,7 @@ class BotFileOpsMixin:
             if is_sensitive_path(rel_path):
                 operations.append(
                     FileOperationResult(
-                        "error", rel_path, "credential-sensitive paths cannot be changed by model-generated file blocks"
+                        "error", rel_path, "protected paths cannot be changed by model-generated file blocks"
                     )
                 )
                 return f"[Edit blocked: {rel_path}]"
@@ -902,7 +902,7 @@ class BotFileOpsMixin:
         joined_snippets = "\n\n".join(snippets)
         if sensitive_files_omitted and not snippets:
             return [], (
-                "Automatic edit retry skipped because workspace candidates may contain credentials. "
+                "Automatic edit retry skipped because workspace candidates may contain private or credential data. "
                 "Share a sanitized excerpt or edit that file locally."
             )
         if oversized_files and not snippets:
@@ -916,7 +916,7 @@ class BotFileOpsMixin:
             else "Current candidate workspace files:\n(none yet - create new files in workspace as needed)"
         )
         if sensitive_files_omitted:
-            file_context += "\nPotentially credential-bearing files were omitted; do not recreate or rewrite them."
+            file_context += "\nProtected internal or credential-bearing files were omitted; do not recreate or rewrite them."
         if oversized_files:
             file_context += (
                 "\nFiles over the 2 MiB chat-edit limit were omitted: "

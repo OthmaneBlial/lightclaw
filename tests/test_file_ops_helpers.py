@@ -281,8 +281,32 @@ async def test_model_file_blocks_cannot_overwrite_env_files(tmp_path):
 
     assert len(operations) == 1
     assert operations[0].action == "error"
-    assert "credential-sensitive" in operations[0].detail
+    assert "protected paths" in operations[0].detail
     assert env_file.read_text(encoding="utf-8") == "OPENAI_API_KEY=keep-me\n"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "relative",
+    [".git/config", ".lightclaw/lightclaw.db", ".lightclaw-meta/messages/response.md"],
+)
+async def test_model_file_blocks_cannot_change_private_lightclaw_state(tmp_path, relative):
+    workspace = tmp_path / "workspace"
+    target = workspace / relative
+    target.parent.mkdir(parents=True)
+    target.write_text("private state\n", encoding="utf-8")
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.config = SimpleNamespace(workspace_path=str(workspace))
+
+    operations, _ = await bot._process_file_blocks(
+        f"```text:{relative}\nreplacement\n```",
+        allow_file_writes=True,
+    )
+
+    assert len(operations) == 1
+    assert operations[0].action == "error"
+    assert "protected paths" in operations[0].detail
+    assert target.read_text(encoding="utf-8") == "private state\n"
 
 
 @pytest.mark.asyncio
@@ -367,6 +391,11 @@ async def test_failed_sensitive_edit_is_not_retried_with_file_contents(tmp_path,
         "failed edit",
         [
             FileOperationResult("error", ".env", "SEARCH text not found"),
+            FileOperationResult(
+                "error",
+                ".lightclaw-meta/messages/response.md",
+                "SEARCH text not found",
+            ),
             FileOperationResult("error", "notes.md", "SEARCH text not found"),
         ],
     )

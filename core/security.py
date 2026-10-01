@@ -37,7 +37,7 @@ SENSITIVE_ASSIGNMENT_RE = re.compile(
     r"[A-Z0-9_.-]{0,128})([\"']?)(\s*[:=]\s*)"
     r"([\"']?)([^\s,;}\"']+)([\"']?)"
 )
-SENSITIVE_PATH_DIRECTORIES = frozenset({".aws", ".docker", ".gnupg", ".kube", ".ssh", "credentials", "secrets"})
+SENSITIVE_PATH_DIRECTORIES = frozenset({".aws", ".docker", ".gnupg", ".kube", ".ssh", ".git", ".lightclaw", ".lightclaw-meta", "credentials", "secrets"})
 SENSITIVE_PATH_NAMES = frozenset(
     {
         ".netrc",
@@ -101,7 +101,7 @@ def redact_text(text: str, known_values: Mapping[str, str] | None = None) -> str
 
 
 def is_sensitive_path(path: str) -> bool:
-    """Recognize common credential paths before including file contents in prompts."""
+    """Recognize credential and private LightClaw paths before prompt or edit use."""
     parts = [part.lower() for part in str(path).replace("\\", "/").split("/") if part]
     if any(part in SENSITIVE_PATH_DIRECTORIES for part in parts):
         return True

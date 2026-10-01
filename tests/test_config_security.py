@@ -234,6 +234,15 @@ def test_recent_credentials_do_not_hide_safe_workspace_candidates(tmp_path):
         path = tmp_path / f".env.secret-{index:02}.local"
         path.write_text("TOKEN=private\n", encoding="utf-8")
         os.utime(path, (100 + index, 100 + index))
+    for directory, name in (
+        (".git", "config"),
+        (".lightclaw", "memory.txt"),
+        (".lightclaw-meta/messages", "response.md"),
+    ):
+        path = tmp_path / directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("private session data\n", encoding="utf-8")
+        os.utime(path, (200, 200))
     (tmp_path / "safe.txt").write_text("safe\n", encoding="utf-8")
     os.utime(tmp_path / "safe.txt", (1, 1))
 
@@ -319,6 +328,9 @@ def test_sensitive_context_detection_covers_credential_paths_and_json_keys():
     assert is_sensitive_path(".env.local")
     assert is_sensitive_path(".ssh/id_ed25519")
     assert is_sensitive_path("config/credentials.json")
+    assert is_sensitive_path(".git/config")
+    assert is_sensitive_path(".lightclaw/lightclaw.db")
+    assert is_sensitive_path(".lightclaw-meta/messages/response.md")
     assert not is_sensitive_path("src/auth.py")
     assert has_sensitive_content('{"apiKey": "json-secret"}')
     assert has_sensitive_content('AWS_ACCESS_KEY_ID="AKIAEXAMPLE"')
