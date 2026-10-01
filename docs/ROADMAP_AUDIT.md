@@ -60,9 +60,11 @@ roadmap's “proof over claims” rule.
   The three legacy skill migration cases cover symlink files, symlink swaps, and oversized files.
   The clean venv used the pinned pip from `requirements-pip.txt`; Python 3.10.21's bundled pip
   23.0.1 could not resolve one hashed transitive extra.
-- Canonical quality at `1de80ce` on 2026-10-01 passed all 846 tests on Python 3.14.7 with the
-  package build/install checks. The `c5fa6f4` symlink-swap test extension also passed all three
-  cases on Python 3.14.7. One third-party `google-genai` deprecation warning remains on 3.14.
+- Latest canonical quality suite at `c0ae46e` on 2026-10-01: all 849 tests passed on macOS
+  arm64 with Python 3.14.7; lint, documentation links, architecture/runtime budgets,
+  dependency audit, package build, and clean-wheel installation also passed. The added cancel
+  tests verify that a local run stops while durable SQLite cancellation is delayed and that a
+  persistence failure is reported. One third-party `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
