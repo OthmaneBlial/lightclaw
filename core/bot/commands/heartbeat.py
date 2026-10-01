@@ -147,7 +147,8 @@ class CommandsHeartbeatMixin:
             # Terminal chat sessions may use non-numeric IDs.
             return
 
-        memories = self.memory.recall(
+        memories = await asyncio.to_thread(
+            self.memory.recall,
             "heartbeat automation",
             top_k=max(1, min(self.config.memory_top_k, 4)),
             session_id=session_id,

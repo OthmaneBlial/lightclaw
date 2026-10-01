@@ -250,6 +250,15 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
     bot = LightClawBot.__new__(LightClawBot)
     bot.config = Config(workspace_path=str(tmp_path), telegram_allowed_users=["42"])
     bot.memory = MemoryStore(tmp_path / "memory.db")
+    loop_thread = threading.get_ident()
+    recall_threads = []
+    recall = bot.memory.recall
+
+    def capture_recall(*args, **kwargs):
+        recall_threads.append(threading.get_ident())
+        return recall(*args, **kwargs)
+
+    bot.memory.recall = capture_recall
     bot.memory.bind_session(
         "123", user_namespace="telegram-user:42", workspace_namespace=str(tmp_path.resolve())
     )
@@ -324,6 +333,8 @@ async def test_memory_clear_does_not_restore_inflight_heartbeat_history(
         release.set()
         release_skills.set()
         await run
+        assert len(recall_threads) == 1
+        assert recall_threads[0] != loop_thread
 
         saved = bot.memory.get_recent("123")
         if erase in {"other", "none"}:
