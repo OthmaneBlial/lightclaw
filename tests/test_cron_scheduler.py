@@ -274,10 +274,13 @@ def test_cron_times_show_the_machine_local_utc_offset():
     timestamp = time.time() + 3600
     rendered = CommandsCronMixin._format_local_datetime(timestamp)
     offset = time.strftime("%z", time.localtime(timestamp))
+    usage = CommandsCronMixin._cron_usage_text()
 
     assert re.fullmatch(r"[+-]\d{4}", offset)
     assert rendered.endswith(f" {offset}")
-    assert "local time" in CommandsCronMixin._cron_usage_text()
+    assert "/cron add at YYYY-MM-DD HH:MM" in usage
+    assert "one-time, local time" in usage
+    assert "/cron add at &lt;timestamp&gt;" in usage
 
 
 def test_cron_store_discards_unrenderable_timestamps_and_intervals(monkeypatch, tmp_path):

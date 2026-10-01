@@ -24,6 +24,10 @@ from ..delegation.workspace import await_thread_completion
 from ..messaging import _TelegramHTMLChunker
 
 MAX_CRON_STORE_BYTES = 1024 * 1024
+_CRON_AT_USAGE = (
+    "<code>/cron add at YYYY-MM-DD HH:MM &lt;message&gt;</code> (one-time, local time)\n"
+    "<code>/cron add at &lt;timestamp&gt; &lt;message&gt;</code> (one-time, Unix seconds)"
+)
 
 
 class CronStoreReadError(RuntimeError):
@@ -37,7 +41,7 @@ class CommandsCronMixin:
             "<b>Usage</b>\n"
             "<code>/cron list</code> - list jobs for this chat\n"
             "<code>/cron add every &lt;minutes&gt; &lt;message&gt;</code> - recurring job\n"
-            "<code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code> - one-time job\n"
+            f"{_CRON_AT_USAGE}\n"
             "<code>/cron remove &lt;id&gt;</code> - delete a job"
         )
 
@@ -359,7 +363,7 @@ class CommandsCronMixin:
                     update,
                     "Usage:\n"
                     "<code>/cron add every &lt;minutes&gt; &lt;message&gt;</code>\n"
-                    "<code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code>",
+                    f"{_CRON_AT_USAGE}",
                     parse_mode=ParseMode.HTML,
                 )
                 return
@@ -415,7 +419,7 @@ class CommandsCronMixin:
                 if len(args) < 4:
                     await self._reply_logged(
                         update,
-                        "Usage: <code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code>",
+                        f"Usage:\n{_CRON_AT_USAGE}",
                         parse_mode=ParseMode.HTML,
                     )
                     return
@@ -432,7 +436,7 @@ class CommandsCronMixin:
                 if run_at is None or not text:
                     await self._reply_logged(
                         update,
-                        "Usage: <code>/cron add at &lt;YYYY-MM-DD HH:MM local time|timestamp&gt; &lt;message&gt;</code>",
+                        f"Usage:\n{_CRON_AT_USAGE}",
                         parse_mode=ParseMode.HTML,
                     )
                     return
