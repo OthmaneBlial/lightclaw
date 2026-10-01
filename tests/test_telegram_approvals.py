@@ -1958,7 +1958,13 @@ async def test_history_diff_opens_a_persisted_run_for_its_chat(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
+@pytest.mark.parametrize(
+    ("cursor", "offset", "uses_database_snapshot"),
+    [("", 0, True), ("1:77:", 10, False)],
+)
+async def test_history_diff_button_cannot_read_another_chats_run(
+    tmp_path, cursor, offset, uses_database_snapshot
+):
     run_id = "run-0123456789abcdef"
     jobs = SimpleNamespace(
         history_snapshot=Mock(return_value=77), list_jobs=Mock(return_value=[])
@@ -1970,7 +1976,7 @@ async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
     bot._reply_logged = AsyncMock()
     message = SimpleNamespace(reply_document=AsyncMock())
     query = SimpleNamespace(
-        data=f"lc:history:diff:{bot._run_action_token(run_id)}",
+        data=f"lc:history:diff:{cursor}{bot._run_action_token(run_id)}",
         message=message,
         answer=AsyncMock(),
     )
@@ -1983,8 +1989,12 @@ async def test_history_diff_button_cannot_read_another_chats_run(tmp_path):
     await bot.handle_run_action(update, SimpleNamespace())
 
     jobs.list_jobs.assert_called_once_with(
-        session_id="chat-two", limit=11, offset=0, snapshot_rowid=77
+        session_id="chat-two", limit=11, offset=offset, snapshot_rowid=77
     )
+    if uses_database_snapshot:
+        jobs.history_snapshot.assert_called_once_with("chat-two")
+    else:
+        jobs.history_snapshot.assert_not_called()
     message.reply_document.assert_not_awaited()
     assert "no longer on the history page" in bot._reply_logged.await_args.args[1]
 
