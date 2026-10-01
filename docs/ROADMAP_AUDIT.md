@@ -102,6 +102,13 @@ roadmap's “proof over claims” rule.
   protect `.git`, `.lightclaw`, and `.lightclaw-meta` from model context and file-block edits.
   Recent-file discovery also prunes those private directories plus generated dependency, build, and
   cache trees while preserving explicitly named and last-used paths.
+- Latest canonical `scripts/quality.py` run at `943e2d8` passed on macOS arm64 Python 3.14.7:
+  872 tests, lint, documentation links, provider artifacts, architecture/runtime budgets, locked
+  dependency resolution, dependency audit, sdist/wheel build, and clean-wheel installation. A new
+  regression reproduces and fixes cross-user memory recall when concurrent Telegram group updates
+  bind scopes through worker threads: each update now activates its user/workspace scope in its own
+  async context while SQLite persistence remains off the event loop. One third-party
+  `google-genai` deprecation warning remains.
 - GitHub CI, CodeQL, OpenSSF Scorecard, and showcase validation are disabled, so no GitHub CI
   run exists for this local validation.
 - The release workflow's manual rehearsal succeeded at commit `ee7c49f` on 2026-08-24
