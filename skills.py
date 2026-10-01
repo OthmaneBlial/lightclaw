@@ -252,8 +252,8 @@ def validate_skill_directory(path: str | Path) -> dict[str, Any]:
                 loaded = json.loads(manifest_bytes.decode("utf-8"))
                 manifest = loaded if isinstance(loaded, dict) else {}
                 errors.extend(validate_skill_manifest(loaded))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                errors.append("skill.json is not valid UTF-8 JSON")
+            except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+                errors.append("skill.json is invalid or exceeds the JSON nesting limit")
     capabilities = set(manifest.get("capabilities", [])) if manifest else set()
     network = manifest.get("network", {}) if manifest else {}
     isolated_only = bool(

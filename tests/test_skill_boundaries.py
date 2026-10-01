@@ -285,6 +285,22 @@ def test_validator_refuses_symlinked_skill_and_cli_exposes_contract(tmp_path):
     assert parsed.path == "examples/safe-skill"
 
 
+def test_skill_validator_rejects_recursively_nested_manifest(tmp_path, monkeypatch):
+    directory = tmp_path / "nested-manifest"
+    directory.mkdir()
+    (directory / "SKILL.md").write_text("# Safe skill\n", encoding="utf-8")
+    (directory / "skill.json").write_text("{}", encoding="utf-8")
+
+    def reject_nested_json(_content):
+        raise RecursionError("maximum recursion depth exceeded")
+
+    monkeypatch.setattr("skills.json.loads", reject_nested_json)
+    report = validate_skill_directory(directory)
+
+    assert report["valid"] is False
+    assert "JSON nesting limit" in report["errors"][0]
+
+
 @pytest.mark.asyncio
 async def test_skill_list_splits_large_html_reply():
     bot = LightClawBot.__new__(LightClawBot)
