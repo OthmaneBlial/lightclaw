@@ -285,7 +285,10 @@ class CommandsHeartbeatMixin:
 
         self._heartbeat_last_run_at = time.time()
         if not clear_event.is_set():
-            self.memory.ingest("assistant", f"[heartbeat]\n\n{final_response}", session_id)
+            await self._ingest_memory(
+                "assistant", f"[heartbeat]\n\n{final_response}", session_id,
+                clear_event=clear_event,
+            )
 
 
     async def cmd_heartbeat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):

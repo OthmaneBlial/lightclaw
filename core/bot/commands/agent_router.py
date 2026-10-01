@@ -604,13 +604,17 @@ class CommandsAgentRouterMixin:
                     f"agent: {agent}\n"
                     f"task: {task}"
                 )
-                self.memory.ingest("user", request_entry, session_id)
+                await self._ingest_memory(
+                    "user", request_entry, session_id, clear_event=clear_event
+                )
                 memory_entry = self._build_single_delegation_memory_entry(
                     agent=agent,
                     task=task,
                     result_text=result_text,
                 )
-                self.memory.ingest("assistant", memory_entry, session_id)
+                await self._ingest_memory(
+                    "assistant", memory_entry, session_id, clear_event=clear_event
+                )
                 if not self._llm_backoff_active():
                     self._create_background_task(self.maybe_summarize(session_id))
             await self._send_response(progress, update, result_text)

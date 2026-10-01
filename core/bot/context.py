@@ -6,11 +6,29 @@ import asyncio
 import os
 
 from ..logging_setup import log
+from .delegation.workspace import await_thread_completion
 
 MAX_CACHED_SESSION_SUMMARIES = 128
 
 
 class BotContextMixin:
+    async def _ingest_memory(
+        self,
+        role: str,
+        content: str,
+        session_id: str,
+        *,
+        clear_event: asyncio.Event | None = None,
+    ) -> int | None:
+        if clear_event and clear_event.is_set():
+            return None
+        async with self._get_memory_write_lock():
+            if clear_event and clear_event.is_set():
+                return None
+            return await await_thread_completion(
+                self.memory.ingest, role, content, session_id
+            )
+
     def _summary_key(self, session_id: str) -> tuple[str, str, str]:
         return (session_id, *self.memory.scope_for(session_id))
 
@@ -123,7 +141,7 @@ class BotContextMixin:
     async def _get_session_summary(self, session_id: str) -> str:
         """Get the stored summary for a session."""
         key = self._summary_key(session_id)
-        async with self._get_memory_wipe_lock():
+        async with self._get_memory_write_lock():
             # First check in-memory cache
             if key in self._session_summaries:
                 summary = self._sanitize_summary_for_prompt(self._session_summaries[key])

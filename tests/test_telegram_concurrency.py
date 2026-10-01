@@ -26,6 +26,84 @@ async def test_nested_memory_guards_share_invalidation_and_keep_outer_registrati
 
 
 @pytest.mark.asyncio
+async def test_memory_ingestion_runs_off_loop_and_skips_after_clear():
+    loop_thread = threading.get_ident()
+    worker_threads = []
+    clear_event = asyncio.Event()
+
+    def ingest(*_args):
+        worker_threads.append(threading.get_ident())
+        return 1
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot.memory = SimpleNamespace(ingest=Mock(side_effect=ingest))
+
+    assert await bot._ingest_memory("user", "goal", "chat", clear_event=clear_event) == 1
+    assert len(worker_threads) == 1
+    assert worker_threads[0] != loop_thread
+
+    pending_clear_event = asyncio.Event()
+    lock = bot._get_memory_write_lock()
+    await lock.acquire()
+    try:
+        pending_write = asyncio.create_task(
+            bot._ingest_memory("assistant", "answer", "chat", clear_event=pending_clear_event)
+        )
+        await asyncio.sleep(0)
+        pending_clear_event.set()
+    finally:
+        lock.release()
+
+    assert await pending_write is None
+    bot.memory.ingest.assert_called_once_with("user", "goal", "chat")
+
+
+@pytest.mark.asyncio
+async def test_clear_during_initial_memory_write_prevents_agent_start():
+    loop = asyncio.get_running_loop()
+    write_started = asyncio.Event()
+    release_write = threading.Event()
+
+    def ingest(*_args):
+        loop.call_soon_threadsafe(write_started.set)
+        assert release_write.wait(timeout=2)
+        return 1
+
+    bot = LightClawBot.__new__(LightClawBot)
+    bot._session_id_from_update = lambda _update: "chat-1"
+    bot._log_user_message = Mock()
+    bot._log_bot_message = Mock()
+    bot._get_pending_multi_plan = Mock(return_value=None)
+    bot._agent_mode_by_session = {"chat-1": "codex"}
+    bot._send_response = AsyncMock()
+    bot._run_local_agent_task = AsyncMock(return_value="should not run")
+    bot.memory = SimpleNamespace(ingest=Mock(side_effect=ingest))
+    context = SimpleNamespace(bot=SimpleNamespace(send_chat_action=AsyncMock()))
+    placeholder = SimpleNamespace(edit_text=AsyncMock())
+    update = SimpleNamespace(
+        effective_chat=SimpleNamespace(id=1),
+        message=SimpleNamespace(reply_text=AsyncMock(return_value=placeholder)),
+    )
+
+    task = asyncio.create_task(bot._process_user_message(update, context, "goal"))
+    try:
+        await asyncio.wait_for(write_started.wait(), timeout=2)
+        bot._invalidate_active_message_requests("chat-1")
+        release_write.set()
+        await task
+    finally:
+        release_write.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    bot._run_local_agent_task.assert_not_awaited()
+    bot._send_response.assert_awaited_once_with(
+        placeholder, update, "🗑️ Request cleared before agent execution."
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("route", ["direct", "run", "observe"])
 @pytest.mark.parametrize("clear_kind", ["session", "global"])
 async def test_agent_commands_do_not_restore_cleared_memory(tmp_path, route, clear_kind):
@@ -100,6 +178,7 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
     max_active_by_chat: dict[str, int] = {}
     max_active_total = 0
     started_by_chat: dict[str, list[str]] = {}
+    other_chat_started = asyncio.Event()
 
     async def run_local_agent_task(*, session_id: str, task: str, **_kwargs):
         nonlocal max_active_total
@@ -110,6 +189,10 @@ async def test_messages_serialize_per_chat_without_blocking_other_chats():
         )
         max_active_total = max(max_active_total, sum(active_by_chat.values()))
         started_by_chat.setdefault(session_id, []).append(task)
+        if session_id == "chat-1":
+            await other_chat_started.wait()
+        else:
+            other_chat_started.set()
         await asyncio.sleep(0)
         active_by_chat[session_id] -= 1
         return f"completed: {task}"

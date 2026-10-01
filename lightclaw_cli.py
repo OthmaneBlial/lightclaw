@@ -905,7 +905,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             if bot._llm_backoff_active():
                 remaining = bot._llm_backoff_remaining_sec()
                 wait_hint = f"{remaining}s" if remaining > 0 else "a short while"
-                bot.memory.ingest("user", user_text, session_id)
+                await bot._ingest_memory("user", user_text, session_id)
                 return (
                     f"⚠️ {config.llm_provider} is temporarily unavailable "
                     "(quota/billing or rate limit).\n"
@@ -967,7 +967,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
             else:
                 bot._clear_llm_backoff()
 
-            bot.memory.ingest("user", user_text, session_id)
+            await bot._ingest_memory("user", user_text, session_id)
 
             requested_file_intent = bot._is_file_intent(user_text)
             allow_file_writes = file_mode == "edit" and requested_file_intent
@@ -1032,7 +1032,7 @@ def cmd_chat(args: argparse.Namespace) -> int:
                     )
                 )
             memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
-            bot.memory.ingest("assistant", memory_response, session_id)
+            await bot._ingest_memory("assistant", memory_response, session_id)
 
             if not provider_error_response:
                 await bot.maybe_summarize(session_id)

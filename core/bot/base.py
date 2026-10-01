@@ -135,6 +135,12 @@ class BotBaseMixin:
             lock = self._memory_wipe_lock = asyncio.Lock()
         return lock
 
+    def _get_memory_write_lock(self) -> asyncio.Lock:
+        lock = getattr(self, "_memory_write_lock", None)
+        if lock is None:
+            lock = self._memory_write_lock = asyncio.Lock()
+        return lock
+
     def _invalidate_active_message_requests(self, session_id: str | None = None) -> None:
         sessions = getattr(self, "_active_message_clear_events_by_session", {})
         for active_session, messages in sessions.items():

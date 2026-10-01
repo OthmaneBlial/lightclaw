@@ -342,7 +342,12 @@ class BotHandlersMixin:
             log.info(
                 f"[{session_id}] Delegation mode active ({active_agent}); routing message to local agent"
             )
-            self.memory.ingest("user", user_text, session_id)
+            await self._ingest_memory("user", user_text, session_id, clear_event=clear_event)
+            if clear_event.is_set():
+                await self._send_response(
+                    placeholder, update, "🗑️ Request cleared before agent execution."
+                )
+                return
 
             async def _delegation_progress_update(text: str):
                 if not placeholder:
@@ -365,13 +370,17 @@ class BotHandlersMixin:
                 progress_cb=_delegation_progress_update,
             )
             if not clear_event.is_set():
-                self.memory.ingest("assistant", delegated_response, session_id)
+                await self._ingest_memory(
+                    "assistant", delegated_response, session_id, clear_event=clear_event
+                )
                 delegation_context = self._build_single_delegation_memory_entry(
                     agent=active_agent,
                     task=user_text,
                     result_text=delegated_response,
                 )
-                self.memory.ingest("assistant", delegation_context, session_id)
+                await self._ingest_memory(
+                    "assistant", delegation_context, session_id, clear_event=clear_event
+                )
             await self._send_response(placeholder, update, delegated_response)
             if not clear_event.is_set() and not self._llm_backoff_active():
                 self._create_background_task(self.maybe_summarize(session_id))
@@ -381,7 +390,7 @@ class BotHandlersMixin:
         if self._llm_backoff_active():
             remaining = self._llm_backoff_remaining_sec()
             wait_hint = f"{remaining}s" if remaining > 0 else "a short while"
-            self.memory.ingest("user", user_text, session_id)
+            await self._ingest_memory("user", user_text, session_id, clear_event=clear_event)
             quick_reply = (
                 f"⚠️ {self.config.llm_provider} is temporarily unavailable "
                 "(quota/billing or rate limit).\n"
@@ -479,7 +488,7 @@ class BotHandlersMixin:
 
         # 8. Ingest into memory
         if not clear_event.is_set():
-            self.memory.ingest("user", user_text, session_id)
+            await self._ingest_memory("user", user_text, session_id, clear_event=clear_event)
 
         # 9. Apply file operations (create/edit) and clean the response
         requested_file_intent = self._is_file_intent(user_text)
@@ -614,7 +623,9 @@ class BotHandlersMixin:
             )
         memory_response = "\n\n".join(part for part in memory_parts if part).strip() or "Done."
         if not clear_event.is_set():
-            self.memory.ingest("assistant", memory_response, session_id)
+            await self._ingest_memory(
+                "assistant", memory_response, session_id, clear_event=clear_event
+            )
 
         # 11. Edit placeholder with final response
         await self._send_response(placeholder, update, final_markdown_response)

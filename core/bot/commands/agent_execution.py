@@ -922,8 +922,10 @@ class CommandsAgentExecutionMixin:
             results_by_label=results_by_label,
         )
         if not clear_event.is_set():
-            self.memory.ingest("user", request_entry, session_id)
-            self.memory.ingest("assistant", memory_entry, session_id)
+            await self._ingest_memory("user", request_entry, session_id, clear_event=clear_event)
+            await self._ingest_memory(
+                "assistant", memory_entry, session_id, clear_event=clear_event
+            )
             if not self._llm_backoff_active():
                 self._create_background_task(self.maybe_summarize(session_id))
 
