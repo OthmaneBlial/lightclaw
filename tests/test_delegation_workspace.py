@@ -56,6 +56,7 @@ async def test_new_delegation_does_not_claim_another_sessions_queued_job(tmp_pat
             "new-chat", "codex", "new reviewed task", workspace_dir=workspace
         )
         assert "queued" in result
+        assert "will not auto-start" in result
         assert store.get_job(older["run_id"])["status"] == "queued"
         jobs = store.list_jobs(workspace=workspace)
         assert len(jobs) == 2

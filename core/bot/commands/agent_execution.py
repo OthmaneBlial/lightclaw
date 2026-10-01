@@ -458,7 +458,9 @@ class CommandsAgentExecutionMixin:
         if not claimed_job or claimed_job["run_id"] != run_id:
             await self._reply_logged(
                 update,
-                f"⏳ Run <code>{_escape_html(run_id)}</code> is queued behind another run in this workspace.",
+                f"⏳ Run <code>{_escape_html(run_id)}</code> was not started; it remains queued and will not auto-start. "
+                "Cancel this and any stale queued jobs with <code>lightclaw jobs cancel &lt;run-id&gt;</code>, "
+                "then resubmit after the workspace is clear.",
                 parse_mode=ParseMode.HTML,
             )
             return

@@ -23,7 +23,7 @@
     {
       "branch_points": 83,
       "line": 334,
-      "lines": 668,
+      "lines": 670,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -37,7 +37,7 @@
     {
       "branch_points": 73,
       "line": 857,
-      "lines": 421,
+      "lines": 425,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -116,7 +116,7 @@
     {
       "branch_points": 83,
       "line": 334,
-      "lines": 668,
+      "lines": 670,
       "name": "_execute_multi_agent_plan_impl",
       "path": "core/bot/commands/agent_execution.py"
     },
@@ -130,7 +130,7 @@
     {
       "branch_points": 73,
       "line": 857,
-      "lines": 421,
+      "lines": 425,
       "name": "_run_local_agent_task_impl",
       "path": "core/bot/delegation/execution.py"
     },
@@ -233,7 +233,7 @@
       "path": "core/bot/delegation/planning.py"
     },
     {
-      "lines": 1277,
+      "lines": 1281,
       "path": "core/bot/delegation/execution.py"
     },
     {
@@ -245,7 +245,7 @@
       "path": "core/artifacts.py"
     },
     {
-      "lines": 1001,
+      "lines": 1003,
       "path": "core/bot/commands/agent_execution.py"
     },
     {
@@ -281,6 +281,6 @@
       "path": "core/bot/commands/cron.py"
     }
   ],
-  "runtime_lines": 22689,
+  "runtime_lines": 22695,
   "schema_version": 1
 }

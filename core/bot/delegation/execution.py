@@ -955,7 +955,11 @@ class DelegationExecutionMixin:
                     run_id=run_id,
                 )
                 if not claimed or claimed["run_id"] != durable["run_id"]:
-                    return f"⏳ Delegation queued as `{run_id}`; another run is ahead of it or owns this workspace."
+                    return (
+                        f"⏳ Delegation `{run_id}` was not started; it remains queued and will not auto-start. "
+                        "Cancel this and any stale queued jobs with `lightclaw jobs cancel <run-id>`, "
+                        "then resubmit after the workspace is clear."
+                    )
                 self._active_run_ids_by_session[session_id] = run_id
                 self._active_run_requesters_by_session[session_id] = requester_user_id
                 current_run_task = asyncio.current_task()
