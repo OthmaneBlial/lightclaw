@@ -531,9 +531,9 @@ google-auth==2.59.0 \
     --hash=sha256:43e47b1d3067fb90d77bd9ba21f139bb0577b3f2b9f3e2516fc00f37435efcad \
     --hash=sha256:eb32f44f89f6b577947ebee5887c1db46e6b1a278889ba369a88179643f32240
     # via google-genai
-google-genai==2.25.0 \
-    --hash=sha256:2e8f3a5f76ed00d5ffc3153f6089bc7d3511054eed53ad9cfc6095a7dc59b028 \
-    --hash=sha256:ab603baa5eee0205926ad0f8d7f93e0400df6d67650e99c33e01ab228ea16ad6
+google-genai==2.27.0 \
+    --hash=sha256:44940e99d5d49432bb5e4fe3bd8ac9906e75162d051ca74af63b733fb5632382 \
+    --hash=sha256:7827330be282b3337c220f5d90c501b316c1ca0ee89358afb15f673dfcdab4fb
     # via lightclaw-ai (pyproject.toml)
 h11==0.16.0 \
     --hash=sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1 \
